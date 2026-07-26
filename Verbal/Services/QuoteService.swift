@@ -33,8 +33,75 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
     }
 }
 
+/// A line item shown on the quote detail table.
+struct QuoteLineItem: Identifiable, Decodable, Sendable {
+    let id: UUID
+    let description: String?
+    let type: String
+    let quantity: Double?
+    let unit: String?
+    let unitPrice: Double?
+    let priceSource: String?
+    let position: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, description, type, quantity, unit
+        case unitPrice = "unit_price"
+        case priceSource = "price_source"
+        case position
+    }
+
+    var isMissingPrice: Bool { priceSource == "missing" || unitPrice == nil }
+
+    var lineTotal: Double? {
+        guard let quantity, let unitPrice else { return nil }
+        return quantity * unitPrice
+    }
+
+    var quantityText: String? { quantityLabel(quantity, unit) }
+}
+
 enum QuoteService {
     private static var client: SupabaseClient { SupabaseManager.client }
+
+    /// Fetch a quote's line items, in order.
+    static func fetchLineItems(quoteId: UUID) async throws -> [QuoteLineItem] {
+        try await client
+            .from("quote_line_items")
+            .select("id, description, type, quantity, unit, unit_price, price_source, position")
+            .eq("quote_id", value: quoteId)
+            .order("position", ascending: true)
+            .execute()
+            .value
+    }
+
+    /// Delete a quote (line items and transcript cascade via FK).
+    static func deleteQuote(id: UUID) async throws {
+        try await client.from("quotes").delete().eq("id", value: id).execute()
+    }
+
+    /// Run the AI extraction on a transcript, returning the structured quote (not persisted).
+    static func generate(transcript: String) async throws -> GeneratedQuote {
+        let extraction: ExtractResponse = try await client.functions.invoke(
+            "extract-quote",
+            options: FunctionInvokeOptions(body: ExtractRequest(transcript: transcript))
+        )
+        let q = extraction.quote
+        return GeneratedQuote(
+            jobSummary: q.jobSummary,
+            notes: q.notes,
+            lineItems: q.lineItems.map {
+                GeneratedLineItem(
+                    description: $0.description,
+                    type: $0.type,
+                    quantity: $0.quantity,
+                    unit: $0.unit,
+                    unitPrice: $0.unitPrice,
+                    priceSource: $0.priceSource
+                )
+            }
+        )
+    }
 
     /// Fetch the signed-in user's quotes, newest first.
     static func fetchQuotes() async throws -> [QuoteSummary] {
@@ -50,28 +117,21 @@ enum QuoteService {
             .value
     }
 
-    /// Extract a structured quote from `transcript` and save it. Returns the new quote id.
+    /// Persist an already-generated quote (from `generate`) with its transcript.
     @discardableResult
-    static func createQuote(transcript: String, title: String) async throws -> UUID {
+    static func save(_ quote: GeneratedQuote, transcript: String, title: String) async throws -> UUID {
         guard let userID = client.auth.currentUser?.id else {
             throw QuoteError.notSignedIn
         }
 
-        // 1. AI extraction (server-side; never exposes the OpenAI key).
-        let extraction: ExtractResponse = try await client.functions.invoke(
-            "extract-quote",
-            options: FunctionInvokeOptions(body: ExtractRequest(transcript: transcript))
-        )
-        let quote = extraction.quote
-
-        // 2. Deterministic totals (never trust the LLM for math).
+        // Deterministic totals (never trust the LLM for math).
         let subtotal = quote.lineItems.reduce(into: 0.0) { sum, item in
-            if let qty = item.quantity, let price = item.unitPrice {
-                sum += qty * price
-            }
+            if let total = item.lineTotal { sum += total }
         }
 
-        let resolvedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Fall back to the AI summary as the quote's name when the user didn't type one.
+        let typedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedTitle = typedTitle.isEmpty ? quote.jobSummary : typedTitle
         let quoteInsert = QuoteInsert(
             userId: userID,
             title: resolvedTitle.isEmpty ? nil : resolvedTitle,
@@ -82,7 +142,6 @@ enum QuoteService {
             status: "draft"
         )
 
-        // 3. Persist the quote and get its id.
         let inserted: InsertedRow = try await client
             .from("quotes")
             .insert(quoteInsert, returning: .representation)
@@ -92,7 +151,6 @@ enum QuoteService {
             .value
         let quoteID = inserted.id
 
-        // 4. Persist line items (preserving order) and the transcript.
         let lineItems = quote.lineItems.enumerated().map { index, item in
             LineItemInsert(
                 quoteId: quoteID,
@@ -102,7 +160,7 @@ enum QuoteService {
                 unit: item.unit,
                 unitPrice: item.unitPrice,
                 priceSource: item.priceSource,
-                confidence: item.confidence,
+                confidence: nil,
                 position: index
             )
         }
@@ -116,6 +174,39 @@ enum QuoteService {
 
         return quoteID
     }
+}
+
+/// A structured quote produced by the AI, before it's persisted — used in the review UI.
+struct GeneratedQuote: Sendable {
+    var jobSummary: String
+    var notes: String?
+    var lineItems: [GeneratedLineItem]
+}
+
+struct GeneratedLineItem: Identifiable, Sendable {
+    let id = UUID()
+    var description: String
+    var type: String
+    var quantity: Double?
+    var unit: String?
+    var unitPrice: Double?
+    var priceSource: String?
+
+    var isMissingPrice: Bool { priceSource == "missing" || unitPrice == nil }
+    var lineTotal: Double? {
+        guard let quantity, let unitPrice else { return nil }
+        return quantity * unitPrice
+    }
+    var quantityText: String? { quantityLabel(quantity, unit) }
+}
+
+/// Formats a quantity + unit like "8 each" or "20 meters".
+func quantityLabel(_ quantity: Double?, _ unit: String?) -> String? {
+    guard let quantity else { return nil }
+    let q = quantity.truncatingRemainder(dividingBy: 1) == 0
+        ? String(Int(quantity))
+        : String(format: "%.2f", quantity)
+    return [q, unit].compactMap { $0 }.joined(separator: " ")
 }
 
 enum QuoteError: LocalizedError {

@@ -10,6 +10,7 @@ struct HomeView: View {
     @State private var showCreate = false
     @State private var quotes: [QuoteSummary] = []
     @State private var isLoading = false
+    @State private var filter: QuoteFilter = .all
 
     var body: some View {
         NavigationStack {
@@ -27,10 +28,16 @@ struct HomeView: View {
                     Button { showCreate = true } label: { Image(systemName: "plus") }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        // TODO: second action (define what this button does)
+                    Menu {
+                        Picker("Filter", selection: $filter) {
+                            ForEach(QuoteFilter.allCases) { option in
+                                Text(option.label).tag(option)
+                            }
+                        }
                     } label: {
-                        Image(systemName: "line.3.horizontal.decrease")
+                        Image(systemName: filter == .all
+                              ? "line.3.horizontal.decrease"
+                              : "line.3.horizontal.decrease.circle.fill")
                     }
                     NavigationLink {
                         ProfileView()
@@ -55,7 +62,9 @@ struct HomeView: View {
                 Section {
                     ForEach(section.quotes) { quote in
                         NavigationLink {
-                            QuoteDetailView(quote: quote)
+                            QuoteDetailView(quote: quote) {
+                                quotes.removeAll { $0.id == quote.id }
+                            }
                         } label: {
                             QuoteRow(quote: quote)
                         }
@@ -96,25 +105,99 @@ struct HomeView: View {
         }
     }
 
+    /// Quotes grouped into status sections, honoring the active filter.
+    /// Section titles include a count, e.g. "Waiting to hear back · 2".
     private var sections: [(title: String, quotes: [QuoteSummary])] {
-        let calendar = Calendar.current
-        var today: [QuoteSummary] = []
-        var week: [QuoteSummary] = []
-        var earlier: [QuoteSummary] = []
-        for quote in quotes {
-            if calendar.isDateInToday(quote.createdAt) {
-                today.append(quote)
-            } else if calendar.isDate(quote.createdAt, equalTo: Date(), toGranularity: .weekOfYear) {
-                week.append(quote)
-            } else {
-                earlier.append(quote)
-            }
+        let filtered = quotes.filter { filter.matches($0.status) }
+        var groups: [QuoteStatusGroup: [QuoteSummary]] = [:]
+        for quote in filtered {
+            groups[QuoteStatusGroup(status: quote.status), default: []].append(quote)
         }
-        var result: [(String, [QuoteSummary])] = []
-        if !today.isEmpty { result.append(("Today", today)) }
-        if !week.isEmpty { result.append(("This week", week)) }
-        if !earlier.isEmpty { result.append(("Earlier", earlier)) }
-        return result
+        return QuoteStatusGroup.allCases.compactMap { group in
+            guard let items = groups[group], !items.isEmpty else { return nil }
+            return ("\(group.title) · \(items.count)", items)
+        }
+    }
+}
+
+/// Status buckets shown as list sections (in display order).
+private enum QuoteStatusGroup: CaseIterable, Hashable {
+    case drafts, waiting, accepted, declined, expired, other
+
+    init(status: String) {
+        switch status {
+        case "draft": self = .drafts
+        case "sent", "viewed": self = .waiting
+        case "accepted": self = .accepted
+        case "declined": self = .declined
+        case "expired": self = .expired
+        default: self = .other
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .drafts: return "Drafts"
+        case .waiting: return "Waiting to hear back"
+        case .accepted: return "Accepted"
+        case .declined: return "Declined"
+        case .expired: return "Expired"
+        case .other: return "Other"
+        }
+    }
+}
+
+/// Filter options for the toolbar menu.
+enum QuoteFilter: CaseIterable, Hashable, Identifiable {
+    case all, drafts, waiting, accepted, declined, expired
+
+    var id: Self { self }
+
+    var label: String {
+        switch self {
+        case .all: return "All"
+        case .drafts: return "Drafts"
+        case .waiting: return "Waiting to hear back"
+        case .accepted: return "Accepted"
+        case .declined: return "Declined"
+        case .expired: return "Expired"
+        }
+    }
+
+    private var statuses: Set<String>? {
+        switch self {
+        case .all: return nil
+        case .drafts: return ["draft"]
+        case .waiting: return ["sent", "viewed"]
+        case .accepted: return ["accepted"]
+        case .declined: return ["declined"]
+        case .expired: return ["expired"]
+        }
+    }
+
+    func matches(_ status: String) -> Bool {
+        statuses?.contains(status) ?? true
+    }
+}
+
+/// Small native rounded-rectangle chip with a leading icon/avatar and text.
+private struct QuoteChip<Leading: View>: View {
+    let text: String
+    @ViewBuilder let leading: Leading
+
+    var body: some View {
+        HStack(spacing: 8) {
+            leading
+                .font(.body)
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color(.mainText))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .glassEffect(in: .capsule)
     }
 }
 
@@ -137,18 +220,173 @@ private struct QuoteRow: View {
 
 /// Placeholder detail — to be built out into the quote review/edit screen.
 private struct QuoteDetailView: View {
+    @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
     let quote: QuoteSummary
+    var onDeleted: () -> Void
+    @State private var showHeaderTitle = false
+    @State private var lineItems: [QuoteLineItem] = []
 
-    var body: some View {
-        List {
-            Section("Summary") {
-                Text(quote.jobSummary ?? "—")
+    private var missingCount: Int { lineItems.filter(\.isMissingPrice).count }
+
+    private var shareText: String {
+        var lines = [quote.displayTitle]
+        if let summary = quote.jobSummary, !summary.isEmpty { lines.append(summary) }
+        return lines.joined(separator: "\n")
+    }
+
+    private var chips: some View {
+        HStack(spacing: 10) {
+            // 1. Who made the quote + their avatar.
+            QuoteChip(text: session.profile?.fullName ?? "You") {
+                AvatarView(image: session.avatarImage,
+                           urlString: session.profile?.avatarUrl,
+                           size: 22)
             }
-            Section("Total") {
-                Text(quote.total, format: .number.precision(.fractionLength(2)))
+            // 2. Creation date.
+            QuoteChip(text: dateLabel) {
+                Image(systemName: "calendar")
+            }
+            // 3. Status (my pick).
+            QuoteChip(text: statusLabel) {
+                Image(systemName: statusIcon)
             }
         }
-        .navigationTitle(quote.displayTitle)
+    }
+
+    @ViewBuilder
+    private var lineItemsSection: some View {
+        if !lineItems.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(lineItems) { item in
+                    LineItemRow(
+                        description: item.description ?? "Item",
+                        quantityText: item.quantityText,
+                        isMissingPrice: item.isMissingPrice,
+                        lineTotal: item.lineTotal
+                    )
+                    if item.id != lineItems.last?.id {
+                        Divider()
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            HStack {
+                Text("Total")
+                    .font(.headline)
+                    .foregroundStyle(Color(.mainText))
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(quote.total, format: .number.precision(.fractionLength(2)))
+                        .font(.title3.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Color(.mainText))
+                    if missingCount > 0 {
+                        Text("excl. \(missingCount) unpriced item\(missingCount == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private var dateLabel: String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(quote.createdAt) { return "Today" }
+        if calendar.isDateInYesterday(quote.createdAt) { return "Yesterday" }
+        return quote.createdAt.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private var statusLabel: String {
+        switch quote.status {
+        case "draft": return "Draft"
+        case "sent": return "Sent"
+        case "viewed": return "Viewed"
+        case "accepted": return "Accepted"
+        case "declined": return "Declined"
+        case "expired": return "Expired"
+        default: return quote.status.capitalized
+        }
+    }
+
+    private var statusIcon: String {
+        switch quote.status {
+        case "draft": return "pencil"
+        case "sent": return "paperplane"
+        case "viewed": return "eye"
+        case "accepted": return "checkmark.circle"
+        case "declined": return "xmark.circle"
+        case "expired": return "clock.badge.exclamationmark"
+        default: return "circle"
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text(quote.displayTitle)
+                    .font(.robotoSlab(34, relativeTo: .largeTitle))
+                    .foregroundStyle(Color(.mainText))
+                    .lineLimit(2)
+
+                chips
+
+                if let summary = quote.jobSummary, !summary.isEmpty {
+                    Text(summary)
+                        .font(.callout)
+                        .fontWeight(.medium)
+                        .foregroundStyle(Color(.mainText))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                lineItemsSection
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+        }
+        .background(Color(.homeBackground))
+        .task {
+            lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? []
+        }
         .navigationBarTitleDisplayMode(.inline)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y > 44
+        } action: { _, scrolledPastTitle in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showHeaderTitle = scrolledPastTitle
+            }
+        }
+        .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                if showHeaderTitle {
+                    Text(quote.displayTitle)
+                        .font(.robotoSlab(17, relativeTo: .headline))
+                        .foregroundStyle(Color(.mainText))
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                ShareLink(item: shareText)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(role: .destructive) {
+                        Task {
+                            try? await QuoteService.deleteQuote(id: quote.id)
+                            onDeleted()
+                            dismiss()
+                        }
+                    } label: {
+                        Label("Delete quote", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+            }
+        }
     }
 }
