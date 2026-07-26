@@ -10,6 +10,15 @@ struct QuoteRecordingView: View {
     @State private var recorder = QuoteRecorder()
     @State private var title = ""
     @State private var showHeaderTitle = false
+    @State private var isSaving = false
+    @State private var toast: Toast?
+
+    /// Editable transcript — mirrors live transcription, editable by hand when stopped.
+    @State private var transcriptText = ""
+
+    private var hasText: Bool {
+        !transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     private var displayTitle: String {
         title.isEmpty ? "Untitled quote" : title
@@ -53,6 +62,10 @@ struct QuoteRecordingView: View {
                     .padding(.horizontal, 24)
                     .padding(.bottom, 8)
             }
+            .toast($toast)
+            .onChange(of: recorder.transcript) { _, newValue in
+                if recorder.isRecording { transcriptText = newValue }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(role: .close) { dismiss() }
@@ -82,22 +95,44 @@ struct QuoteRecordingView: View {
         }
     }
 
+    private func save() {
+        isSaving = true
+        Task {
+            await recorder.stop()
+            do {
+                try await QuoteService.createQuote(transcript: transcriptText, title: title)
+                isSaving = false
+                toast = Toast(style: .success, message: "Quote saved")
+                try? await Task.sleep(for: .seconds(1.0))
+                dismiss()
+            } catch {
+                isSaving = false
+                toast = Toast(style: .error, message: "Couldn't save quote")
+            }
+        }
+    }
+
     // MARK: - Transcript
 
     private var transcript: some View {
         Group {
-            if recorder.hasContent {
-                Text(recorder.transcript)
-                    .font(.callout)
-                    .fontWeight(.medium)
-                    .foregroundStyle(Color(.mainText))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if recorder.isRecording {
+                // Live transcription (read-only while recording).
+                Text(transcriptText.isEmpty ? "Listening…" : transcriptText)
+                    .foregroundStyle(transcriptText.isEmpty ? .secondary : Color(.mainText))
             } else {
-                Text("Tap the mic and describe the job in your own words.")
-                    .font(.body)
-                    .foregroundStyle(.tertiary)
+                // Editable by hand when stopped; placeholder when empty.
+                TextField(
+                    "Tap the mic and describe the job in your own words.",
+                    text: $transcriptText,
+                    axis: .vertical
+                )
+                .foregroundStyle(Color(.mainText))
             }
         }
+        .font(.callout)
+        .fontWeight(.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Bottom bar (record / timer / cancel)
@@ -125,19 +160,22 @@ struct QuoteRecordingView: View {
             Spacer()
 
             Button {
-                Task { await recorder.stop() }
-                // TODO: run AI extraction + persist the quote
-                dismiss()
+                save()
             } label: {
-                Text("Save")
-                    .font(.body.weight(.semibold))
-                    .frame(height: 24)
-                    .padding(.horizontal, 8)
+                Group {
+                    if isSaving {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("Save").font(.body.weight(.semibold))
+                    }
+                }
+                .frame(height: 24)
+                .padding(.horizontal, 8)
             }
             .buttonStyle(.glassProminent)
-            .tint(Color(.royalBlue600))
+            .tint(Color(.mainText))
             .controlSize(.large)
-            .disabled(!recorder.hasContent || recorder.isRecording)
+            .disabled(!hasText || recorder.isRecording || isSaving)
         }
     }
 }

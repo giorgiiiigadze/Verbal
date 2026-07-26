@@ -16,16 +16,16 @@ struct VerbalApp: App {
         configureNavigationTitleWeight()
     }
 
-    /// Lighten the (otherwise bold) navigation titles to semibold.
+    /// Use Roboto Slab for navigation titles (the app's primary font).
     private func configureNavigationTitleWeight() {
         let appearance = UINavigationBarAppearance()
         appearance.configureWithDefaultBackground()
-        appearance.largeTitleTextAttributes = [
-            .font: UIFont.systemFont(ofSize: 34, weight: .regular)
-        ]
-        appearance.titleTextAttributes = [
-            .font: UIFont.systemFont(ofSize: 17, weight: .semibold)
-        ]
+        let largeTitleFont = UIFont(name: "RobotoSlab-Regular", size: 34)
+            ?? .systemFont(ofSize: 34, weight: .regular)
+        let inlineTitleFont = UIFont(name: "RobotoSlab-Regular", size: 17)
+            ?? .systemFont(ofSize: 17, weight: .semibold)
+        appearance.largeTitleTextAttributes = [.font: largeTitleFont]
+        appearance.titleTextAttributes = [.font: inlineTitleFont]
         UINavigationBar.appearance().standardAppearance = appearance
         UINavigationBar.appearance().scrollEdgeAppearance = appearance
         UINavigationBar.appearance().compactAppearance = appearance
