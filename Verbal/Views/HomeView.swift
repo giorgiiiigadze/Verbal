@@ -7,6 +7,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(SessionStore.self) private var session
+    @State private var showCreate = false
 
     var body: some View {
         NavigationStack {
@@ -21,7 +22,7 @@ struct HomeView: View {
                         Text("Welcome back, \(name).")
                             .foregroundStyle(.secondary)
                     }
-                    Text("Your feed will appear here.")
+                    Text("Your quotes appear here..")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -30,13 +31,28 @@ struct HomeView: View {
             }
             .navigationTitle("Home")
             .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button {
+                        showCreate = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    Button {
+                        // TODO: second action (define what this button does)
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         ProfileView()
                     } label: {
-                        AvatarView(urlString: session.profile?.avatarUrl, size: 30)
+                        AvatarView(image: session.avatarImage, urlString: session.profile?.avatarUrl, size: 30)
                     }
                 }
+            }
+            .sheet(isPresented: $showCreate) {
+                QuoteRecordingView()
             }
         }
     }

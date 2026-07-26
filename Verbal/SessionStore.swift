@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SwiftUI
 import Supabase
 
 @MainActor
@@ -18,35 +19,55 @@ final class SessionStore {
     private(set) var state: AppState = .loading
     private(set) var profile: Profile?
 
+    /// The user's avatar, downloaded and decoded during bootstrap so it shows
+    /// instantly (no visible load) once the splash screen dismisses.
+    private(set) var avatarImage: Image?
+
+    /// True once the initial data needed for first paint has finished loading.
+    /// The splash screen stays up until this is true.
+    private(set) var isBootstrapped = false
+
     private let client = SupabaseManager.client
 
-    /// Start listening to auth changes and resolve the initial state.
+    /// Resolve the initial state and preload first-paint data, then keep
+    /// listening for auth changes.
     func start() async {
-        // Resolve the initial state immediately from locally stored session,
-        // so the UI never sits on a blank loading screen waiting on the network.
         if let session = client.auth.currentSession, !session.isExpired {
+            await bootstrap()
             state = .ready
-            await refreshProfile()
         } else {
             state = .signedOut
         }
+        isBootstrapped = true
 
         for await change in client.auth.authStateChanges {
             switch change.event {
             case .signedIn, .userUpdated, .tokenRefreshed:
                 if let session = change.session, !session.isExpired {
+                    await bootstrap()
                     state = .ready
-                    await refreshProfile()
                 } else {
-                    state = .signedOut
+                    clearSession()
                 }
             case .signedOut:
-                profile = nil
-                state = .signedOut
+                clearSession()
             default:
                 break
             }
         }
+    }
+
+    /// Load everything the first screen needs before it's shown.
+    /// Add future home-screen preloads here (feed, etc.).
+    private func bootstrap() async {
+        await refreshProfile()
+        await preloadAvatar()
+    }
+
+    private func clearSession() {
+        profile = nil
+        avatarImage = nil
+        state = .signedOut
     }
 
     /// Load the current user's profile (name/avatar from Google) for display.
@@ -63,6 +84,20 @@ final class SessionStore {
             self.profile = profile
         } catch {
             // Row may lag right after signup; the greeting just stays generic.
+        }
+    }
+
+    /// Download and decode the avatar so it's ready before the UI appears.
+    private func preloadAvatar() async {
+        guard let urlString = profile?.avatarUrl,
+              let url = URL(string: urlString) else { return }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            if let image = UIImage(data: data) {
+                avatarImage = Image(uiImage: image)
+            }
+        } catch {
+            // Fall back to the placeholder icon if the download fails.
         }
     }
 

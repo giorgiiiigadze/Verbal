@@ -5,15 +5,19 @@
 
 import SwiftUI
 
-/// Circular avatar that loads a remote image (e.g. the Google profile photo),
-/// falling back to a person icon while loading or when no URL is available.
+/// Circular avatar. Prefers a preloaded image (fetched during bootstrap so it
+/// shows with no visible load); otherwise loads from the URL, falling back to a
+/// person icon.
 struct AvatarView: View {
-    let urlString: String?
+    var image: Image?
+    var urlString: String?
     var size: CGFloat = 32
 
     var body: some View {
         Group {
-            if let urlString, let url = URL(string: urlString) {
+            if let image {
+                image.resizable().scaledToFill()
+            } else if let urlString, let url = URL(string: urlString) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
@@ -21,7 +25,7 @@ struct AvatarView: View {
                     case .failure:
                         placeholder
                     case .empty:
-                        ProgressView()
+                        placeholder
                     @unknown default:
                         placeholder
                     }

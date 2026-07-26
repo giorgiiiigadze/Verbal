@@ -2,6 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Verbal uses the microphone to record your spoken job description and turn it into a quote.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Verbal transcribes your voice on-device to build your quote. Your audio never leaves your phone.</string>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>RoyalBlue400</string>
+	</dict>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
