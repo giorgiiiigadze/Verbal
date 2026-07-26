@@ -69,6 +69,13 @@ final class QuoteRecorder {
         errorMessage = nil
     }
 
+    /// Seed the transcript before resuming, so hand-edits made while paused are kept
+    /// and new speech continues from them.
+    func seed(_ text: String) {
+        finalizedText = text
+        volatileText = ""
+    }
+
     private func startTimer() {
         timerTask?.cancel()
         timerTask = Task { [weak self] in
@@ -96,6 +103,11 @@ final class QuoteRecorder {
             errorMessage = "Microphone and speech permission are required."
             state = .unavailable
             return
+        }
+
+        // Resuming: add a separator so new speech doesn't run into the prior text.
+        if !finalizedText.isEmpty, !finalizedText.hasSuffix(" ") {
+            finalizedText += " "
         }
 
         do {

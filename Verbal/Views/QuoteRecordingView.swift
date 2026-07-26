@@ -265,7 +265,15 @@ struct QuoteRecordingView: View {
     private var bottomBar: some View {
         HStack {
             Button {
-                Task { await recorder.toggle() }
+                Task {
+                    if recorder.isRecording {
+                        await recorder.stop()
+                    } else {
+                        // Resume from whatever is currently shown (incl. hand-edits).
+                        recorder.seed(transcriptText)
+                        await recorder.start()
+                    }
+                }
             } label: {
                 Image(systemName: recorder.isRecording ? "pause.fill" : "mic.fill")
                     .font(.system(size: 22, weight: .semibold))
