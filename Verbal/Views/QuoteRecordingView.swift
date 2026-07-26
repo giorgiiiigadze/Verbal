@@ -8,19 +8,46 @@ import SwiftUI
 struct QuoteRecordingView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var recorder = QuoteRecorder()
+    @State private var title = ""
+    @State private var showHeaderTitle = false
+
+    private var displayTitle: String {
+        title.isEmpty ? "Untitled quote" : title
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                transcript
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
+                VStack(alignment: .leading, spacing: 24) {
+                    Group {
+                        if recorder.isRecording {
+                            // Non-editable while the AI is "generating" — shows the shimmer.
+                            Text(title.isEmpty ? "Untitled quote" : title)
+                                .foregroundStyle(Color(white: 0.72))
+                                .shimmer(active: true)
+                        } else {
+                            TextField("Untitled quote", text: $title)
+                                .foregroundStyle(Color(.mainText))
+                                .textFieldStyle(.plain)
+                        }
+                    }
+                    .font(.largeTitle)
+
+                    transcript
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
             }
-            .background(Color.white)
-            .navigationTitle("Untitled quote")
-            .navigationSubtitle("AI names this after you finish")
-            .navigationBarTitleDisplayMode(.large)
+            .background(Color(.mainBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y > 44
+            } action: { _, scrolledPastTitle in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showHeaderTitle = scrolledPastTitle
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 bottomBar
                     .padding(.horizontal, 24)
@@ -29,6 +56,27 @@ struct QuoteRecordingView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(role: .close) { dismiss() }
+                }
+                ToolbarItem(placement: .principal) {
+                    if showHeaderTitle {
+                        Text(displayTitle)
+                            .font(.headline)
+                            .foregroundStyle(Color(.mainText))
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(role: .destructive) {
+                            Task { await recorder.stop() }
+                            recorder.reset()
+                            dismiss()
+                        } label: {
+                            Label("Discard recording", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
                 }
             }
         }
@@ -40,7 +88,8 @@ struct QuoteRecordingView: View {
         Group {
             if recorder.hasContent {
                 Text(recorder.transcript)
-                    .font(.body)
+                    .font(.callout)
+                    .fontWeight(.medium)
                     .foregroundStyle(Color(.mainText))
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
@@ -59,9 +108,9 @@ struct QuoteRecordingView: View {
                 Task { await recorder.toggle() }
             } label: {
                 Image(systemName: recorder.isRecording ? "pause.fill" : "mic.fill")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(Color(.mainText))
-                    .frame(width: 40, height: 24)
+                    .frame(width: 56, height: 24)
             }
             .buttonStyle(.glass)
             .controlSize(.large)
@@ -69,49 +118,67 @@ struct QuoteRecordingView: View {
 
             Spacer()
 
-            HStack(spacing: 8) {
-                Text(recorder.elapsedText)
-                    .font(.body.monospacedDigit())
-                    .foregroundStyle(Color(.mainText))
-                AudioLevelDots(level: CGFloat(recorder.audioLevel))
-            }
+            Text(recorder.elapsedText)
+                .font(.body.monospacedDigit())
+                .foregroundStyle(Color(.mainText))
 
             Spacer()
 
             Button {
                 Task { await recorder.stop() }
+                // TODO: run AI extraction + persist the quote
                 dismiss()
             } label: {
-                Text("Cancel")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(Color(.mainText))
+                Text("Save")
+                    .font(.body.weight(.semibold))
                     .frame(height: 24)
+                    .padding(.horizontal, 8)
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.glassProminent)
+            .tint(Color(.royalBlue600))
             .controlSize(.large)
+            .disabled(!recorder.hasContent || recorder.isRecording)
         }
     }
 }
 
-/// Row of blue dots that react to the live microphone level (a voice meter).
-private struct AudioLevelDots: View {
-    /// Normalized mic level, 0...1.
-    var level: CGFloat
+// MARK: - Shimmer (AI-style highlight sweep)
 
-    // Center dots respond most strongly, like a simple equalizer.
-    private let weights: [CGFloat] = [0.5, 0.8, 1.0, 0.8, 0.5]
+private struct ShimmerModifier: ViewModifier {
+    var active: Bool
+    @State private var phase: CGFloat = 0
 
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<5, id: \.self) { index in
-                let intensity = min(1, level * weights[index] * 1.8)
-                Circle()
-                    .fill(Color(.royalBlue500))
-                    .frame(width: 5, height: 5)
-                    .scaleEffect(0.6 + intensity)
-                    .opacity(0.3 + intensity * 0.7)
-                    .animation(.easeOut(duration: 0.12), value: level)
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                GeometryReader { proxy in
+                    let width = proxy.size.width
+                    LinearGradient(
+                        colors: [.clear, Color(white: 0.35), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: width * 0.5)
+                    .offset(x: -width * 0.5 + phase * (width + width * 0.5))
+                }
+                .mask(content)
+                .allowsHitTesting(false)
+                .opacity(active ? 1 : 0)
+                .animation(.easeInOut(duration: 0.45), value: active)
             }
-        }
+            .onChange(of: active) { _, isActive in
+                if isActive {
+                    phase = 0
+                    withAnimation(.easeInOut(duration: 1.3).repeatForever(autoreverses: false)) {
+                        phase = 1
+                    }
+                } else {
+                    withAnimation(.easeInOut(duration: 0.3)) { phase = 0 }
+                }
+            }
     }
+}
+
+private extension View {
+    func shimmer(active: Bool) -> some View { modifier(ShimmerModifier(active: active)) }
 }
