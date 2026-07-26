@@ -21,17 +21,17 @@ struct QuoteRecordingView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     Group {
                         if recorder.isRecording {
-                            // Non-editable while the AI is "generating" — shows the shimmer.
+                            // Non-editable while recording; shimmers once the user starts speaking.
                             Text(title.isEmpty ? "Untitled quote" : title)
                                 .foregroundStyle(Color(white: 0.72))
-                                .shimmer(active: true)
+                                .shimmer(active: recorder.hasContent)
                         } else {
                             TextField("Untitled quote", text: $title)
                                 .foregroundStyle(Color(.mainText))
                                 .textFieldStyle(.plain)
                         }
                     }
-                    .font(.largeTitle)
+                    .font(.robotoSlab(34, relativeTo: .largeTitle))
 
                     transcript
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -60,7 +60,7 @@ struct QuoteRecordingView: View {
                 ToolbarItem(placement: .principal) {
                     if showHeaderTitle {
                         Text(displayTitle)
-                            .font(.headline)
+                            .font(.robotoSlab(17, relativeTo: .headline))
                             .foregroundStyle(Color(.mainText))
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
