@@ -2,20 +2,32 @@
 //  ContentView.swift
 //  Verbal
 //
-//  Created by giorgi giorgadze on 26/07/2026.
-//
 
 import SwiftUI
 
 struct ContentView: View {
+    @State private var session = SessionStore()
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        Group {
+            switch session.state {
+            case .loading:
+                ProgressView()
+            case .signedOut:
+                if hasSeenOnboarding {
+                    AuthView()
+                } else {
+                    OnboardingView { hasSeenOnboarding = true }
+                }
+            case .ready:
+                MainTabView()
+            }
         }
-        .padding()
+        .environment(session)
+        .task {
+            await session.start()
+        }
     }
 }
 
