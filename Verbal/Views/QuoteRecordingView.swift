@@ -24,10 +24,6 @@ struct QuoteRecordingView: View {
     /// Editable transcript — mirrors live transcription, editable by hand when stopped.
     @State private var transcriptText = ""
 
-    /// Snapshots of the transcript taken when the user starts a manual edit, so the
-    /// undo button can revert hand-typed changes one editing session at a time.
-    @State private var undoSnapshots: [String] = []
-    @FocusState private var transcriptFocused: Bool
 
     private var hasText: Bool {
         !transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -98,11 +94,6 @@ struct QuoteRecordingView: View {
             .onChange(of: recorder.transcript) { _, newValue in
                 if recorder.isRecording { transcriptText = newValue }
             }
-            .onChange(of: transcriptFocused) { _, focused in
-                // Capture a snapshot when the user starts hand-editing, so undo can
-                // revert the whole editing session.
-                if focused { undoSnapshots.append(transcriptText) }
-            }
             .onChange(of: recorder.isRecording) { wasRecording, isRecording in
                 // When a recording finishes with content, generate the quote.
                 if wasRecording && !isRecording {
@@ -123,12 +114,11 @@ struct QuoteRecordingView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        if let previous = undoSnapshots.popLast() {
-                            transcriptText = previous
-                        }
+                        transcriptText = removingLastWord(from: transcriptText)
                     } label: {
                         Image(systemName: "arrow.uturn.backward")
                     }
+                    .disabled(transcriptText.isEmpty || recorder.isRecording)
                 }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .topBarTrailing) {
@@ -183,6 +173,16 @@ struct QuoteRecordingView: View {
                 }
             }
         }
+    }
+
+    /// Removes the trailing word (plus its separating whitespace) — powers word-by-word undo.
+    private func removingLastWord(from text: String) -> String {
+        var result = text
+        func isSeparator(_ c: Character) -> Bool { c == " " || c == "\n" }
+        while let last = result.last, isSeparator(last) { result.removeLast() }
+        while let last = result.last, !isSeparator(last) { result.removeLast() }
+        while let last = result.last, isSeparator(last) { result.removeLast() }
+        return result
     }
 
     private func save() {
@@ -340,7 +340,6 @@ struct QuoteRecordingView: View {
                     axis: .vertical
                 )
                 .foregroundStyle(Color(.mainText))
-                .focused($transcriptFocused)
             }
         }
         .font(.callout)
