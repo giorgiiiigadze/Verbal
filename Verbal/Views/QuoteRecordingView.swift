@@ -13,6 +13,8 @@ struct QuoteRecordingView: View {
     @State private var isSaving = false
     @State private var isGenerating = false
     @State private var generated: GeneratedQuote?
+    @State private var emptyMessage: String?
+    @State private var showTranscript = false
     @State private var toast: Toast?
 
     /// Editable transcript — mirrors live transcription, editable by hand when stopped.
@@ -34,6 +36,7 @@ struct QuoteRecordingView: View {
                         if recorder.isRecording {
                             Text(displayTitle)
                                 .foregroundStyle(Color(white: 0.72))
+                                .shimmer(active: recorder.hasContent)
                         } else {
                             TextField("Untitled quote", text: $title, axis: .vertical)
                                 .foregroundStyle(Color(.mainText))
@@ -46,6 +49,11 @@ struct QuoteRecordingView: View {
                     if isGenerating {
                         statusBanner
                             .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
+                    if let emptyMessage {
+                        messageNote(emptyMessage)
+                            .transition(.opacity)
                     }
 
                     contentArea
@@ -70,8 +78,16 @@ struct QuoteRecordingView: View {
                     .padding(.bottom, 8)
             }
             .toast($toast)
+            .sheet(isPresented: $showTranscript) {
+                TranscriptSheet(text: transcriptText)
+            }
             .onChange(of: recorder.transcript) { _, newValue in
                 if recorder.isRecording { transcriptText = newValue }
+            }
+            .onChange(of: transcriptText) { _, _ in
+                if emptyMessage != nil {
+                    withAnimation(.easeInOut(duration: 0.2)) { emptyMessage = nil }
+                }
             }
             .onChange(of: recorder.isRecording) { wasRecording, isRecording in
                 // When a recording finishes with content, generate the quote.
@@ -93,6 +109,13 @@ struct QuoteRecordingView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        if generated != nil {
+                            Button {
+                                showTranscript = true
+                            } label: {
+                                Label("View transcript", systemImage: "text.quote")
+                            }
+                        }
                         Button(role: .destructive) {
                             Task { await recorder.stop() }
                             recorder.reset()
@@ -112,10 +135,18 @@ struct QuoteRecordingView: View {
     private func generate() {
         guard hasText, generated == nil, !isGenerating else { return }
         isGenerating = true
+        emptyMessage = nil
         Task {
             defer { isGenerating = false }
-            if let result = try? await QuoteService.generate(transcript: transcriptText) {
-                withAnimation(.easeInOut(duration: 0.5)) {
+            guard let result = try? await QuoteService.generate(transcript: transcriptText) else {
+                toast = Toast(style: .error, message: "Couldn't generate quote")
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.5)) {
+                if result.lineItems.isEmpty {
+                    // Nothing quotable — show the AI's friendly note, keep transcript editable.
+                    emptyMessage = result.jobSummary
+                } else {
                     generated = result
                     // Auto-fill the title if the user hasn't typed their own (max 6 words).
                     if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -125,8 +156,6 @@ struct QuoteRecordingView: View {
                             .joined(separator: " ")
                     }
                 }
-            } else {
-                toast = Toast(style: .error, message: "Couldn't generate quote")
             }
         }
     }
@@ -165,6 +194,21 @@ struct QuoteRecordingView: View {
         .animation(.easeInOut(duration: 0.5), value: generated != nil)
     }
 
+    // MARK: - "Not enough to quote" note
+
+    private func messageNote(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "sparkles")
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(Color(.mainText))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(16)
+        .background(Color(.surface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
     // MARK: - Status banner (while generating)
 
     private var statusBanner: some View {
@@ -181,7 +225,7 @@ struct QuoteRecordingView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(white: 0.91), in: Capsule())
+            .background(Color(.surface), in: Capsule())
 
             Text("We'll turn your description into an itemized quote in a moment.")
                 .font(.footnote)
@@ -311,7 +355,7 @@ struct QuoteRecordingView: View {
                 .padding(.horizontal, 8)
             }
             .buttonStyle(.glassProminent)
-            .tint(Color(.mainText))
+            .tint(Color(.royalBlue600))
             .controlSize(.large)
             .disabled(!hasText || recorder.isRecording || isSaving || isGenerating)
         }

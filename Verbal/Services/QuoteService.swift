@@ -75,6 +75,20 @@ enum QuoteService {
             .value
     }
 
+    /// Fetch the transcript text saved with a quote.
+    static func fetchTranscript(quoteId: UUID) async throws -> String? {
+        struct Row: Decodable { let text: String? }
+        let rows: [Row] = try await client
+            .from("transcripts")
+            .select("text")
+            .eq("quote_id", value: quoteId)
+            .order("created_at", ascending: false)
+            .limit(1)
+            .execute()
+            .value
+        return rows.first?.text
+    }
+
     /// Delete a quote (line items and transcript cascade via FK).
     static func deleteQuote(id: UUID) async throws {
         try await client.from("quotes").delete().eq("id", value: id).execute()

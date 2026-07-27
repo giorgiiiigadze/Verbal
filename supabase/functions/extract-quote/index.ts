@@ -87,6 +87,7 @@ Rules:
 - Set confidence to "low" for any quantity or price you are unsure about, "high" otherwise.
 - Add a short string to "flags" for anything that needs the user's attention (missing prices, ambiguous quantities, unclear scope).
 - Do NOT compute totals or tax — that is done by the app.
+- If the transcript does NOT describe a quotable job (e.g. a greeting, small talk, silence, or too little detail to build a quote), return line_items as an EMPTY array and set job_summary to a short, friendly note (one or two sentences) telling the user there wasn't enough to build a quote and inviting them to describe the job — the tasks, quantities, and prices — then try again.
 Return only data that conforms to the provided schema.`;
 
 function buildUserPrompt(body: RequestBody): string {

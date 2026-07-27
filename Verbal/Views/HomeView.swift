@@ -7,7 +7,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(SessionStore.self) private var session
-    @State private var showCreate = false
+    @Binding var showCreate: Bool
     @State private var quotes: [QuoteSummary] = []
     @State private var isLoading = false
     @State private var filter: QuoteFilter = .all
@@ -24,9 +24,6 @@ struct HomeView: View {
             .background(Color(.homeBackground))
             .navigationTitle("Your quotes")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showCreate = true } label: { Image(systemName: "plus") }
-                }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Menu {
                         Picker("Filter", selection: $filter) {
@@ -180,6 +177,32 @@ enum QuoteFilter: CaseIterable, Hashable, Identifiable {
     }
 }
 
+/// Sheet showing the raw transcript a quote was generated from.
+struct TranscriptSheet: View {
+    let text: String?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(text?.isEmpty == false ? text! : "No transcript saved.")
+                    .font(.callout)
+                    .foregroundStyle(text?.isEmpty == false ? Color(.mainText) : .secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+            }
+            .background(Color(.mainBackground))
+            .navigationTitle("Transcript")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
 /// Small native rounded-rectangle chip with a leading icon/avatar and text.
 private struct QuoteChip<Leading: View>: View {
     let text: String
@@ -197,7 +220,7 @@ private struct QuoteChip<Leading: View>: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .glassEffect(in: .capsule)
+        .background(Color(.surface), in: .capsule)
     }
 }
 
@@ -226,6 +249,8 @@ private struct QuoteDetailView: View {
     var onDeleted: () -> Void
     @State private var showHeaderTitle = false
     @State private var lineItems: [QuoteLineItem] = []
+    @State private var transcriptText: String?
+    @State private var showTranscript = false
 
     private var missingCount: Int { lineItems.filter(\.isMissingPrice).count }
 
@@ -238,7 +263,7 @@ private struct QuoteDetailView: View {
     private var chips: some View {
         HStack(spacing: 10) {
             // 1. Who made the quote + their avatar.
-            QuoteChip(text: session.profile?.fullName ?? "You") {
+            QuoteChip(text: creatorName) {
                 AvatarView(image: session.avatarImage,
                            urlString: session.profile?.avatarUrl,
                            size: 22)
@@ -271,7 +296,7 @@ private struct QuoteDetailView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(Color(.surface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
             HStack {
                 Text("Total")
@@ -291,6 +316,12 @@ private struct QuoteDetailView: View {
             }
             .padding(.top, 4)
         }
+    }
+
+    /// Shows only the first name so the chip stays compact.
+    private var creatorName: String {
+        guard let full = session.profile?.fullName, !full.isEmpty else { return "You" }
+        return String(full.split(separator: " ").first ?? "")
     }
 
     private var dateLabel: String {
@@ -347,9 +378,13 @@ private struct QuoteDetailView: View {
             .padding(.horizontal, 24)
             .padding(.top, 12)
         }
-        .background(Color(.homeBackground))
+        .background(Color(.mainBackground))
         .task {
             lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? []
+            transcriptText = (try? await QuoteService.fetchTranscript(quoteId: quote.id)) ?? nil
+        }
+        .sheet(isPresented: $showTranscript) {
+            TranscriptSheet(text: transcriptText)
         }
         .navigationBarTitleDisplayMode(.inline)
         .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -370,10 +405,20 @@ private struct QuoteDetailView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: shareText)
+                ShareLink(item: shareText) {
+                    Text("Share").fontWeight(.semibold)
+                }
+                .buttonStyle(.glassProminent)
+                .tint(Color(.royalBlue600))
             }
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button {
+                        showTranscript = true
+                    } label: {
+                        Label("View transcript", systemImage: "text.quote")
+                    }
                     Button(role: .destructive) {
                         Task {
                             try? await QuoteService.deleteQuote(id: quote.id)

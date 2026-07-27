@@ -213,7 +213,8 @@ final class QuoteRecorder {
         let continuation = inputContinuation
         let levelCont = levelContinuation
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { buffer, _ in
+        // Smaller buffer → audio reaches the recognizer more often → lower latency.
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { buffer, _ in
             levelCont?.yield(Self.level(from: buffer))
             guard let continuation else { return }
             if let converter, let analyzerFormat,
