@@ -33,6 +33,7 @@ const QUOTE_SCHEMA = {
     type: "object",
     additionalProperties: false,
     properties: {
+      title: { type: "string" },
       job_summary: { type: "string" },
       customer: {
         type: "object",
@@ -71,13 +72,16 @@ const QUOTE_SCHEMA = {
       notes: { type: ["string", "null"] },
       flags: { type: "array", items: { type: "string" } },
     },
-    required: ["job_summary", "customer", "line_items", "notes", "flags"],
+    required: ["title", "job_summary", "customer", "line_items", "notes", "flags"],
   },
 } as const;
 
 const SYSTEM_PROMPT = `You convert a tradesperson's spoken job description into a structured, itemized quote.
 
 Rules:
+- "title" is a short, concrete name for the job itself — a 3 to 6 word noun phrase describing the work (e.g. "Bathroom re-tiling & toilet swap", "Kitchen socket installation"). It must NOT be conversational, a greeting, or a full sentence, and must NOT start with words like "Thanks", "Here's", or "Sure".
+- "job_summary" may be a friendly sentence or two describing the quote; "title" is the compact label.
+- Include EVERY distinct task, job, or material the speaker mentions as its own line item — EVEN IF it has no price. NEVER omit an item just because its price is unknown; instead include it with the stated quantity/unit (or null) and price_source "missing". The ONLY things you may leave out are items the speaker explicitly says to fold into another line (e.g. "grouting is included in the tiling price") or explicitly says to exclude (e.g. "materials he's buying himself").
 - NEVER invent prices. If an item has no spoken price and no rate-card match, set unit_price to null and price_source to "missing".
 - If the speaker states a price, use it and set price_source to "spoken".
 - If an item (without a spoken price) matches an item in the provided rate card by name/meaning, use that unit_price and set price_source to "rate_card".

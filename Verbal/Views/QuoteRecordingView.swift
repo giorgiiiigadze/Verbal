@@ -88,7 +88,12 @@ struct QuoteRecordingView: View {
             }
             .toast($toast)
             .sheet(isPresented: $showTranscript) {
-                TranscriptSheet(text: transcriptText)
+                TranscriptSheet(text: transcriptText, editable: $transcriptText) {
+                    // Regenerate: clear the current result and re-run the AI extraction.
+                    generated = nil
+                    notEnough = false
+                    generate()
+                }
             }
             .onChange(of: recorder.transcript) { _, newValue in
                 if recorder.isRecording { transcriptText = newValue }
@@ -110,9 +115,9 @@ struct QuoteRecordingView: View {
                 }
                 ToolbarItem(placement: .principal) {
                     if showHeaderTitle {
-                        Text(displayTitle)
-                            .font(.robotoSlab(17, relativeTo: .headline))
-                            .foregroundStyle(Color(.mainText))
+                        MarqueeText(text: displayTitle,
+                                    font: .robotoSlab(17, relativeTo: .headline))
+                            .frame(maxWidth: 220)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
@@ -128,7 +133,7 @@ struct QuoteRecordingView: View {
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        if generated != nil {
+                        if generated != nil || notEnough {
                             Button {
                                 showTranscript = true
                             } label: {
@@ -170,12 +175,10 @@ struct QuoteRecordingView: View {
                     notEnough = true
                 } else {
                     generated = result
-                    // Auto-fill the title if the user hasn't typed their own (max 6 words).
+                    // Auto-fill the title from the AI's compact job title if the user
+                    // hasn't typed their own.
                     if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        title = result.jobSummary
-                            .split(separator: " ", omittingEmptySubsequences: true)
-                            .prefix(6)
-                            .joined(separator: " ")
+                        title = result.title
                     }
                 }
             }

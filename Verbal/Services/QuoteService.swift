@@ -102,6 +102,7 @@ enum QuoteService {
         )
         let q = extraction.quote
         return GeneratedQuote(
+            title: q.title,
             jobSummary: q.jobSummary,
             notes: q.notes,
             lineItems: q.lineItems.map {
@@ -145,7 +146,7 @@ enum QuoteService {
 
         // Fall back to the AI summary as the quote's name when the user didn't type one.
         let typedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedTitle = typedTitle.isEmpty ? quote.jobSummary : typedTitle
+        let resolvedTitle = typedTitle.isEmpty ? quote.title : typedTitle
         let quoteInsert = QuoteInsert(
             userId: userID,
             title: resolvedTitle.isEmpty ? nil : resolvedTitle,
@@ -192,6 +193,7 @@ enum QuoteService {
 
 /// A structured quote produced by the AI, before it's persisted — used in the review UI.
 struct GeneratedQuote: Sendable {
+    var title: String
     var jobSummary: String
     var notes: String?
     var lineItems: [GeneratedLineItem]
@@ -261,11 +263,13 @@ private struct ExtractResponse: Decodable {
 }
 
 private struct ExtractedQuote: Decodable {
+    let title: String
     let jobSummary: String
     let notes: String?
     let lineItems: [ExtractedLineItem]
 
     enum CodingKeys: String, CodingKey {
+        case title
         case jobSummary = "job_summary"
         case notes
         case lineItems = "line_items"
