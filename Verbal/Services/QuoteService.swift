@@ -94,6 +94,15 @@ enum QuoteService {
         try await client.from("quotes").delete().eq("id", value: id).execute()
     }
 
+    /// Update a quote's status (draft / sent / viewed / accepted / declined / expired).
+    static func updateStatus(id: UUID, status: String) async throws {
+        try await client
+            .from("quotes")
+            .update(["status": status])
+            .eq("id", value: id)
+            .execute()
+    }
+
     /// Run the AI extraction on a transcript, returning the structured quote (not persisted).
     static func generate(transcript: String) async throws -> GeneratedQuote {
         let extraction: ExtractResponse = try await client.functions.invoke(

@@ -12,6 +12,7 @@ struct HomeView: View {
     @State private var quotes: [QuoteSummary] = []
     @State private var isLoading = false
     @State private var filter: QuoteFilter = .all
+    @State private var shareTarget: QuoteSummary?
 
     var body: some View {
         NavigationStack {
@@ -48,6 +49,13 @@ struct HomeView: View {
                 QuoteRecordingView()
                     .environment(session)
             }
+            .sheet(item: $shareTarget) { quote in
+                ShareQuotePanel(title: quote.displayTitle,
+                                subtitle: "Total \(quote.total.formatted(.number.precision(.fractionLength(2)))) · \(quote.status.capitalized)",
+                                shareText: shareText(for: quote)) {
+                    Task { await markSent(quote) }
+                }
+            }
             .task { await load() }
             .refreshable { await load() }
         }
@@ -77,7 +85,9 @@ struct HomeView: View {
                             }
                             .tint(.red)
 
-                            ShareLink(item: shareText(for: quote)) {
+                            Button {
+                                shareTarget = quote
+                            } label: {
                                 Label("Share", systemImage: "square.and.arrow.up")
                             }
                             .tint(Color(.royalBlue300))
@@ -120,6 +130,17 @@ struct HomeView: View {
             quotes.removeAll { $0.id == quote.id }
         } catch {
             // Leave the row in place if the delete failed.
+        }
+    }
+
+    /// Sharing a draft marks it as Sent (don't downgrade later statuses).
+    private func markSent(_ quote: QuoteSummary) async {
+        guard quote.status == "draft" else { return }
+        do {
+            try await QuoteService.updateStatus(id: quote.id, status: "sent")
+            await load()
+        } catch {
+            // Keep the current status if the update failed.
         }
     }
 
@@ -303,6 +324,113 @@ struct TranscriptSheet: View {
     }
 }
 
+/// Verbal's custom share panel for a quote — a preview plus Share / Copy actions.
+struct ShareQuotePanel: View {
+    let title: String
+    let subtitle: String
+    let shareText: String
+    /// Called when the quote is actually shared or copied (used to mark it Sent).
+    var onShared: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var showSystemShare = false
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack {
+                Text("Share quote")
+                    .font(.robotoSlab(22, relativeTo: .title2))
+                    .foregroundStyle(Color(.mainText))
+                Spacer()
+                Button(role: .close) { dismiss() }
+            }
+
+            // Quote preview.
+            HStack(spacing: 14) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(.royalBlue100))
+                    .frame(width: 46, height: 46)
+                    .overlay(
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(Color(.royalBlue600))
+                    )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+
+            // Actions.
+            HStack(spacing: 12) {
+                actionButton(title: "Share via…", systemImage: "square.and.arrow.up") {
+                    showSystemShare = true
+                }
+                actionButton(title: copied ? "Copied" : "Copy",
+                             systemImage: copied ? "checkmark" : "doc.on.doc") {
+                    UIPasteboard.general.string = shareText
+                    withAnimation { copied = true }
+                    onShared()
+                }
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .presentationDetents([.height(280)])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(.ultraThinMaterial)
+        .sheet(isPresented: $showSystemShare) {
+            ShareSheet(items: [shareText]) { completed in
+                if completed {
+                    onShared()
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    private func actionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                Text(title).fontWeight(.medium)
+            }
+            .foregroundStyle(Color(.mainText))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .glassEffect(.regular.interactive(), in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// UIActivityViewController wrapper that reports whether the share completed,
+/// so callers can react (e.g. marking a quote as Sent).
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    var onComplete: (Bool) -> Void
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, completed, _, _ in
+            onComplete(completed)
+        }
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
 /// Small native rounded-rectangle chip with a leading icon/avatar and text.
 struct QuoteChip<Leading: View>: View {
     let text: String
@@ -352,6 +480,18 @@ private struct QuoteDetailView: View {
     @State private var lineItems: [QuoteLineItem] = []
     @State private var transcriptText: String?
     @State private var showTranscript = false
+    @State private var showShare = false
+    /// Live status — editable via the status chip menu, persisted to Supabase.
+    @State private var status: String
+
+    /// Statuses offered in the status-chip menu, in workflow order.
+    private let selectableStatuses = ["draft", "sent", "viewed", "accepted", "declined", "expired"]
+
+    init(quote: QuoteSummary, onDeleted: @escaping () -> Void) {
+        self.quote = quote
+        self.onDeleted = onDeleted
+        _status = State(initialValue: quote.status)
+    }
 
     private var missingCount: Int { lineItems.filter(\.isMissingPrice).count }
 
@@ -359,6 +499,11 @@ private struct QuoteDetailView: View {
         var lines = [quote.displayTitle]
         if let summary = quote.jobSummary, !summary.isEmpty { lines.append(summary) }
         return lines.joined(separator: "\n")
+    }
+
+    private var shareSubtitle: String {
+        let total = quote.total.formatted(.number.precision(.fractionLength(2)))
+        return "Total \(total) · \(statusLabel)"
     }
 
     private var chips: some View {
@@ -374,10 +519,24 @@ private struct QuoteDetailView: View {
                 QuoteChip(text: dateLabel) {
                     Image(systemName: "calendar")
                 }
-                // 3. Status (my pick).
-                QuoteChip(text: statusLabel) {
-                    Image(systemName: statusIcon)
+                // 3. Status — tap to change it.
+                Menu {
+                    Picker("Status", selection: Binding(
+                        get: { status },
+                        set: { changeStatus(to: $0) }
+                    )) {
+                        ForEach(selectableStatuses, id: \.self) { option in
+                            Label(statusLabel(for: option),
+                                  systemImage: statusIcon(for: option))
+                                .tag(option)
+                        }
+                    }
+                } label: {
+                    QuoteChip(text: statusLabel) {
+                        Image(systemName: statusIcon)
+                    }
                 }
+                .buttonStyle(.plain)
             }
         }
         .scrollClipDisabled()
@@ -430,20 +589,23 @@ private struct QuoteDetailView: View {
 
     private var dateLabel: String { quoteDateLabel(quote.createdAt) }
 
-    private var statusLabel: String {
-        switch quote.status {
+    private var statusLabel: String { statusLabel(for: status) }
+    private var statusIcon: String { statusIcon(for: status) }
+
+    private func statusLabel(for status: String) -> String {
+        switch status {
         case "draft": return "Draft"
         case "sent": return "Sent"
         case "viewed": return "Viewed"
         case "accepted": return "Accepted"
         case "declined": return "Declined"
         case "expired": return "Expired"
-        default: return quote.status.capitalized
+        default: return status.capitalized
         }
     }
 
-    private var statusIcon: String {
-        switch quote.status {
+    private func statusIcon(for status: String) -> String {
+        switch status {
         case "draft": return "pencil"
         case "sent": return "paperplane"
         case "viewed": return "eye"
@@ -451,6 +613,20 @@ private struct QuoteDetailView: View {
         case "declined": return "xmark.circle"
         case "expired": return "clock.badge.exclamationmark"
         default: return "circle"
+        }
+    }
+
+    /// Optimistically update the chip and persist; revert on failure.
+    private func changeStatus(to newStatus: String) {
+        guard newStatus != status else { return }
+        let previous = status
+        withAnimation(.easeInOut(duration: 0.2)) { status = newStatus }
+        Task {
+            do {
+                try await QuoteService.updateStatus(id: quote.id, status: newStatus)
+            } catch {
+                withAnimation(.easeInOut(duration: 0.2)) { status = previous }
+            }
         }
     }
 
@@ -485,6 +661,14 @@ private struct QuoteDetailView: View {
         .sheet(isPresented: $showTranscript) {
             TranscriptSheet(text: transcriptText)
         }
+        .sheet(isPresented: $showShare) {
+            ShareQuotePanel(title: quote.displayTitle,
+                            subtitle: shareSubtitle,
+                            shareText: shareText) {
+                // Sharing a draft marks it as Sent (don't downgrade later statuses).
+                if status == "draft" { changeStatus(to: "sent") }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .onScrollGeometryChange(for: Bool.self) { geometry in
             geometry.contentOffset.y > 44
@@ -504,7 +688,9 @@ private struct QuoteDetailView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: shareText) {
+                Button {
+                    showShare = true
+                } label: {
                     Text("Share").fontWeight(.semibold)
                 }
                 .buttonStyle(.glassProminent)
