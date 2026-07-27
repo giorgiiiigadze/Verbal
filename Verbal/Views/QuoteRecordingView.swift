@@ -222,25 +222,28 @@ struct QuoteRecordingView: View {
     // MARK: - Quote chips (creator / date / status)
 
     private var chips: some View {
-        HStack(spacing: 10) {
-            QuoteChip(text: creatorName) {
-                AvatarView(image: session.avatarImage,
-                           urlString: session.profile?.avatarUrl,
-                           size: 22)
-            }
-            QuoteChip(text: quoteDateLabel(generatedAt)) {
-                Image(systemName: "calendar")
-            }
-            if notEnough {
-                QuoteChip(text: "Needs detail") {
-                    Image(systemName: "exclamationmark.circle")
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                QuoteChip(text: creatorName) {
+                    AvatarView(image: session.avatarImage,
+                               urlString: session.profile?.avatarUrl,
+                               size: 22)
                 }
-            } else {
-                QuoteChip(text: "Draft") {
-                    Image(systemName: "pencil")
+                QuoteChip(text: quoteDateLabel(generatedAt)) {
+                    Image(systemName: "calendar")
+                }
+                if notEnough {
+                    QuoteChip(text: "Needs detail") {
+                        Image(systemName: "exclamationmark.circle")
+                    }
+                } else {
+                    QuoteChip(text: "Draft") {
+                        Image(systemName: "pencil")
+                    }
                 }
             }
         }
+        .scrollClipDisabled()
     }
 
     /// First name only, so the chip stays compact.

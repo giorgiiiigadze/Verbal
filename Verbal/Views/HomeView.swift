@@ -69,6 +69,19 @@ struct HomeView: View {
                             QuoteRow(quote: quote)
                         }
                         .listRowBackground(Color.clear)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                Task { await delete(quote) }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            .tint(.red)
+
+                            ShareLink(item: shareText(for: quote)) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                            .tint(Color(.royalBlue300))
+                        }
                     }
                 } header: {
                     Text(section.title)
@@ -94,6 +107,21 @@ struct HomeView: View {
     }
 
     // MARK: - Data
+
+    private func shareText(for quote: QuoteSummary) -> String {
+        var lines = [quote.displayTitle]
+        if let summary = quote.jobSummary, !summary.isEmpty { lines.append(summary) }
+        return lines.joined(separator: "\n")
+    }
+
+    private func delete(_ quote: QuoteSummary) async {
+        do {
+            try await QuoteService.deleteQuote(id: quote.id)
+            quotes.removeAll { $0.id == quote.id }
+        } catch {
+            // Leave the row in place if the delete failed.
+        }
+    }
 
     private func load() async {
         isLoading = true
@@ -289,6 +317,7 @@ struct QuoteChip<Leading: View>: View {
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Color(.mainText))
                 .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -333,22 +362,25 @@ private struct QuoteDetailView: View {
     }
 
     private var chips: some View {
-        HStack(spacing: 10) {
-            // 1. Who made the quote + their avatar.
-            QuoteChip(text: creatorName) {
-                AvatarView(image: session.avatarImage,
-                           urlString: session.profile?.avatarUrl,
-                           size: 22)
-            }
-            // 2. Creation date.
-            QuoteChip(text: dateLabel) {
-                Image(systemName: "calendar")
-            }
-            // 3. Status (my pick).
-            QuoteChip(text: statusLabel) {
-                Image(systemName: statusIcon)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                // 1. Who made the quote + their avatar.
+                QuoteChip(text: creatorName) {
+                    AvatarView(image: session.avatarImage,
+                               urlString: session.profile?.avatarUrl,
+                               size: 22)
+                }
+                // 2. Creation date.
+                QuoteChip(text: dateLabel) {
+                    Image(systemName: "calendar")
+                }
+                // 3. Status (my pick).
+                QuoteChip(text: statusLabel) {
+                    Image(systemName: statusIcon)
+                }
             }
         }
+        .scrollClipDisabled()
     }
 
     @ViewBuilder
