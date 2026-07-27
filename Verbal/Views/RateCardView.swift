@@ -118,12 +118,21 @@ struct RateCardView: View {
 private struct AddRateItemView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
-    @State private var unit = ""
+    @State private var unit = "each"
+    @State private var customUnit = ""
     @State private var priceText = ""
     @State private var type = "labor"
     @State private var isSaving = false
 
     private let types = ["labor", "material", "other"]
+    private let commonUnits = ["each", "m²", "m", "hour", "day", "job", "litre", "kg"]
+    private let customTag = "__custom__"
+
+    /// The unit to persist — the picked common unit, or the typed custom one.
+    private var resolvedUnit: String? {
+        let value = unit == customTag ? customUnit.trimmingCharacters(in: .whitespaces) : unit
+        return value.isEmpty ? nil : value
+    }
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
@@ -141,7 +150,13 @@ private struct AddRateItemView: View {
                 Section("Price") {
                     TextField("Unit price", text: $priceText)
                         .keyboardType(.decimalPad)
-                    TextField("Unit (e.g. m², hour, each)", text: $unit)
+                    Picker("Unit", selection: $unit) {
+                        ForEach(commonUnits, id: \.self) { Text($0).tag($0) }
+                        Text("Custom…").tag(customTag)
+                    }
+                    if unit == customTag {
+                        TextField("Custom unit", text: $customUnit)
+                    }
                 }
             }
             .navigationTitle("New rate")
@@ -161,12 +176,11 @@ private struct AddRateItemView: View {
 
     private func save() {
         isSaving = true
-        let trimmedUnit = unit.trimmingCharacters(in: .whitespaces)
         let price = Double(priceText.replacingOccurrences(of: ",", with: "."))
         Task {
             try? await QuoteService.addRateCardItem(
                 name: name.trimmingCharacters(in: .whitespaces),
-                unit: trimmedUnit.isEmpty ? nil : trimmedUnit,
+                unit: resolvedUnit,
                 unitPrice: price,
                 type: type
             )
