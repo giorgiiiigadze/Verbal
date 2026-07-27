@@ -45,6 +45,7 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showCreate, onDismiss: { Task { await load() } }) {
                 QuoteRecordingView()
+                    .environment(session)
             }
             .task { await load() }
             .refreshable { await load() }
@@ -62,6 +63,7 @@ struct HomeView: View {
                             QuoteDetailView(quote: quote) {
                                 quotes.removeAll { $0.id == quote.id }
                             }
+                            .environment(session)
                         } label: {
                             QuoteRow(quote: quote)
                         }
@@ -204,7 +206,7 @@ struct TranscriptSheet: View {
 }
 
 /// Small native rounded-rectangle chip with a leading icon/avatar and text.
-private struct QuoteChip<Leading: View>: View {
+struct QuoteChip<Leading: View>: View {
     let text: String
     @ViewBuilder let leading: Leading
 
@@ -324,12 +326,7 @@ private struct QuoteDetailView: View {
         return String(full.split(separator: " ").first ?? "")
     }
 
-    private var dateLabel: String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(quote.createdAt) { return "Today" }
-        if calendar.isDateInYesterday(quote.createdAt) { return "Yesterday" }
-        return quote.createdAt.formatted(.dateTime.month(.abbreviated).day())
-    }
+    private var dateLabel: String { quoteDateLabel(quote.createdAt) }
 
     private var statusLabel: String {
         switch quote.status {

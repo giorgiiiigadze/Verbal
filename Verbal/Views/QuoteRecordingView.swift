@@ -7,18 +7,27 @@ import SwiftUI
 
 struct QuoteRecordingView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(SessionStore.self) private var session
     @State private var recorder = QuoteRecorder()
     @State private var title = ""
     @State private var showHeaderTitle = false
     @State private var isSaving = false
     @State private var isGenerating = false
     @State private var generated: GeneratedQuote?
-    @State private var emptyMessage: String?
+    /// True when generation ran but the transcript wasn't enough to build a quote.
+    @State private var notEnough = false
+    /// When the current generation finished — drives the date chip.
+    @State private var generatedAt = Date()
     @State private var showTranscript = false
     @State private var toast: Toast?
 
     /// Editable transcript — mirrors live transcription, editable by hand when stopped.
     @State private var transcriptText = ""
+
+    /// Snapshots of the transcript taken when the user starts a manual edit, so the
+    /// undo button can revert hand-typed changes one editing session at a time.
+    @State private var undoSnapshots: [String] = []
+    @FocusState private var transcriptFocused: Bool
 
     private var hasText: Bool {
         !transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -46,14 +55,14 @@ struct QuoteRecordingView: View {
                     }
                     .font(.robotoSlab(34, relativeTo: .largeTitle))
 
+                    if generated != nil || notEnough {
+                        chips
+                            .transition(.opacity)
+                    }
+
                     if isGenerating {
                         statusBanner
                             .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-
-                    if let emptyMessage {
-                        messageNote(emptyMessage)
-                            .transition(.opacity)
                     }
 
                     contentArea
@@ -84,10 +93,10 @@ struct QuoteRecordingView: View {
             .onChange(of: recorder.transcript) { _, newValue in
                 if recorder.isRecording { transcriptText = newValue }
             }
-            .onChange(of: transcriptText) { _, _ in
-                if emptyMessage != nil {
-                    withAnimation(.easeInOut(duration: 0.2)) { emptyMessage = nil }
-                }
+            .onChange(of: transcriptFocused) { _, focused in
+                // Capture a snapshot when the user starts hand-editing, so undo can
+                // revert the whole editing session.
+                if focused { undoSnapshots.append(transcriptText) }
             }
             .onChange(of: recorder.isRecording) { wasRecording, isRecording in
                 // When a recording finishes with content, generate the quote.
@@ -107,6 +116,16 @@ struct QuoteRecordingView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        if let previous = undoSnapshots.popLast() {
+                            transcriptText = previous
+                        }
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
+                }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         if generated != nil {
@@ -135,17 +154,20 @@ struct QuoteRecordingView: View {
     private func generate() {
         guard hasText, generated == nil, !isGenerating else { return }
         isGenerating = true
-        emptyMessage = nil
+        notEnough = false
         Task {
             defer { isGenerating = false }
             guard let result = try? await QuoteService.generate(transcript: transcriptText) else {
                 toast = Toast(style: .error, message: "Couldn't generate quote")
                 return
             }
+            generatedAt = Date()
             withAnimation(.easeInOut(duration: 0.5)) {
                 if result.lineItems.isEmpty {
-                    // Nothing quotable — show the AI's friendly note, keep transcript editable.
-                    emptyMessage = result.jobSummary
+                    // Nothing quotable — drop the AI's friendly note straight into the
+                    // transcript so the user can read it and keep editing in place.
+                    transcriptText = result.jobSummary
+                    notEnough = true
                 } else {
                     generated = result
                     // Auto-fill the title if the user hasn't typed their own (max 6 words).
@@ -194,19 +216,34 @@ struct QuoteRecordingView: View {
         .animation(.easeInOut(duration: 0.5), value: generated != nil)
     }
 
-    // MARK: - "Not enough to quote" note
+    // MARK: - Quote chips (creator / date / status)
 
-    private func messageNote(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "sparkles")
-                .foregroundStyle(.secondary)
-            Text(text)
-                .font(.callout)
-                .foregroundStyle(Color(.mainText))
-                .frame(maxWidth: .infinity, alignment: .leading)
+    private var chips: some View {
+        HStack(spacing: 10) {
+            QuoteChip(text: creatorName) {
+                AvatarView(image: session.avatarImage,
+                           urlString: session.profile?.avatarUrl,
+                           size: 22)
+            }
+            QuoteChip(text: quoteDateLabel(generatedAt)) {
+                Image(systemName: "calendar")
+            }
+            if notEnough {
+                QuoteChip(text: "Needs detail") {
+                    Image(systemName: "exclamationmark.circle")
+                }
+            } else {
+                QuoteChip(text: "Draft") {
+                    Image(systemName: "pencil")
+                }
+            }
         }
-        .padding(16)
-        .background(Color(.surface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    /// First name only, so the chip stays compact.
+    private var creatorName: String {
+        guard let full = session.profile?.fullName, !full.isEmpty else { return "You" }
+        return String(full.split(separator: " ").first ?? "")
     }
 
     // MARK: - Status banner (while generating)
@@ -225,7 +262,7 @@ struct QuoteRecordingView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.surface), in: Capsule())
+            .background(Color("Surface"), in: Capsule())
 
             Text("We'll turn your description into an itemized quote in a moment.")
                 .font(.footnote)
@@ -297,6 +334,7 @@ struct QuoteRecordingView: View {
                     axis: .vertical
                 )
                 .foregroundStyle(Color(.mainText))
+                .focused($transcriptFocused)
             }
         }
         .font(.callout)

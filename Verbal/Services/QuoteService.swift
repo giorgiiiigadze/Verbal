@@ -214,6 +214,24 @@ struct GeneratedLineItem: Identifiable, Sendable {
     var quantityText: String? { quantityLabel(quantity, unit) }
 }
 
+/// Formats a quote's timestamp as a compact date + time indicator, e.g.
+/// "Just now", "4 minutes ago", "Today, 7:45 PM", "Yesterday, 7:45 PM", or "Jul 27".
+func quoteDateLabel(_ date: Date, now: Date = Date()) -> String {
+    let calendar = Calendar.current
+    let seconds = now.timeIntervalSince(date)
+
+    if seconds < 60 { return "Just now" }
+    if seconds < 3600 {
+        let minutes = Int(seconds / 60)
+        return "\(minutes) minute\(minutes == 1 ? "" : "s") ago"
+    }
+
+    let time = date.formatted(.dateTime.hour().minute())
+    if calendar.isDateInToday(date) { return "Today, \(time)" }
+    if calendar.isDateInYesterday(date) { return "Yesterday, \(time)" }
+    return date.formatted(.dateTime.month(.abbreviated).day())
+}
+
 /// Formats a quantity + unit like "8 each" or "20 meters".
 func quantityLabel(_ quantity: Double?, _ unit: String?) -> String? {
     guard let quantity else { return nil }
