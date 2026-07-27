@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var isLoading = false
     @State private var filter: QuoteFilter = .all
     @State private var shareTarget: QuoteSummary?
+    @State private var searchText = ""
 
     var body: some View {
         NavigationStack {
@@ -25,8 +26,10 @@ struct HomeView: View {
             }
             .background(Color(.homeBackground))
             .navigationTitle("Your quotes")
+            .searchable(text: $searchText, prompt: "Search quotes")
+            .searchToolbarBehavior(.minimize)
             .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Picker("Filter", selection: $filter) {
                             ForEach(QuoteFilter.allCases) { option in
@@ -37,11 +40,6 @@ struct HomeView: View {
                         Image(systemName: filter == .all
                               ? "line.3.horizontal.decrease"
                               : "line.3.horizontal.decrease.circle.fill")
-                    }
-                    NavigationLink {
-                        ProfileView()
-                    } label: {
-                        AvatarView(image: session.avatarImage, urlString: session.profile?.avatarUrl, size: 30)
                     }
                 }
             }
@@ -157,7 +155,13 @@ struct HomeView: View {
     /// Quotes grouped into status sections, honoring the active filter.
     /// Section titles include a count, e.g. "Waiting to hear back · 2".
     private var sections: [(title: String, quotes: [QuoteSummary])] {
-        let filtered = quotes.filter { filter.matches($0.status) }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = quotes.filter { quote in
+            guard filter.matches(quote.status) else { return false }
+            guard !query.isEmpty else { return true }
+            return quote.displayTitle.lowercased().contains(query)
+                || (quote.jobSummary?.lowercased().contains(query) ?? false)
+        }
         var groups: [QuoteStatusGroup: [QuoteSummary]] = [:]
         for quote in filtered {
             groups[QuoteStatusGroup(status: quote.status), default: []].append(quote)

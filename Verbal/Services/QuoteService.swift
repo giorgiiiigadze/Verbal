@@ -104,10 +104,18 @@ enum QuoteService {
     }
 
     /// Run the AI extraction on a transcript, returning the structured quote (not persisted).
+    /// Passes the user's active rate card so the AI can price known items.
     static func generate(transcript: String) async throws -> GeneratedQuote {
+        let rateCard = (try? await fetchRateCard(activeOnly: true)) ?? []
+        let request = ExtractRequest(
+            transcript: transcript,
+            rate_card: rateCard.map {
+                RateCardPayload(name: $0.name, unit: $0.unit, unit_price: $0.unitPrice, type: $0.type)
+            }
+        )
         let extraction: ExtractResponse = try await client.functions.invoke(
             "extract-quote",
-            options: FunctionInvokeOptions(body: ExtractRequest(transcript: transcript))
+            options: FunctionInvokeOptions(body: request)
         )
         let q = extraction.quote
         return GeneratedQuote(
@@ -125,6 +133,33 @@ enum QuoteService {
                 )
             }
         )
+    }
+
+    // MARK: - Rate card
+
+    static func fetchRateCard(activeOnly: Bool = false) async throws -> [RateCardItem] {
+        guard let userID = client.auth.currentUser?.id else {
+            throw QuoteError.notSignedIn
+        }
+        let query = client
+            .from("rate_card_items")
+            .select("id, name, unit, unit_price, type, active")
+            .eq("user_id", value: userID)
+        let filtered = activeOnly ? query.eq("active", value: true) : query
+        return try await filtered.order("name", ascending: true).execute().value
+    }
+
+    static func addRateCardItem(name: String, unit: String?, unitPrice: Double?, type: String) async throws {
+        guard let userID = client.auth.currentUser?.id else {
+            throw QuoteError.notSignedIn
+        }
+        try await client.from("rate_card_items").insert(
+            RateCardInsert(user_id: userID, name: name, unit: unit, unit_price: unitPrice, type: type, active: true)
+        ).execute()
+    }
+
+    static func deleteRateCardItem(id: UUID) async throws {
+        try await client.from("rate_card_items").delete().eq("id", value: id).execute()
     }
 
     /// Fetch the signed-in user's quotes, newest first.
@@ -252,6 +287,37 @@ func quantityLabel(_ quantity: Double?, _ unit: String?) -> String? {
     return [q, unit].compactMap { $0 }.joined(separator: " ")
 }
 
+/// A saved rate-card entry (labor/material/other) used to auto-price quotes.
+struct RateCardItem: Identifiable, Decodable, Sendable {
+    let id: UUID
+    let name: String
+    let unit: String?
+    let unitPrice: Double?
+    let type: String
+    let active: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, unit
+        case unitPrice = "unit_price"
+        case type, active
+    }
+
+    var priceText: String? {
+        guard let unitPrice else { return nil }
+        let amount = unitPrice.formatted(.number.precision(.fractionLength(2)))
+        return [amount, unit].compactMap { $0 }.joined(separator: " / ")
+    }
+}
+
+private struct RateCardInsert: Encodable {
+    let user_id: UUID
+    let name: String
+    let unit: String?
+    let unit_price: Double?
+    let type: String
+    let active: Bool
+}
+
 enum QuoteError: LocalizedError {
     case notSignedIn
     var errorDescription: String? {
@@ -265,6 +331,14 @@ enum QuoteError: LocalizedError {
 
 private struct ExtractRequest: Encodable {
     let transcript: String
+    let rate_card: [RateCardPayload]
+}
+
+private struct RateCardPayload: Encodable {
+    let name: String
+    let unit: String?
+    let unit_price: Double?
+    let type: String
 }
 
 private struct ExtractResponse: Decodable {

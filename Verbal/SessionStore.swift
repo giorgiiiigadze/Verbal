@@ -22,6 +22,8 @@ final class SessionStore {
     /// The user's avatar, downloaded and decoded during bootstrap so it shows
     /// instantly (no visible load) once the splash screen dismisses.
     private(set) var avatarImage: Image?
+    /// The raw decoded avatar, kept so it can be rendered into a tab-bar icon.
+    private(set) var avatarUIImage: UIImage?
 
     /// True once the initial data needed for first paint has finished loading.
     /// The splash screen stays up until this is true.
@@ -67,6 +69,7 @@ final class SessionStore {
     private func clearSession() {
         profile = nil
         avatarImage = nil
+        avatarUIImage = nil
         state = .signedOut
     }
 
@@ -95,6 +98,7 @@ final class SessionStore {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let image = UIImage(data: data) {
                 avatarImage = Image(uiImage: image)
+                avatarUIImage = image
             }
         } catch {
             // Fall back to the placeholder icon if the download fails.

@@ -7,6 +7,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @Environment(SessionStore.self) private var session
+    @State private var showSettings = false
 
     var body: some View {
         List {
@@ -28,7 +29,21 @@ struct ProfileView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Color(.homeBackground))
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+            }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
     }
 }
