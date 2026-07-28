@@ -47,11 +47,13 @@ final class SessionStore {
     /// Resolve the initial state and preload first-paint data, then keep
     /// listening for auth changes.
     func start() async {
-        // A stored session that can't be refreshed while offline should still
-        // land the user on the home screen — not the sign-in page. We only
-        // fall back to sign-in when there is genuinely no stored session.
-        if let session = client.auth.currentSession,
-           !session.isExpired || !network.isOnline {
+        // If a session exists at all, land on the home screen — even if its
+        // access token is expired (a logged-in user still has a refresh token)
+        // and even if we're offline. Expiry is refreshed in the background; it
+        // is NOT a sign-out. We only show sign-in when there is truly no stored
+        // session. This avoids a flash of the auth page at cold launch,
+        // especially offline where the network state isn't known yet.
+        if client.auth.currentSession != nil {
             await bootstrap()
             state = .ready
         } else {
@@ -62,18 +64,17 @@ final class SessionStore {
         for await change in client.auth.authStateChanges {
             switch change.event {
             case .signedIn, .userUpdated, .tokenRefreshed:
-                if let session = change.session, !session.isExpired {
+                if change.session != nil {
                     await bootstrap()
                     state = .ready
-                } else if client.auth.currentSession != nil, !network.isOnline {
-                    // Keep the user in the app; a failed offline refresh isn't
-                    // a sign-out.
-                    state = .ready
-                } else {
-                    clearSession()
                 }
             case .signedOut:
-                clearSession()
+                // A real sign-out only happens online (user-initiated). A
+                // `signedOut` that arrives while offline is almost always a
+                // failed background token refresh — keep the user in the app.
+                if network.isOnline {
+                    clearSession()
+                }
             default:
                 break
             }
