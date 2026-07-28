@@ -491,6 +491,7 @@ private struct QuoteRow: View {
 private struct QuoteDetailView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     let quote: QuoteSummary
     var onDeleted: () -> Void
     @State private var showHeaderTitle = false
@@ -708,7 +709,9 @@ private struct QuoteDetailView: View {
                 Button {
                     showShare = true
                 } label: {
-                    Text("Share").fontWeight(.semibold)
+                    Text("Share")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(colorScheme == .dark ? .white : Color(.mainText))
                 }
                 .buttonStyle(.glassProminent)
                 .tint(Color(.royalBlue600))
