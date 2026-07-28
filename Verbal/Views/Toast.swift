@@ -57,7 +57,7 @@ private struct ToastModifier: ViewModifier {
             .overlay(alignment: .bottom) {
                 if let toast {
                     ToastView(toast: toast)
-                        .padding(.bottom, 40)
+                        .padding(.bottom, 60)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                         .task(id: toast) {
                             try? await Task.sleep(for: .seconds(2.5))
