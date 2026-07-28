@@ -498,6 +498,7 @@ private struct QuoteDetailView: View {
     @State private var transcriptText: String?
     @State private var showTranscript = false
     @State private var showShare = false
+    @State private var showDeleteConfirm = false
     /// Live status — editable via the status chip menu, persisted to Supabase.
     @State private var status: String
     /// Live currency — editable via the currency chip, persisted to Supabase.
@@ -709,6 +710,10 @@ private struct QuoteDetailView: View {
             lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? []
             transcriptText = (try? await QuoteService.fetchTranscript(quoteId: quote.id)) ?? nil
         }
+        .task {
+            // Warm the exchange-rate cache so a conversion opens instantly.
+            await FXService.prefetch(base: currency)
+        }
         .sheet(isPresented: $showTranscript) {
             TranscriptSheet(text: transcriptText)
         }
@@ -772,11 +777,7 @@ private struct QuoteDetailView: View {
                         Label("View transcript", systemImage: "text.quote")
                     }
                     Button(role: .destructive) {
-                        Task {
-                            try? await QuoteService.deleteQuote(id: quote.id)
-                            onDeleted()
-                            dismiss()
-                        }
+                        showDeleteConfirm = true
                     } label: {
                         Label("Delete quote", systemImage: "trash")
                     }
@@ -784,6 +785,18 @@ private struct QuoteDetailView: View {
                     Image(systemName: "ellipsis")
                 }
             }
+        }
+        .alert("Delete this quote?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    try? await QuoteService.deleteQuote(id: quote.id)
+                    onDeleted()
+                    dismiss()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes “\(quote.displayTitle)” and its line items. This can't be undone.")
         }
     }
 }

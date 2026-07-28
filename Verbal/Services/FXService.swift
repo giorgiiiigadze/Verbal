@@ -7,11 +7,21 @@
 //  updated once per business day. Not every currency is supported (the ECB
 //  list is ~30 majors), so callers must handle `unsupported`.
 //
+//  Rates are cached per base currency for the current day (in memory and in
+//  UserDefaults), so only the first conversion of the day hits the network —
+//  subsequent ones resolve instantly with no spinner.
+//
 
 import Foundation
 
 enum FXService {
     private struct RateResponse: Decodable {
+        let rates: [String: Double]
+    }
+
+    /// One base currency's full rate table, tagged with the day it was fetched.
+    private struct CachedTable: Codable {
+        let day: String
         let rates: [String: Double]
     }
 
@@ -29,16 +39,40 @@ enum FXService {
         }
     }
 
+    private static var memoryCache: [String: CachedTable] = [:]
+
+    /// Today as a plain yyyy-MM-dd key in UTC (matches how ECB rates roll over).
+    private static var today: String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
+    }
+
     /// Today's rate to multiply a `from` amount by to get `to`. Returns 1 when
-    /// the currencies match. Throws `unsupported` / `badResponse` on failure.
+    /// the currencies match. Uses a per-day cache; only the first lookup for a
+    /// given base currency each day makes a network request.
     static func rate(from: String, to: String) async throws -> Double {
         if from == to { return 1 }
+        let table = try await ratesTable(base: from)
+        guard let rate = table[to] else { throw FXError.unsupported }
+        return rate
+    }
+
+    /// Warm the cache for a base currency in the background (best effort), so
+    /// the first real conversion resolves instantly. Errors are ignored.
+    static func prefetch(base: String) async {
+        _ = try? await ratesTable(base: base)
+    }
+
+    /// The full rate table for a base currency, from cache when fresh.
+    private static func ratesTable(base: String) async throws -> [String: Double] {
+        if let cached = cachedTable(base: base) { return cached }
 
         var components = URLComponents(string: "https://api.frankfurter.app/latest")!
-        components.queryItems = [
-            URLQueryItem(name: "from", value: from),
-            URLQueryItem(name: "to", value: to),
-        ]
+        components.queryItems = [URLQueryItem(name: "from", value: base)]
         guard let url = components.url else { throw FXError.badResponse }
 
         let (data, response) = try await URLSession.shared.data(from: url)
@@ -46,10 +80,33 @@ enum FXService {
         // Frankfurter returns 404 for currencies it doesn't cover (e.g. AED).
         if http.statusCode == 404 { throw FXError.unsupported }
         guard http.statusCode == 200,
-              let decoded = try? JSONDecoder().decode(RateResponse.self, from: data),
-              let rate = decoded.rates[to] else {
+              let decoded = try? JSONDecoder().decode(RateResponse.self, from: data) else {
             throw FXError.badResponse
         }
-        return rate
+        store(base: base, rates: decoded.rates)
+        return decoded.rates
+    }
+
+    // MARK: - Cache
+
+    private static func cacheKey(_ base: String) -> String { "fxRates_\(base)" }
+
+    private static func cachedTable(base: String) -> [String: Double]? {
+        if let mem = memoryCache[base], mem.day == today { return mem.rates }
+        if let data = UserDefaults.standard.data(forKey: cacheKey(base)),
+           let decoded = try? JSONDecoder().decode(CachedTable.self, from: data),
+           decoded.day == today {
+            memoryCache[base] = decoded
+            return decoded.rates
+        }
+        return nil
+    }
+
+    private static func store(base: String, rates: [String: Double]) {
+        let table = CachedTable(day: today, rates: rates)
+        memoryCache[base] = table
+        if let data = try? JSONEncoder().encode(table) {
+            UserDefaults.standard.set(data, forKey: cacheKey(base))
+        }
     }
 }
