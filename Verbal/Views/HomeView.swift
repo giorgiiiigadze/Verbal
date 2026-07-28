@@ -10,6 +10,7 @@ struct HomeView: View {
     @Environment(SessionStore.self) private var session
     @Binding var showCreate: Bool
     @State private var quotes: [QuoteSummary] = []
+    @State private var hasLoaded = false
     @State private var isLoading = false
     @State private var filter: QuoteFilter = .all
     @State private var shareTarget: QuoteSummary?
@@ -18,7 +19,10 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if quotes.isEmpty {
+                if quotes.isEmpty && !hasLoaded {
+                    // Still loading first paint — stay blank, not "no quotes".
+                    Color(.homeBackground)
+                } else if quotes.isEmpty {
                     emptyState
                 } else {
                     quotesList
@@ -54,7 +58,15 @@ struct HomeView: View {
                     Task { await markSent(quote) }
                 }
             }
-            .task { await load() }
+            .task {
+                // Seed instantly from the data preloaded during the splash so
+                // the list appears with no empty-state flash, then refresh.
+                if !hasLoaded {
+                    quotes = session.quotes
+                    hasLoaded = session.listsLoaded
+                }
+                await load()
+            }
             .refreshable { await load() }
         }
     }
@@ -150,6 +162,7 @@ struct HomeView: View {
         } catch {
             // Keep whatever we had; a toast/list-error can be added later.
         }
+        hasLoaded = true
     }
 
     /// Quotes grouped into status sections, honoring the active filter.
@@ -278,7 +291,7 @@ struct TranscriptSheet: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
             }
-            .background(Color(.mainBackground))
+            .background(Color(.homeBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -657,7 +670,7 @@ private struct QuoteDetailView: View {
             .padding(.horizontal, 24)
             .padding(.top, 12)
         }
-        .background(Color(.mainBackground))
+        .background(Color(.homeBackground))
         .task {
             lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? []
             transcriptText = (try? await QuoteService.fetchTranscript(quoteId: quote.id)) ?? nil

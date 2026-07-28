@@ -9,13 +9,18 @@
 import SwiftUI
 
 struct RateCardView: View {
+    @Environment(SessionStore.self) private var session
     @State private var items: [RateCardItem] = []
+    @State private var hasLoaded = false
     @State private var isLoading = false
     @State private var showAdd = false
 
     var body: some View {
         Group {
-            if items.isEmpty {
+            if items.isEmpty && !hasLoaded {
+                // Still loading first paint — stay blank, not "no prices".
+                Color(.homeBackground)
+            } else if items.isEmpty {
                 emptyState
             } else {
                 list
@@ -35,7 +40,14 @@ struct RateCardView: View {
         .sheet(isPresented: $showAdd, onDismiss: { Task { await load() } }) {
             AddRateItemView()
         }
-        .task { await load() }
+        .task {
+            // Seed from the splash-time preload so the list shows instantly.
+            if !hasLoaded {
+                items = session.rateCard
+                hasLoaded = session.listsLoaded
+            }
+            await load()
+        }
         .refreshable { await load() }
     }
 
@@ -101,6 +113,7 @@ struct RateCardView: View {
         isLoading = true
         defer { isLoading = false }
         items = (try? await QuoteService.fetchRateCard()) ?? []
+        hasLoaded = true
     }
 
     private func delete(_ item: RateCardItem) async {

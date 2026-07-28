@@ -40,7 +40,7 @@ struct QuoteRecordingView: View {
                     Group {
                         if recorder.isRecording {
                             Text(displayTitle)
-                                .foregroundStyle(Color(white: 0.72))
+                                .foregroundStyle(.secondary)
                                 .shimmer(active: recorder.hasContent)
                         } else {
                             TextField("Untitled quote", text: $title, axis: .vertical)
@@ -68,7 +68,7 @@ struct QuoteRecordingView: View {
                 .padding(.top, 12)
                 .animation(.easeInOut(duration: 0.35), value: isGenerating)
             }
-            .background(Color(.mainBackground))
+            .background(Color(.homeBackground))
             .navigationBarTitleDisplayMode(.inline)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentOffset.y > 44
@@ -300,7 +300,7 @@ struct QuoteRecordingView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(Color(.surface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                 let subtotal = quote.lineItems.compactMap(\.lineTotal).reduce(0, +)
                 let missing = quote.lineItems.filter(\.isMissingPrice).count
@@ -417,7 +417,7 @@ private struct ShimmerModifier: ViewModifier {
                 GeometryReader { proxy in
                     let width = proxy.size.width
                     LinearGradient(
-                        colors: [.clear, Color(white: 0.35), .clear],
+                        colors: [.clear, Color.primary.opacity(0.35), .clear],
                         startPoint: .leading,
                         endPoint: .trailing
                     )

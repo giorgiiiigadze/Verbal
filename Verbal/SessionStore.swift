@@ -29,12 +29,29 @@ final class SessionStore {
     /// The splash screen stays up until this is true.
     private(set) var isBootstrapped = false
 
+    /// Quotes and rate-card items preloaded during bootstrap so the Home and
+    /// Rate Card tabs render instantly with no empty-state flash on first paint.
+    private(set) var quotes: [QuoteSummary] = []
+    private(set) var rateCard: [RateCardItem] = []
+    /// True once the initial fetch of the lists above has completed (success or
+    /// failure), so views can tell "still loading" from "genuinely empty".
+    private(set) var listsLoaded = false
+
     private let client = SupabaseManager.client
+    private let network: NetworkMonitor
+
+    init(network: NetworkMonitor) {
+        self.network = network
+    }
 
     /// Resolve the initial state and preload first-paint data, then keep
     /// listening for auth changes.
     func start() async {
-        if let session = client.auth.currentSession, !session.isExpired {
+        // A stored session that can't be refreshed while offline should still
+        // land the user on the home screen — not the sign-in page. We only
+        // fall back to sign-in when there is genuinely no stored session.
+        if let session = client.auth.currentSession,
+           !session.isExpired || !network.isOnline {
             await bootstrap()
             state = .ready
         } else {
@@ -47,6 +64,10 @@ final class SessionStore {
             case .signedIn, .userUpdated, .tokenRefreshed:
                 if let session = change.session, !session.isExpired {
                     await bootstrap()
+                    state = .ready
+                } else if client.auth.currentSession != nil, !network.isOnline {
+                    // Keep the user in the app; a failed offline refresh isn't
+                    // a sign-out.
                     state = .ready
                 } else {
                     clearSession()
@@ -64,6 +85,17 @@ final class SessionStore {
     private func bootstrap() async {
         await refreshProfile()
         await preloadAvatar()
+        await preloadLists()
+    }
+
+    /// Load the Home and Rate Card lists up front so those tabs show data
+    /// immediately instead of flashing an empty state while fetching.
+    func preloadLists() async {
+        async let quotesResult = try? await QuoteService.fetchQuotes()
+        async let rateResult = try? await QuoteService.fetchRateCard()
+        quotes = await quotesResult ?? quotes
+        rateCard = await rateResult ?? rateCard
+        listsLoaded = true
     }
 
     private func clearSession() {
