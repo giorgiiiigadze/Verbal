@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var isLoading = false
     @State private var filter: QuoteFilter = .all
     @State private var shareTarget: QuoteSummary?
+    @State private var quoteToDelete: QuoteSummary?
     @State private var searchText = ""
 
     var body: some View {
@@ -68,6 +69,17 @@ struct HomeView: View {
                 await load()
             }
             .refreshable { await load() }
+            .alert("Delete this quote?", isPresented: Binding(
+                get: { quoteToDelete != nil },
+                set: { if !$0 { quoteToDelete = nil } }
+            ), presenting: quoteToDelete) { quote in
+                Button("Delete", role: .destructive) {
+                    Task { await delete(quote) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { quote in
+                Text("This permanently deletes “\(quote.displayTitle)”. This can't be undone.")
+            }
         }
     }
 
@@ -89,7 +101,7 @@ struct HomeView: View {
                         .listRowBackground(Color.clear)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
-                                Task { await delete(quote) }
+                                quoteToDelete = quote
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }

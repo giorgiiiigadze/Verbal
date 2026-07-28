@@ -20,8 +20,8 @@ struct QuoteRecordingView: View {
     @State private var generatedAt = Date()
     @State private var showTranscript = false
     @State private var toast: Toast?
-    /// Currency for the quote being built — defaults to the user's setting,
-    /// changeable via the currency chip before saving.
+    /// Currency for the quote being built — always the user's Settings default.
+    /// Changing a quote's currency happens later, on the detail page.
     @State private var currency = AppCurrency.current.rawValue
 
     /// Editable transcript — mirrors live transcription, editable by hand when stopped.
@@ -240,19 +240,6 @@ struct QuoteRecordingView: View {
                         Image(systemName: "exclamationmark.circle")
                     }
                 } else {
-                    // Currency — tap to change before saving.
-                    Menu {
-                        Picker("Currency", selection: $currency) {
-                            ForEach(AppCurrency.allCases) { option in
-                                Text(option.label).tag(option.rawValue)
-                            }
-                        }
-                    } label: {
-                        QuoteChip(text: currencyLabel) {
-                            Image(systemName: "coloncurrencysign.circle")
-                        }
-                    }
-                    .buttonStyle(.plain)
                     QuoteChip(text: "Draft") {
                         Image(systemName: "pencil")
                     }
@@ -262,11 +249,6 @@ struct QuoteRecordingView: View {
         .scrollClipDisabled()
     }
 
-    /// Chip label for the selected currency, e.g. "GBP (£)".
-    private var currencyLabel: String {
-        let c = AppCurrency(rawValue: currency)
-        return "\(currency) (\(c?.symbol ?? currency))"
-    }
 
     /// First name only, so the chip stays compact.
     private var creatorName: String {
