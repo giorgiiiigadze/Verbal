@@ -20,6 +20,9 @@ struct QuoteRecordingView: View {
     @State private var generatedAt = Date()
     @State private var showTranscript = false
     @State private var toast: Toast?
+    /// Currency for the quote being built — defaults to the user's setting,
+    /// changeable via the currency chip before saving.
+    @State private var currency = AppCurrency.current.rawValue
 
     /// Editable transcript — mirrors live transcription, editable by hand when stopped.
     @State private var transcriptText = ""
@@ -190,7 +193,7 @@ struct QuoteRecordingView: View {
         isSaving = true
         Task {
             do {
-                try await QuoteService.save(generated, transcript: transcriptText, title: title)
+                try await QuoteService.save(generated, transcript: transcriptText, title: title, currency: currency)
                 isSaving = false
                 toast = Toast(style: .success, message: "Quote saved")
                 try? await Task.sleep(for: .seconds(1.0))
@@ -237,6 +240,19 @@ struct QuoteRecordingView: View {
                         Image(systemName: "exclamationmark.circle")
                     }
                 } else {
+                    // Currency — tap to change before saving.
+                    Menu {
+                        Picker("Currency", selection: $currency) {
+                            ForEach(AppCurrency.allCases) { option in
+                                Text(option.label).tag(option.rawValue)
+                            }
+                        }
+                    } label: {
+                        QuoteChip(text: currencyLabel) {
+                            Image(systemName: "coloncurrencysign.circle")
+                        }
+                    }
+                    .buttonStyle(.plain)
                     QuoteChip(text: "Draft") {
                         Image(systemName: "pencil")
                     }
@@ -244,6 +260,12 @@ struct QuoteRecordingView: View {
             }
         }
         .scrollClipDisabled()
+    }
+
+    /// Chip label for the selected currency, e.g. "GBP (£)".
+    private var currencyLabel: String {
+        let c = AppCurrency(rawValue: currency)
+        return "\(currency) (\(c?.symbol ?? currency))"
     }
 
     /// First name only, so the chip stays compact.
@@ -294,7 +316,8 @@ struct QuoteRecordingView: View {
                             description: item.description,
                             quantityText: item.quantityText,
                             isMissingPrice: item.isMissingPrice,
-                            lineTotal: item.lineTotal
+                            lineTotal: item.lineTotal,
+                            currencyCode: currency
                         )
                         if item.id != quote.lineItems.last?.id { Divider() }
                     }
@@ -308,7 +331,7 @@ struct QuoteRecordingView: View {
                     Text("Total").font(.headline).foregroundStyle(Color(.mainText))
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(subtotal, format: AppCurrency.currentFormat)
+                        Text(subtotal, format: AppCurrency.format(code: currency))
                             .font(.title3.weight(.semibold).monospacedDigit())
                             .foregroundStyle(Color(.mainText))
                         if missing > 0 {

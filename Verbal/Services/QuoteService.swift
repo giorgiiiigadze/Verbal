@@ -18,12 +18,16 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
     let total: Double
     let status: String
     let createdAt: Date
+    /// ISO 4217 code this quote was priced in. Nil on legacy rows; formatting
+    /// falls back to the user's current setting in that case.
+    let currency: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title
         case jobSummary = "job_summary"
         case total, status
         case createdAt = "created_at"
+        case currency
     }
 
     var displayTitle: String {
@@ -103,6 +107,34 @@ enum QuoteService {
             .execute()
     }
 
+    /// Change a quote's currency (a relabel — the stored amounts are unchanged).
+    static func updateCurrency(id: UUID, currency: String) async throws {
+        try await client
+            .from("quotes")
+            .update(["currency": currency])
+            .eq("id", value: id)
+            .execute()
+    }
+
+    /// Update a single line item's unit price (used when converting a quote).
+    static func updateLineItemPrice(id: UUID, unitPrice: Double) async throws {
+        try await client
+            .from("quote_line_items")
+            .update(["unit_price": unitPrice])
+            .eq("id", value: id)
+            .execute()
+    }
+
+    /// Persist a converted quote: new currency plus recomputed subtotal/total.
+    static func updateCurrencyAndTotal(id: UUID, currency: String, total: Double) async throws {
+        struct Payload: Encodable { let currency: String; let subtotal: Double; let total: Double }
+        try await client
+            .from("quotes")
+            .update(Payload(currency: currency, subtotal: total, total: total))
+            .eq("id", value: id)
+            .execute()
+    }
+
     /// Run the AI extraction on a transcript, returning the structured quote (not persisted).
     /// Passes the user's active rate card so the AI can price known items.
     static func generate(transcript: String) async throws -> GeneratedQuote {
@@ -170,7 +202,7 @@ enum QuoteService {
         }
         return try await client
             .from("quotes")
-            .select("id, title, job_summary, total, status, created_at")
+            .select("id, title, job_summary, total, status, created_at, currency")
             .eq("user_id", value: userID)
             .order("created_at", ascending: false)
             .execute()
@@ -179,7 +211,8 @@ enum QuoteService {
 
     /// Persist an already-generated quote (from `generate`) with its transcript.
     @discardableResult
-    static func save(_ quote: GeneratedQuote, transcript: String, title: String) async throws -> UUID {
+    static func save(_ quote: GeneratedQuote, transcript: String, title: String,
+                     currency: String) async throws -> UUID {
         guard let userID = client.auth.currentUser?.id else {
             throw QuoteError.notSignedIn
         }
@@ -199,7 +232,8 @@ enum QuoteService {
             notes: quote.notes,
             subtotal: subtotal,
             total: subtotal,
-            status: "draft"
+            status: "draft",
+            currency: currency
         )
 
         let inserted: InsertedRow = try await client
@@ -388,12 +422,13 @@ private struct QuoteInsert: Encodable {
     let subtotal: Double
     let total: Double
     let status: String
+    let currency: String
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
         case title
         case jobSummary = "job_summary"
-        case notes, subtotal, total, status
+        case notes, subtotal, total, status, currency
     }
 }
 

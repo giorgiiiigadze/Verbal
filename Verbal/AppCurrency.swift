@@ -73,4 +73,16 @@ enum AppCurrency: String, CaseIterable, Identifiable {
     static func format(_ amount: Double) -> String {
         amount.formatted(currentFormat)
     }
+
+    /// A `FormatStyle` for a specific ISO code (a quote's own currency),
+    /// falling back to the current setting when the code is missing.
+    static func format(code: String?) -> FloatingPointFormatStyle<Double>.Currency {
+        .currency(code: code ?? current.rawValue)
+    }
+
+    /// Format an amount as a string in a specific currency, falling back to
+    /// the current setting when the code is missing.
+    static func format(_ amount: Double, code: String?) -> String {
+        amount.formatted(format(code: code))
+    }
 }

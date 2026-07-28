@@ -53,7 +53,7 @@ struct HomeView: View {
             }
             .sheet(item: $shareTarget) { quote in
                 ShareQuotePanel(title: quote.displayTitle,
-                                subtitle: "Total \(AppCurrency.format(quote.total)) · \(quote.status.capitalized)",
+                                subtitle: "Total \(AppCurrency.format(quote.total, code: quote.currency)) · \(quote.status.capitalized)",
                                 shareText: shareText(for: quote)) {
                     Task { await markSent(quote) }
                 }
@@ -491,7 +491,6 @@ private struct QuoteRow: View {
 private struct QuoteDetailView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     let quote: QuoteSummary
     var onDeleted: () -> Void
     @State private var showHeaderTitle = false
@@ -501,6 +500,15 @@ private struct QuoteDetailView: View {
     @State private var showShare = false
     /// Live status — editable via the status chip menu, persisted to Supabase.
     @State private var status: String
+    /// Live currency — editable via the currency chip, persisted to Supabase.
+    @State private var currency: String
+    /// Live total — updated when the quote is converted to another currency.
+    @State private var total: Double
+    /// Currency the user picked in the chip, pending the convert/relabel choice.
+    @State private var pendingCurrency: CurrencyTarget?
+
+    /// Identifiable wrapper so a picked currency code can drive `.sheet(item:)`.
+    private struct CurrencyTarget: Identifiable { let id: String }
 
     /// Statuses offered in the status-chip menu, in workflow order.
     private let selectableStatuses = ["draft", "sent", "viewed", "accepted", "declined", "expired"]
@@ -509,6 +517,8 @@ private struct QuoteDetailView: View {
         self.quote = quote
         self.onDeleted = onDeleted
         _status = State(initialValue: quote.status)
+        _currency = State(initialValue: quote.currency ?? AppCurrency.current.rawValue)
+        _total = State(initialValue: quote.total)
     }
 
     private var missingCount: Int { lineItems.filter(\.isMissingPrice).count }
@@ -520,8 +530,8 @@ private struct QuoteDetailView: View {
     }
 
     private var shareSubtitle: String {
-        let total = AppCurrency.format(quote.total)
-        return "Total \(total) · \(statusLabel)"
+        let totalText = AppCurrency.format(total, code: currency)
+        return "Total \(totalText) · \(statusLabel)"
     }
 
     private var chips: some View {
@@ -537,7 +547,23 @@ private struct QuoteDetailView: View {
                 QuoteChip(text: dateLabel) {
                     Image(systemName: "calendar")
                 }
-                // 3. Status — tap to change it.
+                // 3. Currency — tap to change this quote's currency.
+                Menu {
+                    Picker("Currency", selection: Binding(
+                        get: { currency },
+                        set: { pendingCurrency = ($0 == currency) ? nil : CurrencyTarget(id: $0) }
+                    )) {
+                        ForEach(AppCurrency.allCases) { option in
+                            Text(option.label).tag(option.rawValue)
+                        }
+                    }
+                } label: {
+                    QuoteChip(text: currencyLabel) {
+                        Image(systemName: "coloncurrencysign.circle")
+                    }
+                }
+                .buttonStyle(.plain)
+                // 4. Status — tap to change it.
                 Menu {
                     Picker("Status", selection: Binding(
                         get: { status },
@@ -569,7 +595,8 @@ private struct QuoteDetailView: View {
                         description: item.description ?? "Item",
                         quantityText: item.quantityText,
                         isMissingPrice: item.isMissingPrice,
-                        lineTotal: item.lineTotal
+                        lineTotal: item.lineTotal,
+                        currencyCode: currency
                     )
                     if item.id != lineItems.last?.id {
                         Divider()
@@ -585,7 +612,7 @@ private struct QuoteDetailView: View {
                     .foregroundStyle(Color(.mainText))
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(quote.total, format: AppCurrency.currentFormat)
+                    Text(total, format: AppCurrency.format(code: currency))
                         .font(.title3.weight(.semibold).monospacedDigit())
                         .foregroundStyle(Color(.mainText))
                     if missingCount > 0 {
@@ -632,6 +659,12 @@ private struct QuoteDetailView: View {
         case "expired": return "clock.badge.exclamationmark"
         default: return "circle"
         }
+    }
+
+    /// Chip label for the current currency, e.g. "GBP (£)".
+    private var currencyLabel: String {
+        let c = AppCurrency(rawValue: currency)
+        return "\(currency) (\(c?.symbol ?? currency))"
     }
 
     /// Optimistically update the chip and persist; revert on failure.
@@ -687,6 +720,20 @@ private struct QuoteDetailView: View {
                 if status == "draft" { changeStatus(to: "sent") }
             }
         }
+        .sheet(item: $pendingCurrency) { target in
+            ConvertCurrencySheet(quoteID: quote.id,
+                                 lineItems: lineItems,
+                                 currentTotal: total,
+                                 fromCode: currency,
+                                 toCode: target.id) { newCurrency, newTotal in
+                currency = newCurrency
+                if let newTotal {
+                    total = newTotal
+                    // Reload line items to show the converted unit prices.
+                    Task { lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? lineItems }
+                }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .onScrollGeometryChange(for: Bool.self) { geometry in
             geometry.contentOffset.y > 44
@@ -711,7 +758,7 @@ private struct QuoteDetailView: View {
                 } label: {
                     Text("Share")
                         .fontWeight(.semibold)
-                        .foregroundStyle(colorScheme == .dark ? .white : Color(.mainText))
+                        .foregroundStyle(.white)
                 }
                 .buttonStyle(.glassProminent)
                 .tint(Color(.royalBlue600))
