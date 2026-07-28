@@ -308,7 +308,7 @@ struct QuoteRecordingView: View {
                     Text("Total").font(.headline).foregroundStyle(Color(.mainText))
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(subtotal, format: .number.precision(.fractionLength(2)))
+                        Text(subtotal, format: AppCurrency.currentFormat)
                             .font(.title3.weight(.semibold).monospacedDigit())
                             .foregroundStyle(Color(.mainText))
                         if missing > 0 {

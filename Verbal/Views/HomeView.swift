@@ -53,7 +53,7 @@ struct HomeView: View {
             }
             .sheet(item: $shareTarget) { quote in
                 ShareQuotePanel(title: quote.displayTitle,
-                                subtitle: "Total \(quote.total.formatted(.number.precision(.fractionLength(2)))) · \(quote.status.capitalized)",
+                                subtitle: "Total \(AppCurrency.format(quote.total)) · \(quote.status.capitalized)",
                                 shareText: shareText(for: quote)) {
                     Task { await markSent(quote) }
                 }
@@ -519,7 +519,7 @@ private struct QuoteDetailView: View {
     }
 
     private var shareSubtitle: String {
-        let total = quote.total.formatted(.number.precision(.fractionLength(2)))
+        let total = AppCurrency.format(quote.total)
         return "Total \(total) · \(statusLabel)"
     }
 
@@ -584,7 +584,7 @@ private struct QuoteDetailView: View {
                     .foregroundStyle(Color(.mainText))
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(quote.total, format: .number.precision(.fractionLength(2)))
+                    Text(quote.total, format: AppCurrency.currentFormat)
                         .font(.title3.weight(.semibold).monospacedDigit())
                         .foregroundStyle(Color(.mainText))
                     if missingCount > 0 {

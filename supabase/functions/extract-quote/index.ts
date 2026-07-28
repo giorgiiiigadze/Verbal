@@ -23,6 +23,9 @@ interface RequestBody {
   rate_card?: RateCardItem[];
   business_defaults?: Record<string, unknown>;
   trade_context?: string;
+  /// ISO 4217 code of the user's main currency (e.g. "GBP"), for any money
+  /// referenced in prose like job_summary. Prices themselves stay numeric.
+  currency?: string;
 }
 
 // Strict schema matching spec §7 — used with OpenAI Structured Outputs.
@@ -106,6 +109,9 @@ function buildUserPrompt(body: RequestBody): string {
   }
   if (body.business_defaults) {
     parts.push(`Business defaults: ${JSON.stringify(body.business_defaults)}`);
+  }
+  if (body.currency) {
+    parts.push(`Currency: ${body.currency}. If you mention any amount in job_summary or flags, use this currency's symbol. Line-item unit_price values must stay plain numbers with no symbol.`);
   }
   parts.push(`Transcript:\n"""${body.transcript ?? ""}"""`);
   return parts.join("\n\n");

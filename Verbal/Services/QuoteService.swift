@@ -111,7 +111,8 @@ enum QuoteService {
             transcript: transcript,
             rate_card: rateCard.map {
                 RateCardPayload(name: $0.name, unit: $0.unit, unit_price: $0.unitPrice, type: $0.type)
-            }
+            },
+            currency: AppCurrency.current.rawValue
         )
         let extraction: ExtractResponse = try await client.functions.invoke(
             "extract-quote",
@@ -304,7 +305,7 @@ struct RateCardItem: Identifiable, Decodable, Sendable {
 
     var priceText: String? {
         guard let unitPrice else { return nil }
-        let amount = unitPrice.formatted(.number.precision(.fractionLength(2)))
+        let amount = AppCurrency.format(unitPrice)
         return [amount, unit].compactMap { $0 }.joined(separator: " / ")
     }
 }
@@ -332,6 +333,7 @@ enum QuoteError: LocalizedError {
 private struct ExtractRequest: Encodable {
     let transcript: String
     let rate_card: [RateCardPayload]
+    let currency: String
 }
 
 private struct RateCardPayload: Encodable {

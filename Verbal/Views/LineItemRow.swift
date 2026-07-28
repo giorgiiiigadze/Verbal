@@ -35,7 +35,7 @@ struct LineItemRow: View {
                         .foregroundStyle(Self.amber)
                 }
             } else if let lineTotal {
-                Text(lineTotal, format: .number.precision(.fractionLength(2)))
+                Text(lineTotal, format: AppCurrency.currentFormat)
                     .font(.callout.weight(.semibold).monospacedDigit())
                     .foregroundStyle(Color(.mainText))
             }

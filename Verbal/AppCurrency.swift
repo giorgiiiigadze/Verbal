@@ -57,4 +57,20 @@ enum AppCurrency: String, CaseIterable, Identifiable {
         }
         return .usd
     }
+
+    /// The user's currently selected currency, read from the persisted setting.
+    static var current: AppCurrency {
+        let code = UserDefaults.standard.string(forKey: "mainCurrency")
+        return code.flatMap(AppCurrency.init(rawValue:)) ?? deviceDefault
+    }
+
+    /// A `FormatStyle` for the current currency, for use in `Text(_, format:)`.
+    static var currentFormat: FloatingPointFormatStyle<Double>.Currency {
+        .currency(code: current.rawValue)
+    }
+
+    /// Format an amount as a string in the current currency, e.g. "£1,250.00".
+    static func format(_ amount: Double) -> String {
+        amount.formatted(currentFormat)
+    }
 }

@@ -172,6 +172,8 @@ private struct AddRateItemView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color(.homeBackground))
             .navigationTitle("New rate")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
