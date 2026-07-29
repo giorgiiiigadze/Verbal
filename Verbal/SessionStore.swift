@@ -63,19 +63,23 @@ final class SessionStore {
         // session. This avoids a flash of the auth page at cold launch,
         // especially offline where the network state isn't known yet.
         if client.auth.currentSession != nil {
-            await bootstrap()
+            // Show the app immediately; don't block first paint on the network.
+            // The splash dismisses right away (even offline), and the
+            // first-paint data streams in via bootstrap() in the background.
             state = .ready
+            isBootstrapped = true
+            Task { await bootstrap() }
         } else {
             state = .signedOut
+            isBootstrapped = true
         }
-        isBootstrapped = true
 
         for await change in client.auth.authStateChanges {
             switch change.event {
             case .signedIn, .userUpdated, .tokenRefreshed:
                 if change.session != nil {
-                    await bootstrap()
                     state = .ready
+                    await bootstrap()
                 }
             case .signedOut:
                 // A real sign-out only happens online (user-initiated). A

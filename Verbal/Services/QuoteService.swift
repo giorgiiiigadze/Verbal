@@ -16,18 +16,22 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
     let title: String?
     let jobSummary: String?
     let total: Double
-    let status: String
+    /// Mutable so Home can optimistically reflect a status change from the menu.
+    var status: String
     let createdAt: Date
     /// ISO 4217 code this quote was priced in. Nil on legacy rows; formatting
     /// falls back to the user's current setting in that case.
     let currency: String?
+    /// Pinned quotes sort into a dedicated section at the top of the Home list.
+    /// Mutable so Home can optimistically reflect a pin toggle.
+    var pinned: Bool
 
     enum CodingKeys: String, CodingKey {
         case id, title
         case jobSummary = "job_summary"
         case total, status
         case createdAt = "created_at"
-        case currency
+        case currency, pinned
     }
 
     var displayTitle: String {
@@ -202,11 +206,115 @@ enum QuoteService {
         }
         return try await client
             .from("quotes")
-            .select("id, title, job_summary, total, status, created_at, currency")
+            .select("id, title, job_summary, total, status, created_at, currency, pinned")
             .eq("user_id", value: userID)
             .order("created_at", ascending: false)
             .execute()
             .value
+    }
+
+    /// Pin or unpin a quote (pinned quotes surface in a section at the top).
+    static func setPinned(id: UUID, pinned: Bool) async throws {
+        try await client
+            .from("quotes")
+            .update(["pinned": pinned])
+            .eq("id", value: id)
+            .execute()
+    }
+
+    /// Duplicate a quote as a new draft (title, summary, notes, amounts, currency
+    /// and all line items are copied; the copy is never pinned). Returns the new id.
+    @discardableResult
+    static func duplicateQuote(id: UUID) async throws -> UUID {
+        guard let userID = client.auth.currentUser?.id else {
+            throw QuoteError.notSignedIn
+        }
+
+        // Read the source quote's copyable fields.
+        struct SourceQuote: Decodable {
+            let title: String?
+            let jobSummary: String?
+            let notes: String?
+            let subtotal: Double?
+            let total: Double
+            let currency: String?
+            enum CodingKeys: String, CodingKey {
+                case title
+                case jobSummary = "job_summary"
+                case notes, subtotal, total, currency
+            }
+        }
+        let source: SourceQuote = try await client
+            .from("quotes")
+            .select("title, job_summary, notes, subtotal, total, currency")
+            .eq("id", value: id)
+            .single()
+            .execute()
+            .value
+
+        struct DuplicateInsert: Encodable {
+            let userId: UUID
+            let title: String?
+            let jobSummary: String?
+            let notes: String?
+            let subtotal: Double?
+            let total: Double
+            let status: String
+            let currency: String?
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+                case title
+                case jobSummary = "job_summary"
+                case notes, subtotal, total, status, currency
+            }
+        }
+        let copiedTitle = source.title.map { $0.isEmpty ? $0 : "\($0) (copy)" }
+        let inserted: InsertedRow = try await client
+            .from("quotes")
+            .insert(DuplicateInsert(
+                userId: userID,
+                title: copiedTitle,
+                jobSummary: source.jobSummary,
+                notes: source.notes,
+                subtotal: source.subtotal,
+                total: source.total,
+                status: "draft",
+                currency: source.currency
+            ), returning: .representation)
+            .select("id")
+            .single()
+            .execute()
+            .value
+        let newID = inserted.id
+
+        // Copy the line items over, preserving order.
+        let items = try await fetchLineItems(quoteId: id)
+        let copies = items.map { item in
+            LineItemInsert(
+                quoteId: newID,
+                description: item.description ?? "",
+                type: item.type,
+                quantity: item.quantity,
+                unit: item.unit,
+                unitPrice: item.unitPrice,
+                priceSource: item.priceSource,
+                confidence: nil,
+                position: item.position
+            )
+        }
+        if !copies.isEmpty {
+            try await client.from("quote_line_items").insert(copies).execute()
+        }
+
+        // Copy the transcript so the duplicate keeps "View transcript" and can be
+        // regenerated, just like the original.
+        if let transcript = try? await fetchTranscript(quoteId: id) {
+            try await client.from("transcripts").insert(
+                TranscriptInsert(quoteId: newID, text: transcript, sttSource: "on_device", status: "done")
+            ).execute()
+        }
+
+        return newID
     }
 
     /// Persist an already-generated quote (from `generate`) with its transcript.

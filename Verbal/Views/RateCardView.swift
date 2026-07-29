@@ -15,6 +15,7 @@ struct RateCardView: View {
     @State private var isLoading = false
     @State private var showAdd = false
     @State private var itemToDelete: RateCardItem?
+    @State private var toast: Toast?
 
     var body: some View {
         Group {
@@ -61,6 +62,7 @@ struct RateCardView: View {
         } message: { item in
             Text("This removes “\(item.name)” from your rate card. This can't be undone.")
         }
+        .toast($toast)
     }
 
     private var list: some View {
@@ -86,8 +88,25 @@ struct RateCardView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 18)
+                .background(Color(.surface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                )
+                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+                .contextMenu {
+                    Button(role: .destructive) {
+                        itemToDelete = item
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     // No .destructive role: it would animate the row out on tap,
                     // before the confirmation alert is answered.
@@ -134,8 +153,9 @@ struct RateCardView: View {
         do {
             try await QuoteService.deleteRateCardItem(id: item.id)
             items.removeAll { $0.id == item.id }
+            toast = Toast(style: .success, message: "Rate deleted")
         } catch {
-            // Keep the row if the delete failed.
+            toast = Toast(style: .error, message: "Couldn't delete rate")
         }
     }
 }
