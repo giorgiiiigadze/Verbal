@@ -7,7 +7,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
-    @Environment(\.dismiss) private var dismiss
 
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
@@ -19,38 +18,42 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("Profile") {
-                    LabeledContent("Name", value: session.profile?.fullName ?? "—")
-                }
-
-                Section {
-                    Picker("Main currency", selection: currency) {
-                        ForEach(AppCurrency.allCases) { option in
-                            Text(option.label).tag(option)
-                        }
-                    }
-                } header: {
-                    Text("Currency")
-                } footer: {
-                    Text("Used to format totals in your quotes and rate card.")
-                }
-
-                Section {
-                    Button("Sign out", role: .destructive) {
-                        Task { try? await session.signOut() }
-                    }
-                }
+        List {
+            Section("Profile") {
+                LabeledContent("Name", value: session.profile?.fullName ?? "—")
             }
-            .scrollContentBackground(.hidden)
-            .background(Color(.homeBackground))
-            .navigationTitle("Settings")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+
+            Section {
+                NavigationLink {
+                    BusinessProfileView()
+                } label: {
+                    Label("Business", systemImage: "briefcase")
+                }
+            } footer: {
+                Text("Your business name, contact details, and quote defaults.")
+            }
+
+            Section {
+                Picker("Main currency", selection: currency) {
+                    ForEach(AppCurrency.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+            } header: {
+                Text("Currency")
+            } footer: {
+                Text("Used to format totals in your quotes and rate card.")
+            }
+
+            Section {
+                Button("Sign out", role: .destructive) {
+                    Task { try? await session.signOut() }
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Color(.homeBackground))
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
