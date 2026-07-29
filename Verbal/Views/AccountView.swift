@@ -78,18 +78,13 @@ struct AccountView: View {
         .disabled(isLoading)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    save()
-                } label: {
-                    if isSaving {
-                        ProgressView().tint(.white)
-                    } else {
-                        Text("Save").fontWeight(.semibold).foregroundStyle(.white)
-                    }
+                if isSaving {
+                    ProgressView()
+                } else {
+                    Button("Save") { save() }
+                        .fontWeight(.semibold)
+                        .disabled(isLoading || !isDirty)
                 }
-                .buttonStyle(.glassProminent)
-                .tint(Color(.royalBlue600))
-                .disabled(isLoading || isSaving || !isDirty)
             }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
