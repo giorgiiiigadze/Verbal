@@ -5,6 +5,29 @@
 
 import SwiftUI
 
+/// Header row shown at the top of the bordered line-items container (Notion-style):
+/// an icon + "Line items" label, a count on the right, above a full-width divider.
+struct LineItemsHeader: View {
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "list.bullet.rectangle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text("Line items")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color(.mainText))
+            Spacer()
+            Text("\(count)")
+                .font(.subheadline.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
 /// One row in a quote's line-item table. Reused by the recording review and detail pages.
 struct LineItemRow: View {
     let description: String

@@ -293,19 +293,26 @@ struct QuoteRecordingView: View {
 
             if !quote.lineItems.isEmpty {
                 VStack(spacing: 0) {
-                    ForEach(quote.lineItems) { item in
-                        LineItemRow(
-                            description: item.description,
-                            quantityText: item.quantityText,
-                            isMissingPrice: item.isMissingPrice,
-                            lineTotal: item.lineTotal,
-                            currencyCode: currency
-                        )
-                        if item.id != quote.lineItems.last?.id { Divider() }
+                    LineItemsHeader(count: quote.lineItems.count)
+                    Divider()
+                    VStack(spacing: 0) {
+                        ForEach(quote.lineItems) { item in
+                            LineItemRow(
+                                description: item.description,
+                                quantityText: item.quantityText,
+                                isMissingPrice: item.isMissingPrice,
+                                lineTotal: item.lineTotal,
+                                currencyCode: currency
+                            )
+                            if item.id != quote.lineItems.last?.id { Divider() }
+                        }
                     }
+                    .padding(.horizontal, 16)
                 }
-                .padding(.horizontal, 16)
-                .background(Color(.surface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                )
 
                 let subtotal = quote.lineItems.compactMap(\.lineTotal).reduce(0, +)
                 let missing = quote.lineItems.filter(\.isMissingPrice).count

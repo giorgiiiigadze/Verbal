@@ -46,6 +46,27 @@ final class SessionStore {
     /// the profile screen reflects the change without a refetch.
     func cacheBusinessProfile(_ profile: BusinessProfile) { businessProfile = profile }
 
+    /// Line items cached per quote so the detail screen renders instantly on open
+    /// (populated by prefetching as list rows appear).
+    private var lineItemsCache: [UUID: [QuoteLineItem]] = [:]
+
+    /// Cached line items for a quote, if any have been loaded already.
+    func lineItems(for quoteID: UUID) -> [QuoteLineItem]? { lineItemsCache[quoteID] }
+
+    /// Store a quote's line items for instant reuse.
+    func cacheLineItems(_ items: [QuoteLineItem], for quoteID: UUID) {
+        lineItemsCache[quoteID] = items
+    }
+
+    /// Fetch and cache a quote's line items unless already cached. Called as list
+    /// rows appear so the detail page has them ready before the user taps.
+    func prefetchLineItems(for quoteID: UUID) async {
+        guard lineItemsCache[quoteID] == nil else { return }
+        if let items = try? await QuoteService.fetchLineItems(quoteId: quoteID) {
+            lineItemsCache[quoteID] = items
+        }
+    }
+
     private let client = SupabaseManager.client
     private let network: NetworkMonitor
 

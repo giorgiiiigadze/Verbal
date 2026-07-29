@@ -14,7 +14,7 @@ struct QuoteDetailView: View {
     let quote: QuoteSummary
     var onDeleted: () -> Void
     @State private var showHeaderTitle = false
-    @State private var lineItems: [QuoteLineItem] = []
+    @State private var lineItems: [QuoteLineItem]
     @State private var transcriptText: String?
     @State private var showTranscript = false
     @State private var showShare = false
@@ -38,7 +38,7 @@ struct QuoteDetailView: View {
     /// Statuses offered in the status-chip menu, in workflow order.
     private let selectableStatuses = ["draft", "sent", "viewed", "accepted", "declined", "expired"]
 
-    init(quote: QuoteSummary, onDeleted: @escaping () -> Void) {
+    init(quote: QuoteSummary, initialLineItems: [QuoteLineItem] = [], onDeleted: @escaping () -> Void) {
         self.quote = quote
         self.onDeleted = onDeleted
         _status = State(initialValue: quote.status)
@@ -46,6 +46,9 @@ struct QuoteDetailView: View {
         _total = State(initialValue: quote.total)
         _title = State(initialValue: quote.title ?? "")
         _jobSummary = State(initialValue: quote.jobSummary ?? "")
+        // Seed from the prefetched cache so the line items render on first paint
+        // instead of popping in after the fetch.
+        _lineItems = State(initialValue: initialLineItems)
     }
 
     /// Title with the same fallback logic as `QuoteSummary.displayTitle`, but
@@ -125,39 +128,54 @@ struct QuoteDetailView: View {
     private var lineItemsSection: some View {
         if !lineItems.isEmpty {
             VStack(spacing: 0) {
-                ForEach(lineItems) { item in
-                    LineItemRow(
-                        description: item.description ?? "Item",
-                        quantityText: item.quantityText,
-                        isMissingPrice: item.isMissingPrice,
-                        lineTotal: item.lineTotal,
-                        currencyCode: currency
-                    )
-                    if item.id != lineItems.last?.id {
-                        Divider()
+                LineItemsHeader(count: lineItems.count)
+                Divider()
+                VStack(spacing: 0) {
+                    ForEach(lineItems) { item in
+                        LineItemRow(
+                            description: item.description ?? "Item",
+                            quantityText: item.quantityText,
+                            isMissingPrice: item.isMissingPrice,
+                            lineTotal: item.lineTotal,
+                            currencyCode: currency
+                        )
+                        if item.id != lineItems.last?.id {
+                            Divider()
+                        }
                     }
                 }
+                .padding(.horizontal, 16)
             }
-            .padding(.horizontal, 16)
-            .background(Color(.surface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+        }
+    }
 
-            HStack {
-                Text("Total")
-                    .font(.headline)
+    /// The quote's total, pinned to the bottom of the screen like a native bar.
+    private var totalBar: some View {
+        HStack {
+            Text("Total")
+                .font(.headline)
+                .foregroundStyle(Color(.mainText))
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(total, format: AppCurrency.format(code: currency))
+                    .font(.title3.weight(.semibold).monospacedDigit())
                     .foregroundStyle(Color(.mainText))
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(total, format: AppCurrency.format(code: currency))
-                        .font(.title3.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(Color(.mainText))
-                    if missingCount > 0 {
-                        Text("excl. \(missingCount) unpriced item\(missingCount == 1 ? "" : "s")")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                if missingCount > 0 {
+                    Text("excl. \(missingCount) unpriced item\(missingCount == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .padding(.top, 4)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+        .background(.bar)
+        .overlay(alignment: .top) {
+            Divider()
         }
     }
 
@@ -240,8 +258,16 @@ struct QuoteDetailView: View {
             .padding(.top, 12)
         }
         .background(Color(.homeBackground))
+        .safeAreaInset(edge: .bottom) {
+            totalBar
+        }
         .task {
-            lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? []
+            // Refresh line items in the background (kept if the refetch fails so
+            // the seeded, prefetched copy stays on screen).
+            if let fresh = try? await QuoteService.fetchLineItems(quoteId: quote.id) {
+                lineItems = fresh
+                session.cacheLineItems(fresh, for: quote.id)
+            }
             transcriptText = (try? await QuoteService.fetchTranscript(quoteId: quote.id)) ?? nil
         }
         .task {

@@ -119,7 +119,8 @@ struct HomeView: View {
                         // Zero-opacity link so the row navigates without the
                         // default trailing chevron (we draw our own inside).
                         NavigationLink {
-                            QuoteDetailView(quote: quote) {
+                            QuoteDetailView(quote: quote,
+                                            initialLineItems: session.lineItems(for: quote.id) ?? []) {
                                 quotes.removeAll { $0.id == quote.id }
                                 // Delay so the toast animates in on the
                                 // now-visible Home, after the detail view's
@@ -137,6 +138,11 @@ struct HomeView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+                    .onAppear {
+                        // Warm the cache so tapping opens the detail with line
+                        // items already on screen.
+                        Task { await session.prefetchLineItems(for: quote.id) }
+                    }
                     .contextMenu { quoteMenu(for: quote) }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         // No .destructive role: it would animate the row out
