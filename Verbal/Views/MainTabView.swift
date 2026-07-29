@@ -31,9 +31,17 @@ struct MainTabView: View {
                 }
             }
             // Detached trailing button in the tab bar — opens the recording sheet
-            // instead of switching tabs.
-            Tab("Record", systemImage: "mic.fill", value: .record, role: .search) {
+            // instead of switching tabs. The mic glyph is force-tinted blue
+            // (always-original) since this tab is never "selected", so the
+            // TabView tint would otherwise leave it in the default color.
+            Tab(value: TabItem.record, role: .search) {
                 Color.clear
+            } label: {
+                Label {
+                    Text("Record")
+                } icon: {
+                    Image(uiImage: Self.blueMicIcon)
+                }
             }
         }
         .tint(Color(.mainText))
@@ -44,6 +52,13 @@ struct MainTabView: View {
             }
         }
     }
+
+    /// The mic tab glyph, tinted royal blue with always-original rendering so it
+    /// stays blue regardless of selection state.
+    private static let blueMicIcon: UIImage = {
+        let base = UIImage(systemName: "mic.fill") ?? UIImage()
+        return base.withTintColor(UIColor(resource: .royalBlue600), renderingMode: .alwaysOriginal)
+    }()
 
     @ViewBuilder
     private var profileIcon: some View {
