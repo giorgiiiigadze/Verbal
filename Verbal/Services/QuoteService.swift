@@ -102,6 +102,72 @@ enum QuoteService {
         try await client.from("quotes").delete().eq("id", value: id).execute()
     }
 
+    // MARK: - Editing
+
+    /// Update a quote's core editable fields plus recomputed totals.
+    static func updateQuoteCore(id: UUID, title: String?, jobSummary: String?,
+                                subtotal: Double, total: Double) async throws {
+        struct Payload: Encodable {
+            let title: String?
+            let jobSummary: String?
+            let subtotal: Double
+            let total: Double
+            enum CodingKeys: String, CodingKey {
+                case title
+                case jobSummary = "job_summary"
+                case subtotal, total
+            }
+        }
+        try await client
+            .from("quotes")
+            .update(Payload(title: title, jobSummary: jobSummary, subtotal: subtotal, total: total))
+            .eq("id", value: id)
+            .execute()
+    }
+
+    /// Overwrite a line item's editable fields (quote_id is left untouched).
+    static func updateLineItem(id: UUID, description: String?, type: String, quantity: Double?,
+                               unit: String?, unitPrice: Double?, priceSource: String,
+                               position: Int) async throws {
+        try await client
+            .from("quote_line_items")
+            .update(LineItemFields(description: description, type: type, quantity: quantity,
+                                   unit: unit, unitPrice: unitPrice, priceSource: priceSource,
+                                   position: position))
+            .eq("id", value: id)
+            .execute()
+    }
+
+    /// Insert a new line item into a quote.
+    static func insertLineItem(quoteId: UUID, description: String?, type: String, quantity: Double?,
+                               unit: String?, unitPrice: Double?, priceSource: String,
+                               position: Int) async throws {
+        struct Insert: Encodable {
+            let quoteId: UUID
+            let fields: LineItemFields
+            // Flatten quote_id alongside the shared editable fields.
+            enum CodingKeys: String, CodingKey { case quoteId = "quote_id" }
+            func encode(to encoder: Encoder) throws {
+                try fields.encode(to: encoder)
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(quoteId, forKey: .quoteId)
+            }
+        }
+        try await client
+            .from("quote_line_items")
+            .insert(Insert(quoteId: quoteId,
+                           fields: LineItemFields(description: description, type: type,
+                                                  quantity: quantity, unit: unit,
+                                                  unitPrice: unitPrice, priceSource: priceSource,
+                                                  position: position)))
+            .execute()
+    }
+
+    /// Delete a single line item.
+    static func deleteLineItem(id: UUID) async throws {
+        try await client.from("quote_line_items").delete().eq("id", value: id).execute()
+    }
+
     /// Update a quote's status (draft / sent / viewed / accepted / declined / expired).
     static func updateStatus(id: UUID, status: String) async throws {
         try await client
@@ -537,6 +603,24 @@ private struct QuoteInsert: Encodable {
         case title
         case jobSummary = "job_summary"
         case notes, subtotal, total, status, currency
+    }
+}
+
+/// The editable columns of a line item (no quote_id), shared by update & insert.
+private struct LineItemFields: Encodable {
+    let description: String?
+    let type: String
+    let quantity: Double?
+    let unit: String?
+    let unitPrice: Double?
+    let priceSource: String?
+    let position: Int
+
+    enum CodingKeys: String, CodingKey {
+        case description, type, quantity, unit
+        case unitPrice = "unit_price"
+        case priceSource = "price_source"
+        case position
     }
 }
 

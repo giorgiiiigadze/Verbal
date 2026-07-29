@@ -18,7 +18,11 @@ struct QuoteDetailView: View {
     @State private var transcriptText: String?
     @State private var showTranscript = false
     @State private var showShare = false
+    @State private var showEdit = false
     @State private var showDeleteConfirm = false
+    /// Live title & summary — editable via the edit sheet.
+    @State private var title: String
+    @State private var jobSummary: String
     /// Live status — editable via the status chip menu, persisted to Supabase.
     @State private var status: String
     /// Live currency — editable via the currency chip, persisted to Supabase.
@@ -40,13 +44,23 @@ struct QuoteDetailView: View {
         _status = State(initialValue: quote.status)
         _currency = State(initialValue: quote.currency ?? AppCurrency.current.rawValue)
         _total = State(initialValue: quote.total)
+        _title = State(initialValue: quote.title ?? "")
+        _jobSummary = State(initialValue: quote.jobSummary ?? "")
+    }
+
+    /// Title with the same fallback logic as `QuoteSummary.displayTitle`, but
+    /// driven by the live editable `title`/`jobSummary`.
+    private var displayTitle: String {
+        if !title.isEmpty { return title }
+        if !jobSummary.isEmpty { return jobSummary }
+        return "Untitled quote"
     }
 
     private var missingCount: Int { lineItems.filter(\.isMissingPrice).count }
 
     private var shareText: String {
-        var lines = [quote.displayTitle]
-        if let summary = quote.jobSummary, !summary.isEmpty { lines.append(summary) }
+        var lines = [displayTitle]
+        if !jobSummary.isEmpty { lines.append(jobSummary) }
         return lines.joined(separator: "\n")
     }
 
@@ -205,15 +219,15 @@ struct QuoteDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text(quote.displayTitle)
+                Text(displayTitle)
                     .font(.robotoSlab(34, relativeTo: .largeTitle))
                     .foregroundStyle(Color(.mainText))
                     .fixedSize(horizontal: false, vertical: true)
 
                 chips
 
-                if let summary = quote.jobSummary, !summary.isEmpty {
-                    Text(summary)
+                if !jobSummary.isEmpty {
+                    Text(jobSummary)
                         .font(.callout)
                         .fontWeight(.medium)
                         .foregroundStyle(Color(.mainText))
@@ -237,8 +251,21 @@ struct QuoteDetailView: View {
         .sheet(isPresented: $showTranscript) {
             TranscriptSheet(text: transcriptText)
         }
+        .sheet(isPresented: $showEdit) {
+            EditQuoteView(quoteId: quote.id,
+                          currency: currency,
+                          title: title,
+                          jobSummary: jobSummary,
+                          lineItems: lineItems) { newTitle, newSummary, newTotal in
+                title = newTitle
+                jobSummary = newSummary
+                total = newTotal
+                // Reload items so descriptions/prices/order reflect the edits.
+                Task { lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? lineItems }
+            }
+        }
         .sheet(isPresented: $showShare) {
-            ShareQuotePanel(title: quote.displayTitle,
+            ShareQuotePanel(title: displayTitle,
                             subtitle: shareSubtitle,
                             shareText: shareText) {
                 // Sharing a draft marks it as Sent (don't downgrade later statuses).
@@ -271,7 +298,7 @@ struct QuoteDetailView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 if showHeaderTitle {
-                    MarqueeText(text: quote.displayTitle,
+                    MarqueeText(text: displayTitle,
                                 font: .robotoSlab(17, relativeTo: .headline))
                         .frame(maxWidth: 220)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -291,6 +318,11 @@ struct QuoteDetailView: View {
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button {
+                        showEdit = true
+                    } label: {
+                        Label("Edit quote", systemImage: "pencil")
+                    }
                     Button {
                         showTranscript = true
                     } label: {
@@ -317,7 +349,7 @@ struct QuoteDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This permanently deletes “\(quote.displayTitle)” and its line items. This can't be undone.")
+            Text("This permanently deletes “\(displayTitle)” and its line items. This can't be undone.")
         }
     }
 }
