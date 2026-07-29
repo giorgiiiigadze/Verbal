@@ -19,6 +19,9 @@ final class SessionStore {
     private(set) var state: AppState = .loading
     private(set) var profile: Profile?
 
+    /// The signed-in account's email (from Google auth), for display.
+    var email: String? { client.auth.currentUser?.email }
+
     /// The user's avatar, downloaded and decoded during bootstrap so it shows
     /// instantly (no visible load) once the splash screen dismisses.
     private(set) var avatarImage: Image?
@@ -33,9 +36,15 @@ final class SessionStore {
     /// Rate Card tabs render instantly with no empty-state flash on first paint.
     private(set) var quotes: [QuoteSummary] = []
     private(set) var rateCard: [RateCardItem] = []
+    /// The business profile, preloaded so Settings → Profile shows instantly.
+    private(set) var businessProfile: BusinessProfile?
     /// True once the initial fetch of the lists above has completed (success or
     /// failure), so views can tell "still loading" from "genuinely empty".
     private(set) var listsLoaded = false
+
+    /// Update the cached business profile after the user edits it, so reopening
+    /// the profile screen reflects the change without a refetch.
+    func cacheBusinessProfile(_ profile: BusinessProfile) { businessProfile = profile }
 
     private let client = SupabaseManager.client
     private let network: NetworkMonitor
@@ -94,8 +103,10 @@ final class SessionStore {
     func preloadLists() async {
         async let quotesResult = try? await QuoteService.fetchQuotes()
         async let rateResult = try? await QuoteService.fetchRateCard()
+        async let bizResult = try? await BusinessService.fetch()
         quotes = await quotesResult ?? quotes
         rateCard = await rateResult ?? rateCard
+        businessProfile = await bizResult ?? businessProfile
         listsLoaded = true
     }
 
