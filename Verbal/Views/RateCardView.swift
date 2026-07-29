@@ -14,6 +14,7 @@ struct RateCardView: View {
     @State private var hasLoaded = false
     @State private var isLoading = false
     @State private var showAdd = false
+    @State private var itemToDelete: RateCardItem?
 
     var body: some View {
         Group {
@@ -49,6 +50,17 @@ struct RateCardView: View {
             await load()
         }
         .refreshable { await load() }
+        .alert("Delete this rate?", isPresented: Binding(
+            get: { itemToDelete != nil },
+            set: { if !$0 { itemToDelete = nil } }
+        ), presenting: itemToDelete) { item in
+            Button("Delete", role: .destructive) {
+                Task { await delete(item) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { item in
+            Text("This removes “\(item.name)” from your rate card. This can't be undone.")
+        }
     }
 
     private var list: some View {
@@ -77,8 +89,10 @@ struct RateCardView: View {
                 .padding(.vertical, 4)
                 .listRowBackground(Color.clear)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        Task { await delete(item) }
+                    // No .destructive role: it would animate the row out on tap,
+                    // before the confirmation alert is answered.
+                    Button {
+                        itemToDelete = item
                     } label: {
                         Label("Delete", systemImage: "trash")
                     }
@@ -160,6 +174,8 @@ private struct AddRateItemView: View {
                         ForEach(types, id: \.self) { Text($0.capitalized).tag($0) }
                     }
                 }
+                .listRowBackground(Color(.surface))
+
                 Section("Price") {
                     TextField("Unit price", text: $priceText)
                         .keyboardType(.decimalPad)
@@ -171,6 +187,7 @@ private struct AddRateItemView: View {
                         TextField("Custom unit", text: $customUnit)
                     }
                 }
+                .listRowBackground(Color(.surface))
             }
             .scrollContentBackground(.hidden)
             .background(Color(.homeBackground))

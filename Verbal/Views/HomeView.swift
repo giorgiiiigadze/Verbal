@@ -100,7 +100,9 @@ struct HomeView: View {
                         }
                         .listRowBackground(Color.clear)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
+                            // No .destructive role: it would animate the row out
+                            // on tap, before the confirmation alert is answered.
+                            Button {
                                 quoteToDelete = quote
                             } label: {
                                 Label("Delete", systemImage: "trash")
