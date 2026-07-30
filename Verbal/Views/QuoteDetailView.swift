@@ -129,9 +129,10 @@ struct QuoteDetailView: View {
     @ViewBuilder
     private var lineItemsSection: some View {
         if !lineItems.isEmpty {
-            VStack(spacing: 0) {
-                LineItemsHeader(count: lineItems.count)
-                Divider()
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Line items")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Color(.mainText))
                 VStack(spacing: 0) {
                     ForEach(lineItems) { item in
                         LineItemRow(
@@ -147,11 +148,11 @@ struct QuoteDetailView: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                )
             }
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
         }
     }
 

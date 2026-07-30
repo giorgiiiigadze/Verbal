@@ -294,9 +294,10 @@ struct QuoteRecordingView: View {
             ScopeList(items: quote.scope)
 
             if !quote.lineItems.isEmpty {
-                VStack(spacing: 0) {
-                    LineItemsHeader(count: quote.lineItems.count)
-                    Divider()
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Line items")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Color(.mainText))
                     VStack(spacing: 0) {
                         ForEach(quote.lineItems) { item in
                             LineItemRow(
@@ -310,11 +311,11 @@ struct QuoteRecordingView: View {
                         }
                     }
                     .padding(.horizontal, 16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                    )
                 }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
 
                 let subtotal = quote.lineItems.compactMap(\.lineTotal).reduce(0, +)
                 let missing = quote.lineItems.filter(\.isMissingPrice).count

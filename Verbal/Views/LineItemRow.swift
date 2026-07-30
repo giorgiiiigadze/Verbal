@@ -5,29 +5,6 @@
 
 import SwiftUI
 
-/// Header row shown at the top of the bordered line-items container (Notion-style):
-/// an icon + "Line items" label, a count on the right, above a full-width divider.
-struct LineItemsHeader: View {
-    let count: Int
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "list.bullet.rectangle")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Text("Line items")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color(.mainText))
-            Spacer()
-            Text("\(count)")
-                .font(.subheadline.monospacedDigit())
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-}
-
 /// Client-facing "Scope of work" — a titled bullet list of what the job covers.
 /// Renders nothing when empty. Shown between the summary and the line-items table.
 struct ScopeList: View {
