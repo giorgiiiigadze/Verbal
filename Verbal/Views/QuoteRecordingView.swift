@@ -103,6 +103,15 @@ struct QuoteRecordingView: View {
                     generate()
                 }
             }
+            .onChange(of: recorder.errorMessage) { _, message in
+                // Surface mic / speech-permission or engine failures — otherwise
+                // tapping the mic would appear to do nothing.
+                if let message { toast = Toast(style: .error, message: message) }
+            }
+            .onAppear {
+                // Use the current Settings currency each time the sheet opens.
+                currency = AppCurrency.current.rawValue
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(role: .close) { dismiss() }
@@ -373,6 +382,12 @@ struct QuoteRecordingView: View {
                     if recorder.isRecording {
                         await recorder.stop()
                     } else {
+                        // Resuming to add more: drop the generated review so the
+                        // transcript reappears and re-generates on the next stop.
+                        if generated != nil || notEnough {
+                            generated = nil
+                            notEnough = false
+                        }
                         // Resume from whatever is currently shown (incl. hand-edits).
                         recorder.seed(transcriptText)
                         await recorder.start()
