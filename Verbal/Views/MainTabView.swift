@@ -12,6 +12,9 @@ struct MainTabView: View {
     @Environment(SessionStore.self) private var session
     @State private var selection: TabItem = .home
     @State private var showCreate = false
+    /// First-launch welcome sheet, shown once after the user's first sign-in.
+    @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
+    @State private var showWelcome = false
 
     var body: some View {
         TabView(selection: $selection) {
@@ -50,6 +53,25 @@ struct MainTabView: View {
                 selection = .home
                 showCreate = true
             }
+        }
+        .task {
+            // Show the welcome flow once, the first time home appears post sign-in —
+            // after a short beat so it slides up just after the splash dismisses.
+            guard !hasSeenWelcome else { return }
+            try? await Task.sleep(for: .seconds(0.8))
+            showWelcome = true
+        }
+        .sheet(isPresented: $showWelcome) {
+            WelcomeOnboardingView {
+                hasSeenWelcome = true
+                showWelcome = false
+                // Drop the user straight into recording their first quote.
+                Task {
+                    try? await Task.sleep(for: .seconds(0.35))
+                    showCreate = true
+                }
+            }
+            .environment(session)
         }
     }
 
