@@ -292,6 +292,7 @@ struct QuoteRecordingView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             ScopeList(items: quote.scope)
+                .padding(.top, 8)
 
             if !quote.lineItems.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
@@ -316,6 +317,7 @@ struct QuoteRecordingView: View {
                             .strokeBorder(Color(.separator), lineWidth: 0.5)
                     )
                 }
+                .padding(.top, 8)
 
                 let subtotal = quote.lineItems.compactMap(\.lineTotal).reduce(0, +)
                 let missing = quote.lineItems.filter(\.isMissingPrice).count

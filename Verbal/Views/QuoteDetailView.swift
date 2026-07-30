@@ -261,10 +261,10 @@ struct QuoteDetailView: View {
                 }
 
                 ScopeList(items: scope)
-                    .padding(.top, 20)
+                    .padding(.top, 8)
 
                 lineItemsSection
-                    .padding(.top, 20)
+                    .padding(.top, 8)
             }
             .padding(.horizontal, 24)
             .padding(.top, 12)
