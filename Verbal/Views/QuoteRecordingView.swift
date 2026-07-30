@@ -291,6 +291,8 @@ struct QuoteRecordingView: View {
                 .foregroundStyle(Color(.mainText))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            ScopeList(items: quote.scope)
+
             if !quote.lineItems.isEmpty {
                 VStack(spacing: 0) {
                     LineItemsHeader(count: quote.lineItems.count)

@@ -20,9 +20,10 @@ struct QuoteDetailView: View {
     @State private var showShare = false
     @State private var showEdit = false
     @State private var showDeleteConfirm = false
-    /// Live title & summary — editable via the edit sheet.
+    /// Live title, summary & scope — editable via the edit sheet.
     @State private var title: String
     @State private var jobSummary: String
+    @State private var scope: [String]
     /// Live status — editable via the status chip menu, persisted to Supabase.
     @State private var status: String
     /// Live currency — editable via the currency chip, persisted to Supabase.
@@ -46,6 +47,7 @@ struct QuoteDetailView: View {
         _total = State(initialValue: quote.total)
         _title = State(initialValue: quote.title ?? "")
         _jobSummary = State(initialValue: quote.jobSummary ?? "")
+        _scope = State(initialValue: quote.scope)
         // Seed from the prefetched cache so the line items render on first paint
         // instead of popping in after the fetch.
         _lineItems = State(initialValue: initialLineItems)
@@ -245,14 +247,23 @@ struct QuoteDetailView: View {
                 chips
 
                 if !jobSummary.isEmpty {
-                    Text(jobSummary)
-                        .font(.callout)
-                        .fontWeight(.medium)
-                        .foregroundStyle(Color(.mainText))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Summary")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(Color(.mainText))
+                        Text(jobSummary)
+                            .font(.callout)
+                            .fontWeight(.medium)
+                            .foregroundStyle(Color(.mainText))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
 
+                ScopeList(items: scope)
+                    .padding(.top, 20)
+
                 lineItemsSection
+                    .padding(.top, 20)
             }
             .padding(.horizontal, 24)
             .padding(.top, 12)
@@ -282,9 +293,11 @@ struct QuoteDetailView: View {
                           currency: currency,
                           title: title,
                           jobSummary: jobSummary,
-                          lineItems: lineItems) { newTitle, newSummary, newTotal in
+                          scope: scope,
+                          lineItems: lineItems) { newTitle, newSummary, newScope, newTotal in
                 title = newTitle
                 jobSummary = newSummary
+                scope = newScope
                 total = newTotal
                 // Reload items so descriptions/prices/order reflect the edits.
                 Task { lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? lineItems }

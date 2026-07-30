@@ -28,6 +28,38 @@ struct LineItemsHeader: View {
     }
 }
 
+/// Client-facing "Scope of work" — a titled bullet list of what the job covers.
+/// Renders nothing when empty. Shown between the summary and the line-items table.
+struct ScopeList: View {
+    let items: [String]
+
+    var body: some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Scope of work")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Color(.mainText))
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                        HStack(alignment: .top, spacing: 10) {
+                            Circle()
+                                .fill(Color(.mainText))
+                                .frame(width: 5, height: 5)
+                                .padding(.top, 7)
+                            Text(item)
+                                .font(.callout)
+                                .foregroundStyle(Color(.mainText))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .padding(.leading, 18)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
 /// One row in a quote's line-item table. Reused by the recording review and detail pages.
 struct LineItemRow: View {
     let description: String

@@ -17,6 +17,7 @@ struct TranscriptSheet: View {
     var onRegenerate: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var isEditing = false
+    @State private var toast: Toast?
     @FocusState private var editorFocused: Bool
 
     private var displayText: String { editable?.wrappedValue ?? text ?? "" }
@@ -66,6 +67,7 @@ struct TranscriptSheet: View {
                     Button(role: .close) { dismiss() }
                 }
             }
+            .toast($toast)
         }
     }
 
@@ -73,6 +75,7 @@ struct TranscriptSheet: View {
         HStack(spacing: 16) {
             Button {
                 UIPasteboard.general.string = displayText
+                toast = Toast(style: .success, message: "Transcript copied")
             } label: {
                 Image(systemName: "doc.on.doc")
             }

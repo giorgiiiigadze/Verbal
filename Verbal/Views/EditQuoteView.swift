@@ -13,13 +13,15 @@ struct EditQuoteView: View {
     let quoteId: UUID
     /// The quote's currency code, for formatting prices and the total.
     let currency: String
-    /// Called after a successful save with the new title, job summary, and total
-    /// so the detail screen can reflect the edits without a full refetch.
-    var onSaved: (_ title: String, _ jobSummary: String, _ total: Double) -> Void
+    /// Called after a successful save with the new title, job summary, scope, and
+    /// total so the detail screen can reflect the edits without a full refetch.
+    var onSaved: (_ title: String, _ jobSummary: String, _ scope: [String], _ total: Double) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var jobSummary: String
+    /// Scope edited as one bullet per line; blank lines are dropped on save.
+    @State private var scopeText: String
     @State private var items: [EditableLineItem]
     /// Server ids present when editing began, to compute deletions on save.
     private let originalIDs: Set<UUID>
@@ -29,13 +31,15 @@ struct EditQuoteView: View {
          currency: String,
          title: String,
          jobSummary: String,
+         scope: [String],
          lineItems: [QuoteLineItem],
-         onSaved: @escaping (String, String, Double) -> Void) {
+         onSaved: @escaping (String, String, [String], Double) -> Void) {
         self.quoteId = quoteId
         self.currency = currency
         self.onSaved = onSaved
         _title = State(initialValue: title)
         _jobSummary = State(initialValue: jobSummary)
+        _scopeText = State(initialValue: scope.joined(separator: "\n"))
         // Build with an explicit loop (not `.map`) so the value-type initializer
         // isn't called from a nonisolated map closure under main-actor isolation.
         var built: [EditableLineItem] = []
@@ -56,6 +60,16 @@ struct EditQuoteView: View {
                     TextField("Title", text: $title)
                     TextField("Job summary", text: $jobSummary, axis: .vertical)
                         .lineLimit(2...5)
+                }
+                .listRowBackground(Color(.surface))
+
+                Section {
+                    TextField("One item per line", text: $scopeText, axis: .vertical)
+                        .lineLimit(3...10)
+                } header: {
+                    Text("Scope of work")
+                } footer: {
+                    Text("Each line becomes a bullet on the quote.")
                 }
                 .listRowBackground(Color(.surface))
 
@@ -149,16 +163,21 @@ struct EditQuoteView: View {
 
         let newTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let newSummary = jobSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newScope = scopeText
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
         let subtotal = total
         try? await QuoteService.updateQuoteCore(
             id: quoteId,
             title: newTitle.isEmpty ? nil : newTitle,
             jobSummary: newSummary.isEmpty ? nil : newSummary,
+            scope: newScope,
             subtotal: subtotal,
             total: subtotal
         )
 
-        onSaved(newTitle, newSummary, subtotal)
+        onSaved(newTitle, newSummary, newScope, subtotal)
         dismiss()
     }
 }

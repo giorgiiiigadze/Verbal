@@ -25,13 +25,28 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
     /// Pinned quotes sort into a dedicated section at the top of the Home list.
     /// Mutable so Home can optimistically reflect a pin toggle.
     var pinned: Bool
+    /// Client-facing "what we'll do" bullet list (may be empty on legacy rows).
+    var scope: [String]
 
     enum CodingKeys: String, CodingKey {
         case id, title
         case jobSummary = "job_summary"
         case total, status
         case createdAt = "created_at"
-        case currency, pinned
+        case currency, pinned, scope
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        jobSummary = try c.decodeIfPresent(String.self, forKey: .jobSummary)
+        total = try c.decode(Double.self, forKey: .total)
+        status = try c.decode(String.self, forKey: .status)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        currency = try c.decodeIfPresent(String.self, forKey: .currency)
+        pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        scope = try c.decodeIfPresent([String].self, forKey: .scope) ?? []
     }
 
     var displayTitle: String {
@@ -106,21 +121,23 @@ enum QuoteService {
 
     /// Update a quote's core editable fields plus recomputed totals.
     static func updateQuoteCore(id: UUID, title: String?, jobSummary: String?,
-                                subtotal: Double, total: Double) async throws {
+                                scope: [String], subtotal: Double, total: Double) async throws {
         struct Payload: Encodable {
             let title: String?
             let jobSummary: String?
+            let scope: [String]
             let subtotal: Double
             let total: Double
             enum CodingKeys: String, CodingKey {
                 case title
                 case jobSummary = "job_summary"
-                case subtotal, total
+                case scope, subtotal, total
             }
         }
         try await client
             .from("quotes")
-            .update(Payload(title: title, jobSummary: jobSummary, subtotal: subtotal, total: total))
+            .update(Payload(title: title, jobSummary: jobSummary, scope: scope,
+                            subtotal: subtotal, total: total))
             .eq("id", value: id)
             .execute()
     }
@@ -224,6 +241,7 @@ enum QuoteService {
         return GeneratedQuote(
             title: q.title,
             jobSummary: q.jobSummary,
+            scope: q.scope,
             notes: q.notes,
             lineItems: q.lineItems.map {
                 GeneratedLineItem(
@@ -272,7 +290,7 @@ enum QuoteService {
         }
         return try await client
             .from("quotes")
-            .select("id, title, job_summary, total, status, created_at, currency, pinned")
+            .select("id, title, job_summary, total, status, created_at, currency, pinned, scope")
             .eq("user_id", value: userID)
             .order("created_at", ascending: false)
             .execute()
@@ -300,6 +318,7 @@ enum QuoteService {
         struct SourceQuote: Decodable {
             let title: String?
             let jobSummary: String?
+            let scope: [String]?
             let notes: String?
             let subtotal: Double?
             let total: Double
@@ -307,12 +326,12 @@ enum QuoteService {
             enum CodingKeys: String, CodingKey {
                 case title
                 case jobSummary = "job_summary"
-                case notes, subtotal, total, currency
+                case scope, notes, subtotal, total, currency
             }
         }
         let source: SourceQuote = try await client
             .from("quotes")
-            .select("title, job_summary, notes, subtotal, total, currency")
+            .select("title, job_summary, scope, notes, subtotal, total, currency")
             .eq("id", value: id)
             .single()
             .execute()
@@ -322,6 +341,7 @@ enum QuoteService {
             let userId: UUID
             let title: String?
             let jobSummary: String?
+            let scope: [String]
             let notes: String?
             let subtotal: Double?
             let total: Double
@@ -331,7 +351,7 @@ enum QuoteService {
                 case userId = "user_id"
                 case title
                 case jobSummary = "job_summary"
-                case notes, subtotal, total, status, currency
+                case scope, notes, subtotal, total, status, currency
             }
         }
         let copiedTitle = source.title.map { $0.isEmpty ? $0 : "\($0) (copy)" }
@@ -341,6 +361,7 @@ enum QuoteService {
                 userId: userID,
                 title: copiedTitle,
                 jobSummary: source.jobSummary,
+                scope: source.scope ?? [],
                 notes: source.notes,
                 subtotal: source.subtotal,
                 total: source.total,
@@ -403,6 +424,7 @@ enum QuoteService {
             userId: userID,
             title: resolvedTitle.isEmpty ? nil : resolvedTitle,
             jobSummary: quote.jobSummary,
+            scope: quote.scope,
             notes: quote.notes,
             subtotal: subtotal,
             total: subtotal,
@@ -448,6 +470,7 @@ enum QuoteService {
 struct GeneratedQuote: Sendable {
     var title: String
     var jobSummary: String
+    var scope: [String]
     var notes: String?
     var lineItems: [GeneratedLineItem]
 }
@@ -558,13 +581,14 @@ private struct ExtractResponse: Decodable {
 private struct ExtractedQuote: Decodable {
     let title: String
     let jobSummary: String
+    let scope: [String]
     let notes: String?
     let lineItems: [ExtractedLineItem]
 
     enum CodingKeys: String, CodingKey {
         case title
         case jobSummary = "job_summary"
-        case notes
+        case scope, notes
         case lineItems = "line_items"
     }
 }
@@ -592,6 +616,7 @@ private struct QuoteInsert: Encodable {
     let userId: UUID
     let title: String?
     let jobSummary: String
+    let scope: [String]
     let notes: String?
     let subtotal: Double
     let total: Double
@@ -602,7 +627,7 @@ private struct QuoteInsert: Encodable {
         case userId = "user_id"
         case title
         case jobSummary = "job_summary"
-        case notes, subtotal, total, status, currency
+        case scope, notes, subtotal, total, status, currency
     }
 }
 
