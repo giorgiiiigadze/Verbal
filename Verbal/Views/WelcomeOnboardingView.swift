@@ -18,11 +18,11 @@ struct WelcomeOnboardingView: View {
     private let panels: [Panel] = [
         Panel(symbol: "mic.fill",
               headline: "Just say the job",
-              body: "Describe the work like you'd tell a mate — that's all Verbal needs.",
+              body: "Describe the work like you'd tell a mate. That's all Verbal needs.",
               button: "Continue"),
         Panel(symbol: "doc.text.fill",
               headline: "We do the paperwork",
-              body: "Your words become a proper itemized quote — labour, materials, the lot — in seconds.",
+              body: "Your words become a proper itemized quote in seconds. Labour, materials, the lot.",
               button: "Continue"),
         Panel(symbol: "list.bullet.rectangle.fill",
               headline: "Priced how you price",
@@ -30,7 +30,7 @@ struct WelcomeOnboardingView: View {
               button: "Continue"),
         Panel(symbol: "slider.horizontal.3",
               headline: "You have the final say",
-              body: "Tweak any price, add or bin a line — nothing sends until you're happy.",
+              body: "Tweak any price, add or bin a line. Nothing sends until you're happy.",
               button: "Continue"),
         Panel(symbol: "paperplane.fill",
               headline: "Send it, win the job",
@@ -65,10 +65,10 @@ struct WelcomeOnboardingView: View {
             } label: {
                 Text(panels[page].button)
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color(.surface))
                     .frame(maxWidth: .infinity)
                     .frame(height: 54)
-                    .background(Color(.royalBlue600), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(Color(.mainText), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 24)
@@ -87,13 +87,17 @@ struct WelcomeOnboardingView: View {
             illustration(for: panel)
 
             VStack(spacing: 10) {
+                Image(systemName: panel.symbol)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(Color(.mainText))
+                    .padding(.bottom, 2)
                 Text(panel.headline)
                     .font(.robotoSlab(26, relativeTo: .title))
                     .foregroundStyle(Color(.mainText))
                     .multilineTextAlignment(.center)
                 Text(panel.body)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(.mainText).opacity(0.65))
                     .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 28)
@@ -113,7 +117,7 @@ struct WelcomeOnboardingView: View {
             .overlay(
                 Image(systemName: panel.symbol)
                     .font(.system(size: 64, weight: .semibold))
-                    .foregroundStyle(Color(.royalBlue600))
+                    .foregroundStyle(Color(.mainText))
             )
             .padding(.horizontal, 24)
     }
@@ -122,7 +126,7 @@ struct WelcomeOnboardingView: View {
         HStack(spacing: 8) {
             ForEach(panels.indices, id: \.self) { index in
                 Capsule()
-                    .fill(index == page ? Color(.royalBlue600) : Color(.separator))
+                    .fill(index == page ? Color(.mainText) : Color(.separator))
                     .frame(width: index == page ? 20 : 7, height: 7)
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: page)
             }
