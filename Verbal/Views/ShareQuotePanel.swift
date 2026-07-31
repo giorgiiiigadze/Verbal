@@ -8,18 +8,28 @@
 
 import SwiftUI
 import UIKit
+import QuickLook
 
 /// Verbal's custom share panel for a quote — a preview plus Share / Copy actions.
 struct ShareQuotePanel: View {
     let title: String
     let subtitle: String
     let shareText: String
+    /// The quote as a printable document. When present the panel previews the
+    /// real page and sends the PDF; without it, it falls back to sharing text.
+    var document: QuoteDocument?
     /// Called when the quote is actually shared or copied (used to mark it Sent).
     var onShared: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var showSystemShare = false
     @State private var copied = false
+    @State private var preview: UIImage?
+    @State private var pdfURL: URL?
+    @State private var isPreviewing = false
+    @State private var failedToRender = false
+
+    private var hasPDF: Bool { document != nil && !failedToRender }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -31,16 +41,32 @@ struct ShareQuotePanel: View {
                 Button(role: .close) { dismiss() }
             }
 
-            // Quote preview.
+            // Quote preview — the real first page when we have one, so the user
+            // sees exactly what the client will get before it goes out.
             HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.royalBlue100))
-                    .frame(width: 46, height: 46)
-                    .overlay(
-                        Image(systemName: "doc.text")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(Color(.royalBlue600))
-                    )
+                Group {
+                    if let preview {
+                        Image(uiImage: preview)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } else {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(.royalBlue25))
+                            .overlay(
+                                Image(systemName: "doc.text")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundStyle(Color(.blueAccentText))
+                            )
+                    }
+                }
+                .frame(width: 46, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                )
+                .onTapGesture { if pdfURL != nil { isPreviewing = true } }
+
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.headline)
@@ -58,10 +84,11 @@ struct ShareQuotePanel: View {
 
             // Actions.
             HStack(spacing: 12) {
-                actionButton(title: "Share via…", systemImage: "square.and.arrow.up") {
+                actionButton(title: hasPDF ? "Send quote" : "Share via…",
+                             systemImage: "square.and.arrow.up") {
                     showSystemShare = true
                 }
-                actionButton(title: copied ? "Copied" : "Copy",
+                actionButton(title: copied ? "Copied" : "Copy text",
                              systemImage: copied ? "checkmark" : "doc.on.doc") {
                     UIPasteboard.general.string = shareText
                     withAnimation { copied = true }
@@ -72,16 +99,32 @@ struct ShareQuotePanel: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .presentationDetents([.height(280)])
+        .presentationDetents([.height(300)])
         .presentationDragIndicator(.hidden)
         .presentationBackground(.ultraThinMaterial)
+        .task {
+            guard let document else { return }
+            preview = QuotePDF.thumbnail(document)
+            do {
+                pdfURL = try QuotePDF.write(document)
+            } catch {
+                // Fall back to sharing text rather than blocking the send.
+                failedToRender = true
+            }
+        }
         .sheet(isPresented: $showSystemShare) {
-            ShareSheet(items: [shareText]) { completed in
+            ShareSheet(items: [pdfURL as Any? ?? shareText].compactMap { $0 }) { completed in
                 if completed {
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     onShared()
                     dismiss()
                 }
+            }
+        }
+        .sheet(isPresented: $isPreviewing) {
+            if let pdfURL {
+                QuickLookPreview(url: pdfURL)
+                    .ignoresSafeArea()
             }
         }
     }
@@ -98,6 +141,33 @@ struct ShareQuotePanel: View {
             .glassEffect(.regular.interactive(), in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Full-screen PDF preview, so the user can read the document before sending.
+struct QuickLookPreview: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> QLPreviewController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ controller: QLPreviewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(url: url) }
+
+    final class Coordinator: NSObject, QLPreviewControllerDataSource {
+        let url: URL
+        init(url: URL) { self.url = url }
+
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
+
+        func previewController(_ controller: QLPreviewController,
+                               previewItemAt index: Int) -> QLPreviewItem {
+            url as NSURL
+        }
     }
 }
 

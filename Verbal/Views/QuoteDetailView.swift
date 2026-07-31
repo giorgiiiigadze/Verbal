@@ -203,6 +203,24 @@ struct QuoteDetailView: View {
         }
     }
 
+    /// The quote as a printable document, built from the live edited values so
+    /// the PDF matches what's on screen rather than the last fetch.
+    private var pdfDocument: QuoteDocument {
+        QuoteDocument(
+            title: displayTitle,
+            number: quote.number,
+            clientName: clientName.isEmpty ? nil : clientName,
+            createdAt: quote.createdAt,
+            validityDate: quote.validityDate,
+            jobSummary: jobSummary.isEmpty ? nil : jobSummary,
+            scope: scope,
+            lineItems: lineItems,
+            total: total,
+            currency: currency,
+            business: session.businessProfile
+        )
+    }
+
     private var dateLabel: String { quoteDateLabel(quote.createdAt) }
 
     /// "Valid to 14 Aug 2026" while it still holds, "Expired 2 Aug 2026" after.
@@ -337,7 +355,8 @@ struct QuoteDetailView: View {
         .sheet(isPresented: $showShare) {
             ShareQuotePanel(title: displayTitle,
                             subtitle: shareSubtitle,
-                            shareText: shareText) {
+                            shareText: shareText,
+                            document: pdfDocument) {
                 // Sharing a draft marks it as Sent (don't downgrade later statuses).
                 if status == "draft" { changeStatus(to: "sent") }
             }
