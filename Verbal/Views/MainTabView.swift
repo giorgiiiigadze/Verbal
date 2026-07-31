@@ -10,11 +10,9 @@ struct MainTabView: View {
     private enum TabItem: Hashable { case home, rateCard, profile, record }
 
     @Environment(SessionStore.self) private var session
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selection: TabItem = .home
     @State private var showCreate = false
-    /// First-launch welcome sheet, shown once after the user's first sign-in.
-    @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
-    @State private var showWelcome = false
 
     /// Intercepts taps on the record "tab" before it ever becomes the selected
     /// tab. Letting it select and then snapping back in onChange briefly puts
@@ -61,38 +59,22 @@ struct MainTabView: View {
                 Label {
                     Text("Record")
                 } icon: {
-                    Image(uiImage: Self.blueMicIcon)
+                    Image(uiImage: micIcon)
                 }
             }
         }
         .tint(Color(.mainText))
-        .task {
-            // Show the welcome flow once, the first time home appears post sign-in —
-            // after a short beat so it slides up just after the splash dismisses.
-            guard !hasSeenWelcome else { return }
-            try? await Task.sleep(for: .seconds(0.8))
-            showWelcome = true
-        }
-        .sheet(isPresented: $showWelcome) {
-            WelcomeOnboardingView {
-                hasSeenWelcome = true
-                showWelcome = false
-                // Drop the user straight into recording their first quote.
-                Task {
-                    try? await Task.sleep(for: .seconds(0.35))
-                    showCreate = true
-                }
-            }
-            .environment(session)
-        }
     }
 
-    /// The mic tab glyph, tinted royal blue with always-original rendering so it
-    /// stays blue regardless of selection state.
-    private static let blueMicIcon: UIImage = {
+    /// The mic tab glyph, force-tinted with always-original rendering so it keeps
+    /// its color regardless of selection state. Royal blue reads well on the light
+    /// tab bar, but it's near-black on the dark one, so dark mode gets white.
+    /// Computed (not a stored static) so it re-resolves when the scheme changes.
+    private var micIcon: UIImage {
         let base = UIImage(systemName: "mic.fill") ?? UIImage()
-        return base.withTintColor(UIColor(resource: .royalBlue600), renderingMode: .alwaysOriginal)
-    }()
+        let tint: UIColor = colorScheme == .dark ? .white : UIColor(resource: .royalBlue600)
+        return base.withTintColor(tint, renderingMode: .alwaysOriginal)
+    }
 
     @ViewBuilder
     private var profileIcon: some View {
