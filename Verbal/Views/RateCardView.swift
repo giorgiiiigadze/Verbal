@@ -243,6 +243,7 @@ private struct AddRateItemView: View {
                 type: type
             )
             isSaving = false
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             dismiss()
         }
     }

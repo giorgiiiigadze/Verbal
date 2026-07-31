@@ -74,6 +74,12 @@ struct WelcomeOnboardingView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 12)
         }
+        // A light tick as each panel lands, and a firmer press on the final
+        // "Get started" — the tactile tone is set in the first minute.
+        .sensoryFeedback(trigger: page) { oldPage, newPage in
+            guard newPage != oldPage else { return nil }
+            return newPage == panels.count - 1 ? .impact(weight: .medium) : .selection
+        }
         .presentationDetents([.height(520)])
         .presentationCornerRadius(28)
         .presentationDragIndicator(.visible)

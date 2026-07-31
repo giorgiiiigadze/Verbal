@@ -326,6 +326,9 @@ struct HomeView: View {
     private func togglePin(_ quote: QuoteSummary) async {
         guard let index = quotes.firstIndex(where: { $0.id == quote.id }) else { return }
         let newValue = !quote.pinned
+        // Fire with the optimistic update so the tap feels instant, not
+        // gated on the round trip.
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         withAnimation { quotes[index].pinned = newValue }
         do {
             try await QuoteService.setPinned(id: quote.id, pinned: newValue)

@@ -177,6 +177,7 @@ struct EditQuoteView: View {
             total: subtotal
         )
 
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         onSaved(newTitle, newSummary, newScope, subtotal)
         dismiss()
     }
