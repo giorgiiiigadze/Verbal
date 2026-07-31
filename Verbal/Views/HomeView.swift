@@ -121,7 +121,7 @@ struct HomeView: View {
                     ZStack {
                         QuoteRow(quote: quote)
                         // Zero-opacity link so the row navigates without the
-                        // default trailing chevron (we draw our own inside).
+                        // default trailing chevron.
                         NavigationLink {
                             QuoteDetailView(quote: quote,
                                             initialLineItems: session.lineItems(for: quote.id) ?? []) {
@@ -380,19 +380,68 @@ private struct QuoteRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.tertiary)
+            VStack(alignment: .trailing, spacing: 5) {
+                Text(AppCurrency.format(quote.total, code: quote.currency))
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(Color(.mainText))
+                statusPill
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 18)
-        .background(Color(.surface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(quote.pinned ? Color(.royalBlue25) : Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    /// Small tinted capsule naming the quote's status — pale blue for the
+    /// working states, green/red for the settled ones.
+    private var statusPill: some View {
+        Text(pillLabel)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(pillForeground)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(pillBackground, in: Capsule())
+    }
+
+    private var pillLabel: String {
+        switch quote.status {
+        case "draft": return "Draft"
+        case "sent": return "Sent"
+        case "viewed": return "Viewed"
+        case "accepted": return "Accepted"
+        case "declined": return "Declined"
+        case "expired": return "Expired"
+        default: return quote.status.capitalized
+        }
+    }
+
+    private var pillForeground: Color {
+        switch quote.status {
+        case "draft": return .orange
+        case "viewed": return Color(.blueAccentText)
+        case "accepted": return .green
+        case "declined": return .red
+        case "expired": return .secondary
+        default: return Color(.blueAccentText)
+        }
+    }
+
+    private var pillBackground: Color {
+        switch quote.status {
+        case "draft": return .orange.opacity(0.14)
+        case "viewed": return Color(.royalBlue50)
+        case "accepted": return .green.opacity(0.14)
+        case "declined": return .red.opacity(0.12)
+        case "expired": return Color(.separator).opacity(0.5)
+        default: return Color(.royalBlue25)
+        }
     }
 }
 
