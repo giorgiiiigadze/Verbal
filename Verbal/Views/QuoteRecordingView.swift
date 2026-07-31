@@ -19,6 +19,9 @@ struct QuoteRecordingView: View {
     /// When the current generation finished — drives the date chip.
     @State private var generatedAt = Date()
     @State private var showTranscript = false
+    /// Who the quote is for — the one detail the transcript can't provide.
+    @State private var clientName = ""
+    @State private var showClientSheet = false
     @State private var toast: Toast?
     /// Currency for the quote being built — always the user's Settings default.
     /// Changing a quote's currency happens later, on the detail page.
@@ -93,6 +96,9 @@ struct QuoteRecordingView: View {
             // The magic moment — the spoken job became a quote.
             .sensoryFeedback(.success, trigger: generated != nil) { wasGenerated, isGenerated in
                 !wasGenerated && isGenerated
+            }
+            .sheet(isPresented: $showClientSheet) {
+                ClientSheet(name: $clientName)
             }
             .sheet(isPresented: $showTranscript) {
                 TranscriptSheet(text: transcriptText, editable: $transcriptText) {
@@ -210,7 +216,8 @@ struct QuoteRecordingView: View {
         isSaving = true
         Task {
             do {
-                try await QuoteService.save(generated, transcript: transcriptText, title: title, currency: currency)
+                try await QuoteService.save(generated, transcript: transcriptText, title: title,
+                                            currency: currency, clientName: clientName)
                 isSaving = false
                 toast = Toast(style: .success, message: "Quote saved")
                 try? await Task.sleep(for: .seconds(1.0))
@@ -242,13 +249,18 @@ struct QuoteRecordingView: View {
     // MARK: - Quote chips (creator / date / status)
 
     private var chips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 10) {
-                QuoteChip(text: creatorName) {
-                    AvatarView(image: session.avatarImage,
-                               urlString: session.profile?.avatarUrl,
-                               size: 22)
+                // Naming the client is the one detail the transcript can't
+                // supply, so it leads the row and stays inviting until filled.
+                Button { showClientSheet = true } label: {
+                    QuoteChip(text: clientName.isEmpty ? "Add client" : clientName,
+                              tinted: clientName.isEmpty) {
+                        Image(systemName: clientName.isEmpty ? "person.badge.plus" : "person.fill")
+                    }
                 }
+                .buttonStyle(.plain)
+
                 QuoteChip(text: quoteDateLabel(generatedAt)) {
                     Image(systemName: "calendar")
                 }
@@ -263,14 +275,8 @@ struct QuoteRecordingView: View {
                 }
             }
         }
+        .scrollIndicators(.hidden)
         .scrollClipDisabled()
-    }
-
-
-    /// First name only, so the chip stays compact.
-    private var creatorName: String {
-        guard let full = session.profile?.fullName, !full.isEmpty else { return "You" }
-        return String(full.split(separator: " ").first ?? "")
     }
 
     // MARK: - Status banner (while generating)

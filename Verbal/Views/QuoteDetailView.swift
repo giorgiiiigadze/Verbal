@@ -20,6 +20,10 @@ struct QuoteDetailView: View {
     @State private var showShare = false
     @State private var showEdit = false
     @State private var showDeleteConfirm = false
+    @State private var showClientSheet = false
+    /// Seeded from the quote and kept in sync after an edit, so the chip
+    /// updates without refetching the list.
+    @State private var clientName: String
     /// Live title, summary & scope — editable via the edit sheet.
     @State private var title: String
     @State private var jobSummary: String
@@ -48,6 +52,7 @@ struct QuoteDetailView: View {
         _title = State(initialValue: quote.title ?? "")
         _jobSummary = State(initialValue: quote.jobSummary ?? "")
         _scope = State(initialValue: quote.scope)
+        _clientName = State(initialValue: quote.clientName ?? "")
         // Seed from the prefetched cache so the line items render on first paint
         // instead of popping in after the fetch.
         _lineItems = State(initialValue: initialLineItems)
@@ -75,17 +80,32 @@ struct QuoteDetailView: View {
     }
 
     private var chips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 10) {
-                // 1. Who made the quote + their avatar.
-                QuoteChip(text: creatorName) {
-                    AvatarView(image: session.avatarImage,
-                               urlString: session.profile?.avatarUrl,
-                               size: 22)
+                // 1. Who it's for — tap to name or change the client.
+                Button { showClientSheet = true } label: {
+                    QuoteChip(text: clientName.isEmpty ? "Add client" : clientName,
+                              tinted: clientName.isEmpty) {
+                        Image(systemName: clientName.isEmpty ? "person.badge.plus" : "person.fill")
+                    }
                 }
-                // 2. Creation date.
+                .buttonStyle(.plain)
+                // 2. Reference number, assigned when the quote was created.
+                if let numberLabel = quote.numberLabel {
+                    QuoteChip(text: numberLabel) {
+                        Image(systemName: "number")
+                    }
+                }
+                // 3. Creation date.
                 QuoteChip(text: dateLabel) {
                     Image(systemName: "calendar")
+                }
+                // 4. How long the price holds.
+                if let validityLabel {
+                    QuoteChip(text: validityLabel) {
+                        Image(systemName: quote.isPastValidity
+                              ? "clock.badge.exclamationmark" : "clock")
+                    }
                 }
                 // 3. Currency — tap to change this quote's currency.
                 Menu {
@@ -123,6 +143,7 @@ struct QuoteDetailView: View {
                 .buttonStyle(.plain)
             }
         }
+        .scrollIndicators(.hidden)
         .scrollClipDisabled()
     }
 
@@ -182,13 +203,14 @@ struct QuoteDetailView: View {
         }
     }
 
-    /// Shows only the first name so the chip stays compact.
-    private var creatorName: String {
-        guard let full = session.profile?.fullName, !full.isEmpty else { return "You" }
-        return String(full.split(separator: " ").first ?? "")
-    }
-
     private var dateLabel: String { quoteDateLabel(quote.createdAt) }
+
+    /// "Valid to 14 Aug 2026" while it still holds, "Expired 2 Aug 2026" after.
+    private var validityLabel: String? {
+        guard let date = quote.validityDate else { return nil }
+        let day = QuoteDateFormat.display(date)
+        return quote.isPastValidity ? "Expired \(day)" : "Valid to \(day)"
+    }
 
     private var statusLabel: String { statusLabel(for: status) }
     private var statusIcon: String { statusIcon(for: status) }
@@ -285,6 +307,14 @@ struct QuoteDetailView: View {
         .task {
             // Warm the exchange-rate cache so a conversion opens instantly.
             await FXService.prefetch(base: currency)
+        }
+        .sheet(isPresented: $showClientSheet) {
+            ClientSheet(name: $clientName)
+        }
+        .onChange(of: clientName) { previous, current in
+            // Persist only real edits, not the initial seed.
+            guard previous != current else { return }
+            Task { try? await QuoteService.setClient(quoteId: quote.id, name: current) }
         }
         .sheet(isPresented: $showTranscript) {
             TranscriptSheet(text: transcriptText)

@@ -28,13 +28,27 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
     /// Client-facing "what we'll do" bullet list (may be empty on legacy rows).
     var scope: [String]
 
+    /// Sequential per-user reference, e.g. "0007". Assigned by a database
+    /// trigger on insert, so it's always present on new rows.
+    let number: String?
+    /// Date the quote stops being valid, as stored ("yyyy-MM-dd"). Kept as text
+    /// because Postgres `date` columns aren't ISO-8601 timestamps.
+    let validityDateText: String?
+    /// Name of the customer this quote is for, via the linked customer row.
+    let clientName: String?
+
     enum CodingKeys: String, CodingKey {
         case id, title
         case jobSummary = "job_summary"
         case total, status
         case createdAt = "created_at"
-        case currency, pinned, scope
+        case currency, pinned, scope, number
+        case validityDate = "validity_date"
+        case customers
     }
+
+    /// Shape of the embedded `customers(name)` relation.
+    private struct CustomerRef: Decodable { let name: String? }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -47,12 +61,49 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
         currency = try c.decodeIfPresent(String.self, forKey: .currency)
         pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         scope = try c.decodeIfPresent([String].self, forKey: .scope) ?? []
+        number = try c.decodeIfPresent(String.self, forKey: .number)
+        validityDateText = try c.decodeIfPresent(String.self, forKey: .validityDate)
+        clientName = try c.decodeIfPresent(CustomerRef.self, forKey: .customers)?.name
     }
 
     var displayTitle: String {
         if let title, !title.isEmpty { return title }
         if let jobSummary, !jobSummary.isEmpty { return jobSummary }
         return "Untitled quote"
+    }
+
+    /// "Quote 0007" — the reference shown to the user and printed on the PDF.
+    var numberLabel: String? {
+        guard let number, !number.isEmpty else { return nil }
+        return "Quote \(number)"
+    }
+
+    var validityDate: Date? {
+        guard let validityDateText else { return nil }
+        return QuoteDateFormat.dayOnly.date(from: validityDateText)
+    }
+
+    /// True once the validity date has passed (status is left alone; this is
+    /// purely how the date reads to the user).
+    var isPastValidity: Bool {
+        guard let validityDate else { return false }
+        return validityDate < Calendar.current.startOfDay(for: Date())
+    }
+}
+
+/// Formatters for Postgres `date` values, which arrive as "yyyy-MM-dd".
+enum QuoteDateFormat {
+    static let dayOnly: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    /// Medium, localized rendering for display — e.g. "14 Aug 2026".
+    static func display(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.abbreviated).year())
     }
 }
 
@@ -110,6 +161,76 @@ enum QuoteService {
             .execute()
             .value
         return rows.first?.text
+    }
+
+    // MARK: - Customers
+
+    /// Resolve a typed client name to a customer row, reusing an existing one
+    /// with the same name (case-insensitive) so repeat customers don't pile up
+    /// as duplicates. Returns nil for an empty name.
+    static func customerID(named name: String, userID: UUID) async throws -> UUID? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        struct Row: Decodable { let id: UUID }
+        let existing: [Row] = try await client
+            .from("customers")
+            .select("id")
+            .eq("user_id", value: userID)
+            .ilike("name", pattern: trimmed)
+            .limit(1)
+            .execute()
+            .value
+        if let found = existing.first { return found.id }
+
+        struct CustomerInsert: Encodable {
+            let userId: UUID
+            let name: String
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+                case name
+            }
+        }
+        let created: Row = try await client
+            .from("customers")
+            .insert(CustomerInsert(userId: userID, name: trimmed), returning: .representation)
+            .select("id")
+            .single()
+            .execute()
+            .value
+        return created.id
+    }
+
+    /// Names the user has quoted for before — powers suggestions on the client field.
+    static func customerNames() async throws -> [String] {
+        guard let userID = client.auth.currentUser?.id else { return [] }
+        struct Row: Decodable { let name: String? }
+        let rows: [Row] = try await client
+            .from("customers")
+            .select("name")
+            .eq("user_id", value: userID)
+            .order("updated_at", ascending: false)
+            .limit(20)
+            .execute()
+            .value
+        return rows.compactMap(\.name).filter { !$0.isEmpty }
+    }
+
+    /// Link an existing quote to a client by name (used when editing).
+    static func setClient(quoteId: UUID, name: String) async throws {
+        guard let userID = client.auth.currentUser?.id else {
+            throw QuoteError.notSignedIn
+        }
+        let customerId = try await customerID(named: name, userID: userID)
+        struct Payload: Encodable {
+            let customerId: UUID?
+            enum CodingKeys: String, CodingKey { case customerId = "customer_id" }
+        }
+        try await client
+            .from("quotes")
+            .update(Payload(customerId: customerId))
+            .eq("id", value: quoteId)
+            .execute()
     }
 
     /// Delete a quote (line items and transcript cascade via FK).
@@ -290,7 +411,7 @@ enum QuoteService {
         }
         return try await client
             .from("quotes")
-            .select("id, title, job_summary, total, status, created_at, currency, pinned, scope")
+            .select("id, title, job_summary, total, status, created_at, currency, pinned, scope, number, validity_date, customers(name)")
             .eq("user_id", value: userID)
             .order("created_at", ascending: false)
             .execute()
@@ -407,10 +528,12 @@ enum QuoteService {
     /// Persist an already-generated quote (from `generate`) with its transcript.
     @discardableResult
     static func save(_ quote: GeneratedQuote, transcript: String, title: String,
-                     currency: String) async throws -> UUID {
+                     currency: String, clientName: String = "") async throws -> UUID {
         guard let userID = client.auth.currentUser?.id else {
             throw QuoteError.notSignedIn
         }
+
+        let customerId = try? await customerID(named: clientName, userID: userID)
 
         // Deterministic totals (never trust the LLM for math).
         let subtotal = quote.lineItems.reduce(into: 0.0) { sum, item in
@@ -429,7 +552,8 @@ enum QuoteService {
             subtotal: subtotal,
             total: subtotal,
             status: "draft",
-            currency: currency
+            currency: currency,
+            customerId: customerId ?? nil
         )
 
         let inserted: InsertedRow = try await client
@@ -622,12 +746,16 @@ private struct QuoteInsert: Encodable {
     let total: Double
     let status: String
     let currency: String
+    /// Nil when the user didn't name a client. `number` and `validity_date`
+    /// are deliberately absent — a database trigger fills them on insert.
+    let customerId: UUID?
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
         case title
         case jobSummary = "job_summary"
         case scope, notes, subtotal, total, status, currency
+        case customerId = "customer_id"
     }
 }
 

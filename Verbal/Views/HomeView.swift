@@ -519,9 +519,12 @@ private struct QuoteRow: View {
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(1)
                 }
-                Text(quote.createdAt, format: .relative(presentation: .named))
+                // Lead with the client when there is one — job titles repeat
+                // ("Bathroom re-tiling" three times over), names don't.
+                Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 5) {
@@ -541,6 +544,14 @@ private struct QuoteRow: View {
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    /// Client name when known, otherwise when the quote was made. The client is
+    /// the more useful identifier — several quotes share the same job title.
+    private var subtitle: String {
+        let age = quote.createdAt.formatted(.relative(presentation: .named))
+        guard let client = quote.clientName, !client.isEmpty else { return age }
+        return "\(client) · \(age)"
     }
 
     /// Small tinted capsule naming the quote's status — pale blue for the
