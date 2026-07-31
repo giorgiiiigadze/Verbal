@@ -16,8 +16,26 @@ struct MainTabView: View {
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
     @State private var showWelcome = false
 
+    /// Intercepts taps on the record "tab" before it ever becomes the selected
+    /// tab. Letting it select and then snapping back in onChange briefly puts
+    /// the search-role tab through its tab-bar morph, which corrupts the Home
+    /// stack's navigation bar (broken title layout, lost push transitions,
+    /// vanishing tab bar) after the sheet dismisses.
+    private var tabSelection: Binding<TabItem> {
+        Binding(
+            get: { selection },
+            set: { newValue in
+                if newValue == .record {
+                    showCreate = true
+                } else {
+                    selection = newValue
+                }
+            }
+        )
+    }
+
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: tabSelection) {
             Tab("Home", systemImage: "house.fill", value: .home) {
                 HomeView(showCreate: $showCreate)
             }
@@ -48,12 +66,6 @@ struct MainTabView: View {
             }
         }
         .tint(Color(.mainText))
-        .onChange(of: selection) { _, newValue in
-            if newValue == .record {
-                selection = .home
-                showCreate = true
-            }
-        }
         .task {
             // Show the welcome flow once, the first time home appears post sign-in —
             // after a short beat so it slides up just after the splash dismisses.

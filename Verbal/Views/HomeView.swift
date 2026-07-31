@@ -52,10 +52,6 @@ struct HomeView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showCreate, onDismiss: { Task { await load() } }) {
-                QuoteRecordingView()
-                    .environment(session)
-            }
             .sheet(item: $shareTarget) { quote in
                 ShareQuotePanel(title: quote.displayTitle,
                                 subtitle: "Total \(AppCurrency.format(quote.total, code: quote.currency)) · \(quote.status.capitalized)",
@@ -96,6 +92,14 @@ struct HomeView: View {
                 Text("This creates a copy of “\(quote.displayTitle)” as a new draft.")
             }
             .toast($toast)
+        }
+        // Presented from outside the NavigationStack: attaching this sheet to
+        // the content inside the stack (which also owns a minimizing
+        // .searchable toolbar) corrupts the navigation bar after dismissal —
+        // broken title layout and lost push transitions on the next push.
+        .sheet(isPresented: $showCreate, onDismiss: { Task { await load() } }) {
+            QuoteRecordingView()
+                .environment(session)
         }
     }
 
