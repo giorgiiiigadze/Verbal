@@ -11,6 +11,9 @@ struct ContentView: View {
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     @State private var minSplashElapsed = false
+    /// Caps how long the splash will wait for the preloaded lists, so a slow
+    /// or offline launch still reaches the app promptly.
+    @State private var listWaitElapsed = false
 
     init() {
         let network = NetworkMonitor()
@@ -19,8 +22,15 @@ struct ContentView: View {
     }
 
     /// Show the splash until first-paint data has loaded AND at least 0.5s passed.
+    ///
+    /// For a signed-in launch it also waits (briefly) on the preloaded quote
+    /// and rate-card lists: `isBootstrapped` turns true before those fetches
+    /// finish, so dismissing on it alone let Home paint an empty screen for a
+    /// moment. The wait is capped by `listWaitElapsed` so a slow or offline
+    /// start still gets in.
     private var showSplash: Bool {
-        !session.isBootstrapped || !minSplashElapsed
+        guard session.isBootstrapped, minSplashElapsed else { return true }
+        return session.state == .ready && !session.listsLoaded && !listWaitElapsed
     }
 
     var body: some View {
@@ -48,6 +58,10 @@ struct ContentView: View {
         .task {
             try? await Task.sleep(for: .seconds(0.5))
             minSplashElapsed = true
+        }
+        .task {
+            try? await Task.sleep(for: .seconds(2.0))
+            listWaitElapsed = true
         }
     }
 
