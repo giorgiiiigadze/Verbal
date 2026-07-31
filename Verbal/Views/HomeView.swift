@@ -20,6 +20,9 @@ struct HomeView: View {
     @State private var quoteToDuplicate: QuoteSummary?
     @State private var searchText = ""
     @State private var toast: Toast?
+    /// True when the last fetch failed — distinguishes "no quotes" from
+    /// "couldn't reach the server".
+    @State private var loadFailed = false
 
     var body: some View {
         NavigationStack {
@@ -27,8 +30,14 @@ struct HomeView: View {
                 if quotes.isEmpty && !hasLoaded {
                     // Still loading first paint — stay blank, not "no quotes".
                     Color(.homeBackground)
+                } else if quotes.isEmpty && loadFailed {
+                    // Don't claim the account is empty when the fetch failed.
+                    errorState
                 } else if quotes.isEmpty {
                     emptyState
+                } else if sections.isEmpty {
+                    // Quotes exist, but the search or filter excluded them all.
+                    noMatchesState
                 } else {
                     quotesList
                 }
@@ -107,6 +116,25 @@ struct HomeView: View {
 
     private var quotesList: some View {
         List {
+            // Money in play, above the list — the number worth opening the app
+            // for. Hidden while searching or filtering, when it'd be misleading.
+            if !outstanding.isEmpty, searchQuery.isEmpty, filter == .all {
+                outstandingSummary
+                    // Full-bleed tinted band rather than a floating card, so the
+                    // top of the screen reads as its own header zone.
+                    .listRowBackground(
+                        Color(.royalBlue25)
+                            .overlay(alignment: .bottom) {
+                                // Hairline where the band meets the page.
+                                Rectangle()
+                                    .fill(Color(.separator))
+                                    .frame(height: 0.5)
+                            }
+                    )
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 18, leading: 20, bottom: 20, trailing: 20))
+            }
+
             ForEach(sections, id: \.title) { section in
                 // Header as a normal row (not a Section header) so it scrolls
                 // away with the content instead of pinning to the top.
@@ -172,6 +200,30 @@ struct HomeView: View {
         .scrollContentBackground(.hidden)
     }
 
+    /// Quotes with a client and no decision yet — the pipeline.
+    private var outstanding: [QuoteSummary] {
+        quotes.filter { $0.status == "sent" || $0.status == "viewed" }
+    }
+
+    private var outstandingSummary: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Waiting on clients")
+                    .font(.caption)
+                    .foregroundStyle(Color(.blueAccentText))
+                Text(AppCurrency.format(outstanding.reduce(0) { $0 + $1.total },
+                                        code: outstanding.first?.currency))
+                    .font(.title3.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(Color(.mainText))
+            }
+            Spacer(minLength: 8)
+            Text("\(outstanding.count) quote\(outstanding.count == 1 ? "" : "s")")
+                .font(.caption)
+                .foregroundStyle(Color(.blueAccentText))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     /// Long-press context menu for a quote card.
     @ViewBuilder
     private func quoteMenu(for quote: QuoteSummary) -> some View {
@@ -210,12 +262,86 @@ struct HomeView: View {
         }
     }
 
+    /// First run: an invitation into the core loop, not a note that the list
+    /// is empty. This is the screen a new user meets straight after onboarding.
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        placeholder(
+            icon: "mic.fill",
+            title: "Your first quote starts here",
+            message: "Describe a job out loud and Verbal turns it into a priced quote."
+        ) {
+            Button {
+                showCreate = true
+            } label: {
+                Text("Record a job")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 28)
+                    .frame(height: 50)
+                    .background(Color(.royalBlue600), in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// Quotes exist but the active search or filter matched none of them.
+    private var noMatchesState: some View {
+        placeholder(
+            icon: "magnifyingglass",
+            title: "Nothing to show",
+            message: searchQuery.isEmpty
+                ? "No quotes are \(filter.label.lowercased()) right now."
+                : "No quotes match “\(searchQuery)”."
+        ) {
+            Button("Clear search and filters") {
+                searchText = ""
+                filter = .all
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(Color(.blueAccentText))
+        }
+    }
+
+    /// The first load failed and there's nothing cached to fall back on.
+    private var errorState: some View {
+        placeholder(
+            icon: "wifi.exclamationmark",
+            title: "Couldn't load your quotes",
+            message: "Check your connection and try again."
+        ) {
+            Button("Try again") {
+                Task { await load() }
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(Color(.blueAccentText))
+        }
+    }
+
+    /// Shared centered layout for the empty / no-match / error screens.
+    private func placeholder<Action: View>(
+        icon: String,
+        title: String,
+        message: String,
+        @ViewBuilder action: () -> Action
+    ) -> some View {
+        VStack(spacing: 10) {
             Spacer()
-            Text("Your quotes appear here..")
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(Color(.blueAccentText))
+                .frame(width: 64, height: 64)
+                .background(Color(.royalBlue25), in: Circle())
+                .padding(.bottom, 6)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(Color(.mainText))
+            Text(message)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 44)
+            action()
+                .padding(.top, 10)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -225,8 +351,13 @@ struct HomeView: View {
 
     /// Quotes grouped into status sections, honoring the active filter.
     /// Section titles include a count, e.g. "Waiting to hear back · 2".
+    /// The trimmed search text, as typed (for display in the no-match state).
+    private var searchQuery: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var sections: [(title: String, quotes: [QuoteSummary])] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = searchQuery.lowercased()
         let filtered = quotes.filter { quote in
             guard filter.matches(quote.status) else { return false }
             guard !query.isEmpty else { return true }
@@ -266,8 +397,14 @@ struct HomeView: View {
         defer { isLoading = false }
         do {
             quotes = try await QuoteService.fetchQuotes()
+            loadFailed = false
         } catch {
-            // Keep whatever we had; a toast/list-error can be added later.
+            // Keep whatever we had on screen; the flag lets the empty state
+            // report a failure instead of claiming there are no quotes.
+            loadFailed = true
+            if !quotes.isEmpty {
+                toast = Toast(style: .error, message: "Couldn't refresh quotes")
+            }
         }
         hasLoaded = true
     }
