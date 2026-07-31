@@ -179,4 +179,17 @@ final class SessionStore {
     func signOut() async throws {
         try await client.auth.signOut()
     }
+
+    /// Permanently deletes the signed-in account and everything owned by it.
+    /// The server derives the user from the caller's token, so this can only
+    /// ever delete the current account. Signing out afterwards clears the
+    /// local session and returns the app to the auth screen.
+    func deleteAccount() async throws {
+        let _: DeleteAccountResponse = try await client.functions.invoke("delete-account")
+        try? await client.auth.signOut()
+    }
+}
+
+private struct DeleteAccountResponse: Decodable {
+    let deleted: Bool
 }
