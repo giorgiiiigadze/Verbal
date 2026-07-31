@@ -86,6 +86,14 @@ struct QuoteRecordingView: View {
                     .padding(.bottom, 8)
             }
             .toast($toast)
+            // Record button: firm press-down feel on start, gentle release on stop.
+            .sensoryFeedback(trigger: recorder.isRecording) { _, isRecording in
+                isRecording ? .impact(weight: .medium) : .impact(weight: .light)
+            }
+            // The magic moment — the spoken job became a quote.
+            .sensoryFeedback(.success, trigger: generated != nil) { wasGenerated, isGenerated in
+                !wasGenerated && isGenerated
+            }
             .sheet(isPresented: $showTranscript) {
                 TranscriptSheet(text: transcriptText, editable: $transcriptText) {
                     // Regenerate: clear the current result and re-run the AI extraction.

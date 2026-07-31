@@ -341,6 +341,10 @@ struct HomeView: View {
         withAnimation { quotes[index].status = newStatus }
         do {
             try await QuoteService.updateStatus(id: quote.id, status: newStatus)
+            // The user just won the job — make it land physically.
+            if newStatus == "accepted" {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
         } catch {
             withAnimation { quotes[index].status = previous }
         }

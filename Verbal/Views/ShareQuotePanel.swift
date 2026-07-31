@@ -65,6 +65,7 @@ struct ShareQuotePanel: View {
                              systemImage: copied ? "checkmark" : "doc.on.doc") {
                     UIPasteboard.general.string = shareText
                     withAnimation { copied = true }
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     onShared()
                 }
             }
@@ -77,6 +78,7 @@ struct ShareQuotePanel: View {
         .sheet(isPresented: $showSystemShare) {
             ShareSheet(items: [shareText]) { completed in
                 if completed {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     onShared()
                     dismiss()
                 }

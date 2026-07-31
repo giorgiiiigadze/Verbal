@@ -7,7 +7,14 @@ import SwiftUI
 
 struct SplashScreen: View {
     var body: some View {
-        Color(.royalBlue400)
-            .ignoresSafeArea()
+        ZStack {
+            Color(.royalBlue400)
+                .ignoresSafeArea()
+            Image(.brandMark)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 96)
+                .foregroundStyle(.white)
+        }
     }
 }
