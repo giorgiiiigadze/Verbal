@@ -14,7 +14,7 @@ struct SettingsView: View {
 
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
-    @State private var showDeleteConfirmation = false
+    @State private var showDeleteSheet = false
     @State private var isDeleting = false
     @State private var toast: Toast?
 
@@ -87,7 +87,7 @@ struct SettingsView: View {
 
             Section {
                 Button("Delete account", role: .destructive) {
-                    showDeleteConfirmation = true
+                    showDeleteSheet = true
                 }
                 .disabled(isDeleting)
             } footer: {
@@ -99,20 +99,22 @@ struct SettingsView: View {
         .background(Color(.homeBackground))
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Delete your account?", isPresented: $showDeleteConfirmation) {
-            Button("Delete account", role: .destructive) { deleteAccount() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently deletes your account and every quote, rate, and business detail saved to it. This can't be undone.")
+        .sheet(isPresented: $showDeleteSheet) {
+            DeleteAccountSheet { reason in
+                showDeleteSheet = false
+                deleteAccount(reason: reason)
+            }
         }
         .toast($toast)
     }
 
     /// On success the session signs out, which returns the app to the auth
     /// screen — so there's no success state to show here.
-    private func deleteAccount() {
+    private func deleteAccount(reason: String) {
         isDeleting = true
         Task {
+            // Feedback first: once the account is gone the session can't write.
+            await session.recordDeletionFeedback(reason: reason)
             do {
                 try await session.deleteAccount()
             } catch {

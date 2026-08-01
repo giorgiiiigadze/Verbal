@@ -26,6 +26,7 @@ struct ProfileView: View {
     @FocusState private var keyboardShown: Bool
 
     @State private var toast: Toast?
+    @State private var showSignOutConfirmation = false
 
     private var isDirty: Bool {
         [businessName, phone, address, taxNumber] != loadedIdentity
@@ -77,7 +78,7 @@ struct ProfileView: View {
 
                 Section {
                     Button("Sign out", role: .destructive) {
-                        Task { try? await session.signOut() }
+                        showSignOutConfirmation = true
                     }
                 }
                 .listRowBackground(Color(.surface))
@@ -111,6 +112,14 @@ struct ProfileView: View {
                 Spacer()
                 Button("Done") { keyboardShown = false }.fontWeight(.semibold)
             }
+        }
+        .alert("Sign out of Verbal?", isPresented: $showSignOutConfirmation) {
+            Button("Sign out", role: .destructive) {
+                Task { try? await session.signOut() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your quotes stay safe — you'll just need to sign in again.")
         }
         .toast($toast)
         .task { await load() }

@@ -180,6 +180,16 @@ final class SessionStore {
         try await client.auth.signOut()
     }
 
+    /// Record why someone is leaving, before the account goes. Best effort:
+    /// feedback must never be the reason a deletion fails.
+    func recordDeletionFeedback(reason: String) async {
+        struct Feedback: Encodable { let reason: String }
+        try? await client
+            .from("account_deletion_feedback")
+            .insert(Feedback(reason: reason))
+            .execute()
+    }
+
     /// Permanently deletes the signed-in account and everything owned by it.
     /// The server derives the user from the caller's token, so this can only
     /// ever delete the current account. Signing out afterwards clears the
