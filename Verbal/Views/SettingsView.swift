@@ -4,15 +4,16 @@
 //
 
 import SwiftUI
+import StoreKit
 
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
+    /// The system review prompt — Apple limits how often it actually appears,
+    /// so this is a request rather than a guarantee.
+    @Environment(\.requestReview) private var requestReview
 
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
-    @State private var showDeleteConfirmation = false
-    @State private var isDeleting = false
-    @State private var toast: Toast?
 
     private var currency: Binding<AppCurrency> {
         Binding(
@@ -23,29 +24,6 @@ struct SettingsView: View {
 
     var body: some View {
         List {
-            Section("Account") {
-                NavigationLink {
-                    AccountView()
-                } label: {
-                    HStack(spacing: 14) {
-                        AvatarView(image: session.avatarImage,
-                                   urlString: session.profile?.avatarUrl, size: 52)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(session.profile?.fullName ?? "—")
-                                .font(.headline)
-                                .foregroundStyle(Color(.mainText))
-                            if let email = session.email, !email.isEmpty {
-                                Text(email)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 6)
-                }
-            }
-            .listRowBackground(Color(.surface))
-
             Section {
                 NavigationLink {
                     QuoteDefaultsView()
@@ -73,19 +51,40 @@ struct SettingsView: View {
             .listRowBackground(Color(.surface))
 
             Section {
-                Button("Sign out", role: .destructive) {
-                    Task { try? await session.signOut() }
+                if let mail = AppInfo.supportMailURL {
+                    Link(destination: mail) {
+                        Label("Contact support", systemImage: "envelope")
+                    }
                 }
+                Button {
+                    requestReview()
+                } label: {
+                    Label("Rate Verbal", systemImage: "star")
+                }
+            } header: {
+                Text("Support")
+            } footer: {
+                Text("Questions, bugs, or ideas — the email arrives with your app version attached.")
             }
             .listRowBackground(Color(.surface))
 
             Section {
-                Button("Delete account", role: .destructive) {
-                    showDeleteConfirmation = true
+                Link(destination: AppInfo.privacyPolicyURL) {
+                    Label("Privacy policy", systemImage: "hand.raised")
                 }
-                .disabled(isDeleting)
-            } footer: {
-                Text("Permanently removes your account, quotes, and rate card. This can't be undone.")
+                Link(destination: AppInfo.termsURL) {
+                    Label("Terms of service", systemImage: "doc.text")
+                }
+                LabeledContent("Version", value: AppInfo.versionLabel)
+            } header: {
+                Text("About")
+            }
+            .listRowBackground(Color(.surface))
+
+            Section {
+                Button("Sign out", role: .destructive) {
+                    Task { try? await session.signOut() }
+                }
             }
             .listRowBackground(Color(.surface))
         }
@@ -93,26 +92,5 @@ struct SettingsView: View {
         .background(Color(.homeBackground))
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Delete your account?", isPresented: $showDeleteConfirmation) {
-            Button("Delete account", role: .destructive) { deleteAccount() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently deletes your account and every quote, rate, and business detail saved to it. This can't be undone.")
-        }
-        .toast($toast)
-    }
-
-    /// On success the session signs out, which returns the app to the auth
-    /// screen — so there's no success state to show here.
-    private func deleteAccount() {
-        isDeleting = true
-        Task {
-            do {
-                try await session.deleteAccount()
-            } catch {
-                isDeleting = false
-                toast = Toast(style: .error, message: "Couldn't delete account")
-            }
-        }
     }
 }

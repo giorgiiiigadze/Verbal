@@ -54,12 +54,18 @@ struct AuthView: View {
     }
 
     /// Full-screen overlay shown while signing in and setting up the account.
+    /// Uses the brand mark rather than a spinner, so this reads as a
+    /// continuation of the splash instead of a system wait.
     private var loadingScreen: some View {
         ZStack {
             Color(.homeBackground).ignoresSafeArea()
-            VStack(spacing: 16) {
-                ProgressView()
-                    .controlSize(.large)
+            VStack(spacing: 20) {
+                Image(.brandMark)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 88)
+                    .foregroundStyle(Color(.blueAccentText))
+                    .shimmer(active: true, highlight: .white)
                 Text("Signing you in…")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
