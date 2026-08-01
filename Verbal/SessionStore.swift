@@ -184,7 +184,7 @@ final class SessionStore {
     /// feedback must never be the reason a deletion fails.
     func recordDeletionFeedback(reason: String) async {
         struct Feedback: Encodable { let reason: String }
-        try? await client
+        _ = try? await client
             .from("account_deletion_feedback")
             .insert(Feedback(reason: reason))
             .execute()
