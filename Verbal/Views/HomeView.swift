@@ -23,6 +23,17 @@ struct HomeView: View {
     /// True when the last fetch failed — distinguishes "no quotes" from
     /// "couldn't reach the server".
     @State private var loadFailed = false
+    /// Outstanding quotes converted into the user's currency. Nil until the
+    /// first calculation finishes.
+    @State private var outstandingTotal: Double?
+    /// Quotes actually included above — a pair with no available rate is left
+    /// out rather than silently added at the wrong value.
+    @State private var outstandingCount = 0
+    /// True when at least one quote needed converting, so the figure is
+    /// a daily-rate approximation rather than an exact sum.
+    @State private var outstandingIsApproximate = false
+    /// Observed so the summary re-converts when the user changes currency.
+    @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
     var body: some View {
         NavigationStack {
@@ -78,6 +89,7 @@ struct HomeView: View {
                 }
                 await load()
             }
+            .task(id: outstandingSignature) { await recalculateOutstanding() }
             .refreshable { await load() }
             .alert("Delete this quote?", isPresented: Binding(
                 get: { quoteToDelete != nil },
@@ -119,7 +131,7 @@ struct HomeView: View {
         List {
             // Money in play, above the list — the number worth opening the app
             // for. Hidden while searching or filtering, when it'd be misleading.
-            if !outstanding.isEmpty, searchQuery.isEmpty, filter == .all {
+            if outstandingTotal != nil, outstandingCount > 0, searchQuery.isEmpty, filter == .all {
                 outstandingSummary
                     // Full-bleed tinted band rather than a floating card, so the
                     // top of the screen reads as its own header zone.
@@ -206,19 +218,59 @@ struct HomeView: View {
         quotes.filter { $0.status == "sent" || $0.status == "viewed" }
     }
 
+    private var outstandingLabel: String {
+        guard let outstandingTotal else { return "—" }
+        let formatted = AppCurrency.format(outstandingTotal, code: currencyCode)
+        return outstandingIsApproximate ? "≈ \(formatted)" : formatted
+    }
+
+    /// Convert each outstanding quote into the user's currency and total them.
+    /// A pair with no published rate is excluded from both the sum and the
+    /// count, so the figure is never quietly wrong.
+    /// Changes whenever the figure would — the quotes in play, their amounts
+    /// and currencies, or the currency they're being shown in.
+    private var outstandingSignature: String {
+        outstanding.map { "\($0.id)|\($0.total)|\($0.currency ?? "")" }
+            .joined(separator: ",") + "→" + currencyCode
+    }
+
+    private func recalculateOutstanding() async {
+        let target = currencyCode
+        var sum = 0.0
+        var counted = 0
+        var converted = false
+
+        for quote in outstanding {
+            let code = quote.currency ?? target
+            if code == target {
+                sum += quote.total
+                counted += 1
+            } else if let rate = try? await FXService.rate(from: code, to: target) {
+                sum += quote.total * rate
+                counted += 1
+                converted = true
+            }
+        }
+
+        outstandingTotal = sum
+        outstandingCount = counted
+        outstandingIsApproximate = converted
+    }
+
     private var outstandingSummary: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Waiting on clients")
                     .font(.caption)
                     .foregroundStyle(Color(.blueAccentText))
-                Text(AppCurrency.format(outstanding.reduce(0) { $0 + $1.total },
-                                        code: outstanding.first?.currency))
+                // Always in the user's own currency, converting quotes priced
+                // in another one — a raw sum across currencies is meaningless.
+                Text(outstandingLabel)
                     .font(.title3.weight(.semibold).monospacedDigit())
                     .foregroundStyle(Color(.mainText))
             }
             Spacer(minLength: 8)
-            Text("\(outstanding.count) quote\(outstanding.count == 1 ? "" : "s")")
+            Text("\(outstandingCount) quote\(outstandingCount == 1 ? "" : "s")")
                 .font(.caption)
                 .foregroundStyle(Color(.blueAccentText))
         }

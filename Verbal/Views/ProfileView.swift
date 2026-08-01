@@ -25,8 +25,6 @@ struct ProfileView: View {
     @State private var isSaving = false
     @FocusState private var keyboardShown: Bool
 
-    @State private var showDeleteConfirmation = false
-    @State private var isDeleting = false
     @State private var toast: Toast?
 
     private var isDirty: Bool {
@@ -78,12 +76,9 @@ struct ProfileView: View {
                 .listRowBackground(Color(.surface))
 
                 Section {
-                    Button("Delete account", role: .destructive) {
-                        showDeleteConfirmation = true
+                    Button("Sign out", role: .destructive) {
+                        Task { try? await session.signOut() }
                     }
-                    .disabled(isDeleting)
-                } footer: {
-                    Text("Permanently removes your account, quotes, and rate card. This can't be undone.")
                 }
                 .listRowBackground(Color(.surface))
             }
@@ -116,12 +111,6 @@ struct ProfileView: View {
                 Spacer()
                 Button("Done") { keyboardShown = false }.fontWeight(.semibold)
             }
-        }
-        .alert("Delete your account?", isPresented: $showDeleteConfirmation) {
-            Button("Delete account", role: .destructive) { deleteAccount() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently deletes your account and every quote, rate, and business detail saved to it. This can't be undone.")
         }
         .toast($toast)
         .task { await load() }
@@ -160,20 +149,6 @@ struct ProfileView: View {
             isSaving = false
             keyboardShown = false
             toast = Toast(style: .success, message: "Business details saved")
-        }
-    }
-
-    /// On success the session signs out, which returns the app to the auth
-    /// screen — so there's no success state to show here.
-    private func deleteAccount() {
-        isDeleting = true
-        Task {
-            do {
-                try await session.deleteAccount()
-            } catch {
-                isDeleting = false
-                toast = Toast(style: .error, message: "Couldn't delete account")
-            }
         }
     }
 
