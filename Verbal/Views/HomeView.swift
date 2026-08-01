@@ -64,7 +64,8 @@ struct HomeView: View {
             .sheet(item: $shareTarget) { quote in
                 ShareQuotePanel(title: quote.displayTitle,
                                 subtitle: "Total \(AppCurrency.format(quote.total, code: quote.currency)) · \(quote.status.capitalized)",
-                                shareText: shareText(for: quote)) {
+                                shareText: shareText(for: quote),
+                                document: pdfDocument(for: quote)) {
                     Task { await markSent(quote) }
                 }
             }
@@ -187,7 +188,7 @@ struct HomeView: View {
                         .tint(.red)
 
                         Button {
-                            shareTarget = quote
+                            share(quote)
                         } label: {
                             Label("Share", systemImage: "square.and.arrow.up")
                         }
@@ -234,7 +235,7 @@ struct HomeView: View {
                   systemImage: quote.pinned ? "pin.slash" : "pin")
         }
         Button {
-            shareTarget = quote
+            share(quote)
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
@@ -385,6 +386,36 @@ struct HomeView: View {
     }
 
     // MARK: - Data
+
+    /// Load the line items (usually already prefetched by the row) before
+    /// opening the share panel — without them the PDF would print an empty
+    /// table, so this waits rather than rendering a half-built document.
+    private func share(_ quote: QuoteSummary) {
+        Task {
+            await session.prefetchLineItems(for: quote.id)
+            shareTarget = quote
+        }
+    }
+
+    /// The quote as a printable document, for the share panel's PDF.
+    private func pdfDocument(for quote: QuoteSummary) -> QuoteDocument {
+        QuoteDocument(
+            title: quote.displayTitle,
+            number: quote.number,
+            clientName: quote.clientName,
+            createdAt: quote.createdAt,
+            validityDate: quote.validityDate,
+            jobSummary: quote.jobSummary,
+            scope: quote.scope,
+            lineItems: session.lineItems(for: quote.id) ?? [],
+            subtotal: quote.subtotal,
+            taxRate: quote.taxRate,
+            taxAmount: quote.taxAmount,
+            total: quote.total,
+            currency: quote.currency,
+            business: session.businessProfile
+        )
+    }
 
     private func shareText(for quote: QuoteSummary) -> String {
         var lines = [quote.displayTitle]

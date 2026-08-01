@@ -206,7 +206,11 @@ struct QuoteDetailView: View {
     /// The quote as a printable document, built from the live edited values so
     /// the PDF matches what's on screen rather than the last fetch.
     private var pdfDocument: QuoteDocument {
-        QuoteDocument(
+        // Mirror the database's arithmetic on the live line items, so an edit
+        // made in this session prints the right tax without a refetch.
+        let subtotal = lineItems.compactMap(\.lineTotal).reduce(0, +)
+        let tax = (subtotal * quote.taxRate / 100).roundedToCents
+        return QuoteDocument(
             title: displayTitle,
             number: quote.number,
             clientName: clientName.isEmpty ? nil : clientName,
@@ -215,7 +219,10 @@ struct QuoteDetailView: View {
             jobSummary: jobSummary.isEmpty ? nil : jobSummary,
             scope: scope,
             lineItems: lineItems,
-            total: total,
+            subtotal: subtotal,
+            taxRate: quote.taxRate,
+            taxAmount: tax,
+            total: (subtotal + tax).roundedToCents,
             currency: currency,
             business: session.businessProfile
         )

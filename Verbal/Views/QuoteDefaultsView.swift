@@ -14,6 +14,8 @@ struct QuoteDefaultsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var validityDays = 14
+    /// Percentage as typed, e.g. "20". Empty means not tax registered.
+    @State private var taxRate = ""
     @State private var terms = ""
     @State private var notes = ""
 
@@ -23,8 +25,14 @@ struct QuoteDefaultsView: View {
     @State private var isSaving = false
     @FocusState private var keyboardShown: Bool
 
+    /// Typed rate as a number; blank or unparseable means no tax.
+    private var taxRateValue: Double {
+        Double(taxRate.replacingOccurrences(of: ",", with: ".")) ?? 0
+    }
+
     private var isDirty: Bool {
         validityDays != loaded.defaultValidityDays
+            || taxRateValue != loaded.defaultTaxRate
             || terms != (loaded.defaultTerms ?? "")
             || notes != (loaded.defaultNotes ?? "")
     }
@@ -38,6 +46,23 @@ struct QuoteDefaultsView: View {
                         value: $validityDays, in: 1...365)
             } footer: {
                 Text("How long a new quote stays valid for.")
+            }
+            .listRowBackground(Color(.surface))
+
+            Section {
+                LabeledContent("Tax rate") {
+                    HStack(spacing: 4) {
+                        TextField("0", text: $taxRate)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .focused($keyboardShown)
+                        Text("%").foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Tax")
+            } footer: {
+                Text("Added to new quotes and shown as a separate line on the PDF. Leave at 0 if you're not tax registered.")
             }
             .listRowBackground(Color(.surface))
 
@@ -78,6 +103,11 @@ struct QuoteDefaultsView: View {
         }
     }
 
+    /// "20" rather than "20.0", but keeps a real fraction like 8.5.
+    private func trimmedRate(_ rate: Double) -> String {
+        rate == rate.rounded() ? String(Int(rate)) : String(rate)
+    }
+
     private func load() async {
         if let cached = session.businessProfile {
             loaded = cached
@@ -85,6 +115,7 @@ struct QuoteDefaultsView: View {
             loaded = fetched
         }
         validityDays = loaded.defaultValidityDays
+        taxRate = loaded.defaultTaxRate == 0 ? "" : trimmedRate(loaded.defaultTaxRate)
         terms = loaded.defaultTerms ?? ""
         notes = loaded.defaultNotes ?? ""
         isLoading = false
@@ -94,6 +125,7 @@ struct QuoteDefaultsView: View {
         isSaving = true
         var profile = loaded
         profile.defaultValidityDays = validityDays
+        profile.defaultTaxRate = taxRateValue
         profile.defaultTerms = trimmedOrNil(terms)
         profile.defaultNotes = trimmedOrNil(notes)
         Task {

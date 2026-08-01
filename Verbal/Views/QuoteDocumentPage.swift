@@ -27,6 +27,10 @@ struct QuoteDocument {
     let jobSummary: String?
     let scope: [String]
     let lineItems: [QuoteLineItem]
+    let subtotal: Double
+    /// Percentage (20 = 20%) and its amount. A zero rate prints no tax line.
+    let taxRate: Double
+    let taxAmount: Double
     let total: Double
     let currency: String?
     let business: BusinessProfile?
@@ -234,9 +238,21 @@ struct QuoteDocumentPage: View {
 
     private var totals: some View {
         let unpriced = document.lineItems.filter(\.isMissingPrice).count
+        let showsTax = document.taxRate > 0
         return HStack(alignment: .firstTextBaseline) {
             Spacer()
             VStack(alignment: .trailing, spacing: 5) {
+                // Only tax-registered users get a breakdown; for everyone else
+                // a lone "Total" is cleaner than a subtotal that repeats it.
+                if showsTax {
+                    totalsRow(label: "Subtotal", value: document.subtotal)
+                    totalsRow(label: "Tax (\(Self.rateText(document.taxRate)))",
+                              value: document.taxAmount)
+                    Rectangle()
+                        .fill(.black.opacity(0.12))
+                        .frame(width: 190, height: 0.5)
+                        .padding(.vertical, 3)
+                }
                 HStack(spacing: 26) {
                     Text("Total")
                         .font(.system(size: 13, weight: .semibold))
@@ -252,6 +268,24 @@ struct QuoteDocumentPage: View {
                 }
             }
         }
+    }
+
+    private func totalsRow(label: String, value: Double) -> some View {
+        HStack(spacing: 26) {
+            Text(label)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.black.opacity(0.6))
+            Text(AppCurrency.format(value, code: currency))
+                .font(.system(size: 10.5))
+                .foregroundStyle(.black.opacity(0.8))
+        }
+    }
+
+    /// "20%" rather than "20.0%", but keeps a genuine fraction like 8.5%.
+    private static func rateText(_ rate: Double) -> String {
+        rate == rate.rounded()
+            ? "\(Int(rate))%"
+            : String(format: "%.2f%%", rate)
     }
 
     /// Tells the client what to do next — a quote without a call to action

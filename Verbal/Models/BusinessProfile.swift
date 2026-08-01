@@ -18,6 +18,9 @@ struct BusinessProfile: Codable, Sendable {
     var taxNumber: String?
     var currency: String
     var defaultValidityDays: Int
+    /// Tax percentage applied to new quotes, e.g. 20 for 20% VAT. Zero means
+    /// the user isn't tax registered and no tax line is shown.
+    var defaultTaxRate: Double
     var defaultTerms: String?
     var defaultNotes: String?
 
@@ -28,6 +31,7 @@ struct BusinessProfile: Codable, Sendable {
         case taxNumber = "tax_number"
         case currency
         case defaultValidityDays = "default_validity_days"
+        case defaultTaxRate = "default_tax_rate"
         case defaultTerms = "default_terms"
         case defaultNotes = "default_notes"
     }
@@ -37,6 +41,7 @@ struct BusinessProfile: Codable, Sendable {
         BusinessProfile(businessName: nil, logoUrl: nil, phone: nil, email: nil,
                         address: nil, taxNumber: nil,
                         currency: AppCurrency.current.rawValue,
-                        defaultValidityDays: 14, defaultTerms: nil, defaultNotes: nil)
+                        defaultValidityDays: 14, defaultTaxRate: 0,
+                        defaultTerms: nil, defaultNotes: nil)
     }
 }

@@ -36,13 +36,21 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
     let validityDateText: String?
     /// Name of the customer this quote is for, via the linked customer row.
     let clientName: String?
+    /// Sum of the line items, before tax.
+    let subtotal: Double
+    /// Tax percentage (20 = 20%) and the resulting amount. Both are computed
+    /// by the database from `subtotal`, so they always agree with `total`.
+    let taxRate: Double
+    let taxAmount: Double
 
     enum CodingKeys: String, CodingKey {
         case id, title
         case jobSummary = "job_summary"
         case total, status
         case createdAt = "created_at"
-        case currency, pinned, scope, number
+        case currency, pinned, scope, number, subtotal
+        case taxRate = "tax_rate"
+        case taxAmount = "tax_amount"
         case validityDate = "validity_date"
         case customers
     }
@@ -64,7 +72,15 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
         number = try c.decodeIfPresent(String.self, forKey: .number)
         validityDateText = try c.decodeIfPresent(String.self, forKey: .validityDate)
         clientName = try c.decodeIfPresent(CustomerRef.self, forKey: .customers)?.name
+        // Legacy rows predate the tax columns being selected; fall back to a
+        // tax-free quote rather than failing to decode the whole list.
+        subtotal = try c.decodeIfPresent(Double.self, forKey: .subtotal) ?? total
+        taxRate = try c.decodeIfPresent(Double.self, forKey: .taxRate) ?? 0
+        taxAmount = try c.decodeIfPresent(Double.self, forKey: .taxAmount) ?? 0
     }
+
+    /// True when a tax line should appear on the quote and its PDF.
+    var hasTax: Bool { taxRate > 0 && taxAmount > 0 }
 
     var displayTitle: String {
         if let title, !title.isEmpty { return title }
@@ -89,6 +105,11 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
         guard let validityDate else { return false }
         return validityDate < Calendar.current.startOfDay(for: Date())
     }
+}
+
+extension Double {
+    /// Money rounded to two decimals, matching the database's `round(x, 2)`.
+    var roundedToCents: Double { (self * 100).rounded() / 100 }
 }
 
 /// Formatters for Postgres `date` values, which arrive as "yyyy-MM-dd".
@@ -411,7 +432,7 @@ enum QuoteService {
         }
         return try await client
             .from("quotes")
-            .select("id, title, job_summary, total, status, created_at, currency, pinned, scope, number, validity_date, customers(name)")
+            .select("id, title, job_summary, total, status, created_at, currency, pinned, scope, number, validity_date, subtotal, tax_rate, tax_amount, customers(name)")
             .eq("user_id", value: userID)
             .order("created_at", ascending: false)
             .execute()
@@ -550,7 +571,7 @@ enum QuoteService {
             scope: quote.scope,
             notes: quote.notes,
             subtotal: subtotal,
-            total: subtotal,
+            taxRate: (try? await BusinessService.fetch())?.defaultTaxRate ?? 0,
             status: "draft",
             currency: currency,
             customerId: customerId ?? nil
@@ -743,18 +764,21 @@ private struct QuoteInsert: Encodable {
     let scope: [String]
     let notes: String?
     let subtotal: Double
-    let total: Double
+    /// Percentage taken from the business profile. `tax_amount` and `total` are
+    /// derived from this and `subtotal` by a database trigger, as are `number`
+    /// and `validity_date`, so none of them are sent.
+    let taxRate: Double
     let status: String
     let currency: String
-    /// Nil when the user didn't name a client. `number` and `validity_date`
-    /// are deliberately absent — a database trigger fills them on insert.
+    /// Nil when the user didn't name a client.
     let customerId: UUID?
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
         case title
         case jobSummary = "job_summary"
-        case scope, notes, subtotal, total, status, currency
+        case scope, notes, subtotal, status, currency
+        case taxRate = "tax_rate"
         case customerId = "customer_id"
     }
 }
