@@ -1,0 +1,22 @@
+{
+  "name": "kitchen-sockets",
+  "note": "Covers the mid-speech correction rule (eight becomes ten) and an item the speaker deliberately leaves unpriced.",
+  "transcript": "Quick one for the Lomidze kitchen. Eight double sockets, sixty each fitted — actually, make that ten. And I need to run a new spur off the consumer unit, I'll price that once I've had a look in the loft.",
+  "rate_card": [],
+  "currency": "USD",
+  "expect": [
+    {
+      "label": "10 double sockets @ 60",
+      "any": ["socket"],
+      "exclude": [],
+      "price": 60,
+      "quantity": 10
+    },
+    {
+      "label": "spur off consumer unit",
+      "any": ["spur", "consumer"],
+      "exclude": [],
+      "price": null
+    }
+  ]
+}

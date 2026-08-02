@@ -1,0 +1,33 @@
+{
+  "name": "bathroom-retile",
+  "note": "The job that exposed labour/material over-splitting on 2026-08-02: one run produced 4 items, the next produced 6 by inventing an unpriced material line for the toilet and the fan.",
+  "transcript": "Right, this one's for the Beridze place, it's the bathroom. I need to pull out all the old tiles first and get rid of them, then re-tile, it's about eighteen square metres, call that four hundred and fifty. Replace the existing toilet, that's ninety. And swap out the bathroom fan, forty-five.",
+  "rate_card": [],
+  "currency": "USD",
+  "expect": [
+    {
+      "label": "remove old tiles",
+      "any": ["pull", "remov", "strip", "rip", "dispos"],
+      "exclude": [],
+      "price": null
+    },
+    {
+      "label": "re-tile 18 m2",
+      "any": ["til"],
+      "exclude": ["pull", "remov", "strip", "old", "dispos"],
+      "price": 450
+    },
+    {
+      "label": "replace toilet",
+      "any": ["toilet"],
+      "exclude": [],
+      "price": 90
+    },
+    {
+      "label": "bathroom fan",
+      "any": ["fan"],
+      "exclude": [],
+      "price": 45
+    }
+  ]
+}

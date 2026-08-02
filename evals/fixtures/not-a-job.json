@@ -1,0 +1,8 @@
+{
+  "name": "not-a-job",
+  "note": "Guard rail: nothing quotable was said, so the model must return zero line items rather than inventing a job out of politeness.",
+  "transcript": "Uh, hello? Testing, testing. Can you hear me alright? Yeah, sorry, hang on a sec.",
+  "rate_card": [],
+  "currency": "USD",
+  "expect": []
+}
