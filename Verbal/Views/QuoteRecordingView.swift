@@ -16,6 +16,9 @@ struct QuoteRecordingView: View {
     @State private var generated: GeneratedQuote?
     /// True when generation ran but the transcript wasn't enough to build a quote.
     @State private var notEnough = false
+    /// The AI's "there wasn't enough here" note. Held apart from the transcript
+    /// so reading it never costs the user the words they actually spoke.
+    @State private var notEnoughNote = ""
     /// When the current generation finished — drives the date chip.
     @State private var generatedAt = Date()
     @State private var showTranscript = false
@@ -166,9 +169,11 @@ struct QuoteRecordingView: View {
                         Image(systemName: "arrow.uturn.backward")
                     }
                     // Once the quote is generated the transcript is history — trimming
-                    // words from it no longer changes anything on screen.
+                    // words from it no longer changes anything on screen. After a
+                    // "not enough detail" pass it is still the live transcript, so
+                    // undo keeps working there.
                     .disabled(transcriptText.isEmpty || recorder.isRecording
-                              || isGenerating || generated != nil || notEnough)
+                              || isGenerating || generated != nil)
                 }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .topBarTrailing) {
@@ -201,6 +206,7 @@ struct QuoteRecordingView: View {
         guard hasText, generated == nil, !isGenerating else { return }
         isGenerating = true
         notEnough = false
+        notEnoughNote = ""
         Task {
             defer { isGenerating = false }
             guard let result = try? await QuoteService.generate(transcript: transcriptText) else {
@@ -210,9 +216,11 @@ struct QuoteRecordingView: View {
             generatedAt = Date()
             withAnimation(.easeInOut(duration: 0.5)) {
                 if result.lineItems.isEmpty {
-                    // Nothing quotable — drop the AI's friendly note straight into the
-                    // transcript so the user can read it and keep editing in place.
-                    transcriptText = result.jobSummary
+                    // Nothing quotable — show the AI's friendly note above the
+                    // transcript. It must NOT replace the transcript: a recording
+                    // is unrepeatable, and overwriting it would throw away the
+                    // one thing the user can't get back.
+                    notEnoughNote = result.jobSummary
                     notEnough = true
                 } else {
                     generated = result
@@ -325,8 +333,20 @@ struct QuoteRecordingView: View {
                 reviewDocument(generated)
                     .transition(.opacity)
             } else {
-                transcript
-                    .transition(.opacity)
+                VStack(alignment: .leading, spacing: 16) {
+                    if notEnough, !notEnoughNote.isEmpty {
+                        Text(notEnoughNote)
+                            .font(.callout)
+                            .fontWeight(.medium)
+                            .foregroundStyle(Color(.blueAccentText))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(Color(.royalBlue25),
+                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    transcript
+                }
+                .transition(.opacity)
             }
         }
         .animation(.easeInOut(duration: 0.5), value: generated != nil)
