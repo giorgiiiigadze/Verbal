@@ -193,6 +193,11 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Empty response from model" }, 502);
     }
 
+    // Parse before the meter writes. Doing it after would log an "ok" row and
+    // then a "model_error" row from the catch below for one call — two slots of
+    // the caller's rate limit, and one billed extraction counted twice.
+    const quote = JSON.parse(content);
+
     const usage = data.usage ?? {};
     const tokensIn: number = usage.prompt_tokens ?? 0;
     const tokensOut: number = usage.completion_tokens ?? 0;
@@ -211,7 +216,6 @@ Deno.serve(async (req: Request) => {
       outcome: "ok",
     });
 
-    const quote = JSON.parse(content);
     return json({ quote });
   } catch (err) {
     await logUsage({
