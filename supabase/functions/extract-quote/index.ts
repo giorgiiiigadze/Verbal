@@ -9,7 +9,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-const MODEL = "gpt-4o-mini";
+const MODEL = "gpt-5.6-luna";
 
 interface RateCardItem {
   name: string;
@@ -38,6 +38,7 @@ const QUOTE_SCHEMA = {
     properties: {
       title: { type: "string" },
       job_summary: { type: "string" },
+      scope: { type: "array", items: { type: "string" } },
       customer: {
         type: "object",
         additionalProperties: false,
@@ -75,7 +76,7 @@ const QUOTE_SCHEMA = {
       notes: { type: ["string", "null"] },
       flags: { type: "array", items: { type: "string" } },
     },
-    required: ["title", "job_summary", "customer", "line_items", "notes", "flags"],
+    required: ["title", "job_summary", "scope", "customer", "line_items", "notes", "flags"],
   },
 } as const;
 
@@ -84,6 +85,7 @@ const SYSTEM_PROMPT = `You convert a tradesperson's spoken job description into 
 Rules:
 - "title" is a short, concrete name for the job itself — a 3 to 6 word noun phrase describing the work (e.g. "Bathroom re-tiling & toilet swap", "Kitchen socket installation"). It must NOT be conversational, a greeting, or a full sentence, and must NOT start with words like "Thanks", "Here's", or "Sure".
 - "job_summary" may be a friendly sentence or two describing the quote; "title" is the compact label.
+- "scope" is a short bulleted list of what the job covers — 3 to 6 concise phrases, each a distinct stage or deliverable of the work (e.g. "Remove existing tiles and dispose of waste", "Fit new toilet and connect to soil pipe"). Keep each under about ten words, written for the customer to read. It must NOT contain prices, quantities, or amounts — it describes the work, not the money.
 - Include EVERY distinct task, job, or material the speaker mentions as its own line item — EVEN IF it has no price. NEVER omit an item just because its price is unknown; instead include it with the stated quantity/unit (or null) and price_source "missing". The ONLY things you may leave out are items the speaker explicitly says to fold into another line (e.g. "grouting is included in the tiling price") or explicitly says to exclude (e.g. "materials he's buying himself").
 - NEVER invent prices. If an item has no spoken price and no rate-card match, set unit_price to null and price_source to "missing".
 - If the speaker states a price, use it and set price_source to "spoken".
@@ -145,7 +147,6 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        temperature: 0,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: buildUserPrompt(body) },
