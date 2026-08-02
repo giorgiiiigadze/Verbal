@@ -5,11 +5,40 @@
 //
 // The OpenAI key is read from the OPENAI_API_KEY secret and never leaves the
 // server. Prices are never invented; totals/tax are computed in the app, not here.
+//
+// Every call is rate-limited per user and logged to usage_events with the token
+// counts OpenAI actually charged for. Without the limit a single account could
+// run the OpenAI bill up without bound; without the log, per-user cost is a
+// guess.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+// Prompt + schema live in prompt.mjs so the eval harness scores what ships.
+// Both files must be deployed together.
+import { QUOTE_SCHEMA, SYSTEM_PROMPT, buildUserPrompt } from "./prompt.mjs";
 
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const MODEL = "gpt-5.6-luna";
+
+/// USD per million tokens. Keep in step with MODEL — this is what turns the
+/// usage log into real money rather than raw counts.
+const PRICING: Record<string, { input: number; cached: number; output: number }> = {
+  "gpt-5.6-luna": { input: 0.20, cached: 0.02, output: 1.20 },
+  "gpt-5.6-terra": { input: 2.00, cached: 0.20, output: 12.00 },
+  "gpt-5-mini": { input: 0.25, cached: 0.025, output: 2.00 },
+  "gpt-4o-mini": { input: 0.15, cached: 0.075, output: 0.60 },
+};
+
+/// Generous enough that no real tradesperson will meet them — a busy one writes
+/// a handful of quotes a day — but low enough to cap a runaway script.
+const HOURLY_LIMIT = 30;
+const DAILY_LIMIT = 150;
+
+const admin = createClient(
+  Deno.env.get("SUPABASE_URL") ?? "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  { auth: { persistSession: false, autoRefreshToken: false } },
+);
 
 interface RateCardItem {
   name: string;
@@ -28,95 +57,65 @@ interface RequestBody {
   currency?: string;
 }
 
-// Strict schema matching spec §7 — used with OpenAI Structured Outputs.
-const QUOTE_SCHEMA = {
-  name: "quote_extraction",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      title: { type: "string" },
-      job_summary: { type: "string" },
-      scope: { type: "array", items: { type: "string" } },
-      customer: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          name: { type: ["string", "null"] },
-          address: { type: ["string", "null"] },
-        },
-        required: ["name", "address"],
-      },
-      line_items: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            description: { type: "string" },
-            type: { type: "string", enum: ["labor", "material", "other"] },
-            quantity: { type: ["number", "null"] },
-            unit: { type: ["string", "null"] },
-            unit_price: { type: ["number", "null"] },
-            price_source: { type: "string", enum: ["spoken", "rate_card", "missing"] },
-            confidence: { type: "string", enum: ["high", "low"] },
-          },
-          required: [
-            "description",
-            "type",
-            "quantity",
-            "unit",
-            "unit_price",
-            "price_source",
-            "confidence",
-          ],
-        },
-      },
-      notes: { type: ["string", "null"] },
-      flags: { type: "array", items: { type: "string" } },
-    },
-    required: ["title", "job_summary", "scope", "customer", "line_items", "notes", "flags"],
-  },
-} as const;
+/// The caller's user id, taken from the JWT the client sends. verify_jwt already
+/// guarantees the token is valid; this reads who it belongs to.
+async function callerId(req: Request): Promise<string | null> {
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!token) return null;
+  const { data, error } = await admin.auth.getUser(token);
+  if (error || !data.user) return null;
+  return data.user.id;
+}
 
-const SYSTEM_PROMPT = `You convert a tradesperson's spoken job description into a structured, itemized quote.
+/// Returns the window that has been exhausted ("hour"/"day"), or null to proceed.
+async function exhaustedWindow(userId: string): Promise<string | null> {
+  const now = Date.now();
+  const windows: Array<[string, number, string]> = [
+    [new Date(now - 3_600_000).toISOString(), HOURLY_LIMIT, "hour"],
+    [new Date(now - 86_400_000).toISOString(), DAILY_LIMIT, "day"],
+  ];
+  for (const [since, limit, label] of windows) {
+    const { count, error } = await admin
+      .from("usage_events")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .neq("outcome", "rate_limited")
+      .gte("created_at", since);
+    // Fail open. If the counter is unreachable the database is already in
+    // trouble and the app is broken regardless — refusing here would turn one
+    // outage into two, and the OpenAI key is not at risk from a database blip.
+    if (error) {
+      console.error("rate-limit check failed, allowing:", error.message);
+      return null;
+    }
+    if ((count ?? 0) >= limit) return label;
+  }
+  return null;
+}
 
-Rules:
-- "title" is a short, concrete name for the job itself — a 3 to 6 word noun phrase describing the work (e.g. "Bathroom re-tiling & toilet swap", "Kitchen socket installation"). It must NOT be conversational, a greeting, or a full sentence, and must NOT start with words like "Thanks", "Here's", or "Sure".
-- "job_summary" may be a friendly sentence or two describing the quote; "title" is the compact label.
-- "scope" is a short bulleted list of what the job covers — 3 to 6 concise phrases, each a distinct stage or deliverable of the work (e.g. "Remove existing tiles and dispose of waste", "Fit new toilet and connect to soil pipe"). Keep each under about ten words, written for the customer to read. It must NOT contain prices, quantities, or amounts — it describes the work, not the money.
-- Include EVERY distinct task, job, or material the speaker mentions as its own line item — EVEN IF it has no price. NEVER omit an item just because its price is unknown; instead include it with the stated quantity/unit (or null) and price_source "missing". The ONLY things you may leave out are items the speaker explicitly says to fold into another line (e.g. "grouting is included in the tiling price") or explicitly says to exclude (e.g. "materials he's buying himself").
-- NEVER invent prices. If an item has no spoken price and no rate-card match, set unit_price to null and price_source to "missing".
-- If the speaker states a price, use it and set price_source to "spoken".
-- If an item (without a spoken price) matches an item in the provided rate card by name/meaning, use that unit_price and set price_source to "rate_card".
-- Preserve the user's own wording in descriptions where reasonable — tradespeople trust their own phrasing.
-- Classify each line item as "labor", "material", or "other".
-- Handle filler words and mid-speech corrections ("actually make that eight outlets") — use the corrected value.
-- Set confidence to "low" for any quantity or price you are unsure about, "high" otherwise.
-- Add a short string to "flags" for anything that needs the user's attention (missing prices, ambiguous quantities, unclear scope).
-- Do NOT compute totals or tax — that is done by the app.
-- If the transcript does NOT describe a quotable job (e.g. a greeting, small talk, silence, or too little detail to build a quote), return line_items as an EMPTY array and set job_summary to a short, friendly note (one or two sentences) telling the user there wasn't enough to build a quote and inviting them to describe the job — the tasks, quantities, and prices — then try again.
-Return only data that conforms to the provided schema.`;
+interface UsageRow {
+  user_id: string;
+  model: string;
+  tokens_in?: number;
+  tokens_cached?: number;
+  tokens_out?: number;
+  tokens_reasoning?: number;
+  cost_usd?: number;
+  duration_ms?: number;
+  outcome: "ok" | "rate_limited" | "model_error";
+}
 
-function buildUserPrompt(body: RequestBody): string {
-  const parts: string[] = [];
-  if (body.trade_context) {
-    parts.push(`Trade context: ${body.trade_context}`);
-  }
-  if (body.rate_card && body.rate_card.length > 0) {
-    parts.push(`Rate card (saved prices):\n${JSON.stringify(body.rate_card)}`);
-  } else {
-    parts.push("Rate card: (none saved)");
-  }
-  if (body.business_defaults) {
-    parts.push(`Business defaults: ${JSON.stringify(body.business_defaults)}`);
-  }
-  if (body.currency) {
-    parts.push(`Currency: ${body.currency}. If you mention any amount in job_summary or flags, use this currency's symbol. Line-item unit_price values must stay plain numbers with no symbol.`);
-  }
-  parts.push(`Transcript:\n"""${body.transcript ?? ""}"""`);
-  return parts.join("\n\n");
+async function logUsage(row: UsageRow): Promise<void> {
+  const { error } = await admin.from("usage_events").insert(row);
+  // Never fail the user's quote because the meter did not write.
+  if (error) console.error("usage log failed:", error.message);
+}
+
+function priceOf(tokensIn: number, cached: number, tokensOut: number): number {
+  const rate = PRICING[MODEL];
+  if (!rate) return 0;
+  const uncached = Math.max(tokensIn - cached, 0);
+  return (uncached * rate.input + cached * rate.cached + tokensOut * rate.output) / 1_000_000;
 }
 
 Deno.serve(async (req: Request) => {
@@ -125,6 +124,11 @@ Deno.serve(async (req: Request) => {
   }
   if (!OPENAI_API_KEY) {
     return json({ error: "Server not configured: missing OPENAI_API_KEY" }, 500);
+  }
+
+  const userId = await callerId(req);
+  if (!userId) {
+    return json({ error: "Not signed in" }, 401);
   }
 
   let body: RequestBody;
@@ -138,6 +142,17 @@ Deno.serve(async (req: Request) => {
     return json({ error: "transcript is required" }, 400);
   }
 
+  const window = await exhaustedWindow(userId);
+  if (window) {
+    await logUsage({ user_id: userId, model: MODEL, outcome: "rate_limited" });
+    return json({
+      error: window === "hour"
+        ? "That's a lot of quotes in one hour. Try again shortly."
+        : "You've hit today's limit on new quotes. Try again tomorrow.",
+    }, 429);
+  }
+
+  const startedAt = Date.now();
   try {
     const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -157,18 +172,54 @@ Deno.serve(async (req: Request) => {
 
     if (!openaiRes.ok) {
       const detail = await openaiRes.text();
+      await logUsage({
+        user_id: userId,
+        model: MODEL,
+        duration_ms: Date.now() - startedAt,
+        outcome: "model_error",
+      });
       return json({ error: "OpenAI request failed", detail }, 502);
     }
 
     const data = await openaiRes.json();
     const content = data.choices?.[0]?.message?.content;
     if (!content) {
+      await logUsage({
+        user_id: userId,
+        model: MODEL,
+        duration_ms: Date.now() - startedAt,
+        outcome: "model_error",
+      });
       return json({ error: "Empty response from model" }, 502);
     }
+
+    const usage = data.usage ?? {};
+    const tokensIn: number = usage.prompt_tokens ?? 0;
+    const tokensOut: number = usage.completion_tokens ?? 0;
+    const cached: number = usage.prompt_tokens_details?.cached_tokens ?? 0;
+    const reasoning: number = usage.completion_tokens_details?.reasoning_tokens ?? 0;
+
+    await logUsage({
+      user_id: userId,
+      model: MODEL,
+      tokens_in: tokensIn,
+      tokens_cached: cached,
+      tokens_out: tokensOut,
+      tokens_reasoning: reasoning,
+      cost_usd: priceOf(tokensIn, cached, tokensOut),
+      duration_ms: Date.now() - startedAt,
+      outcome: "ok",
+    });
 
     const quote = JSON.parse(content);
     return json({ quote });
   } catch (err) {
+    await logUsage({
+      user_id: userId,
+      model: MODEL,
+      duration_ms: Date.now() - startedAt,
+      outcome: "model_error",
+    });
     return json({ error: "Extraction failed", detail: String(err) }, 500);
   }
 });
