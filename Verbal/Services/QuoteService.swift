@@ -336,6 +336,17 @@ enum QuoteService {
             .execute()
     }
 
+    /// Rename a quote. Used when a draft's title is edited after the draft was
+    /// already banked at generation time.
+    static func updateTitle(id: UUID, title: String?) async throws {
+        struct Payload: Encodable { let title: String? }
+        try await client
+            .from("quotes")
+            .update(Payload(title: title))
+            .eq("id", value: id)
+            .execute()
+    }
+
     /// Change a quote's currency (a relabel — the stored amounts are unchanged).
     static func updateCurrency(id: UUID, currency: String) async throws {
         try await client

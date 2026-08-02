@@ -30,6 +30,15 @@ struct QuoteRecordingView: View {
     /// Editable transcript — mirrors live transcription, editable by hand when stopped.
     @State private var transcriptText = ""
 
+    /// The in-flight (or finished) write of the draft row, yielding its id. Held
+    /// as a task rather than a plain id because the write runs in the background
+    /// while the user reads the quote: anything that needs the id — finishing,
+    /// closing, discarding — awaits this instead of racing it.
+    @State private var bankTask: Task<UUID?, Never>?
+    /// What was actually persisted, so finishing only writes back real changes.
+    @State private var savedTitle = ""
+    @State private var savedClient = ""
+
 
     private var hasText: Bool {
         !transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -103,8 +112,11 @@ struct QuoteRecordingView: View {
             .sheet(isPresented: $showTranscript) {
                 TranscriptSheet(text: transcriptText, editable: $transcriptText) {
                     // Regenerate: clear the current result and re-run the AI extraction.
+                    // The banked draft goes with it, so the rerun replaces the
+                    // quote rather than leaving two.
                     generated = nil
                     notEnough = false
+                    discardDraft()
                     generate()
                 }
             }
@@ -128,7 +140,16 @@ struct QuoteRecordingView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(role: .close) { dismiss() }
+                    Button(role: .close) {
+                        // Closing keeps the draft; it just carries any late edits
+                        // to the title or client with it.
+                        if let pending = bankTask {
+                            Task {
+                                if let id = await pending.value { await applyEdits(to: id) }
+                            }
+                        }
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .principal) {
                     if showHeaderTitle {
@@ -162,6 +183,7 @@ struct QuoteRecordingView: View {
                         Button(role: .destructive) {
                             Task { await recorder.stop() }
                             recorder.reset()
+                            discardDraft()
                             dismiss()
                         } label: {
                             Label("Discard recording", systemImage: "trash")
@@ -201,6 +223,59 @@ struct QuoteRecordingView: View {
                     }
                 }
             }
+            // Bank it straight away, before the user has a chance to lose it —
+            // but in the background. The quote is on screen and they should be
+            // reading it, not watching a spinner wait on four round trips.
+            if !result.lineItems.isEmpty {
+                startBanking(result)
+            }
+        }
+    }
+
+    /// Begin writing the generated quote to the server as a draft, so it survives
+    /// the sheet being closed. Failure is deliberately silent — the task yields
+    /// nil, finishing falls back to a normal save, and an offline phone never
+    /// raises an error the user can do nothing about.
+    private func startBanking(_ result: GeneratedQuote) {
+        guard bankTask == nil else { return }
+        let bankedTitle = title
+        let bankedClient = clientName
+        let bankedTranscript = transcriptText
+        let bankedCurrency = currency
+        savedTitle = bankedTitle
+        savedClient = bankedClient
+        bankTask = Task {
+            try? await QuoteService.save(
+                result, transcript: bankedTranscript, title: bankedTitle,
+                currency: bankedCurrency, clientName: bankedClient
+            )
+        }
+    }
+
+    /// Push edits made after the draft was banked. Only what changed is written.
+    private func applyEdits(to id: UUID) async {
+        if title != savedTitle {
+            try? await QuoteService.updateTitle(id: id, title: displayTitle)
+        }
+        let trimmedClient = clientName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if clientName != savedClient, !trimmedClient.isEmpty {
+            try? await QuoteService.setClient(quoteId: id, name: trimmedClient)
+        }
+    }
+
+    /// Drop the banked draft — the quote is being replaced by a fresh generation,
+    /// or thrown away outright. Without this, every re-record would leave an
+    /// orphan behind in the Drafts list. Awaits the write first: a draft still in
+    /// flight would otherwise land after the delete and survive it.
+    private func discardDraft() {
+        guard let pending = bankTask else { return }
+        bankTask = nil
+        savedTitle = ""
+        savedClient = ""
+        Task {
+            if let id = await pending.value {
+                try? await QuoteService.deleteQuote(id: id)
+            }
         }
     }
 
@@ -218,15 +293,23 @@ struct QuoteRecordingView: View {
         guard let generated else { return }
         isSaving = true
         Task {
+            defer { isSaving = false }
+            // Wait for the background write before deciding anything: a quick tap
+            // on Done while it is still in flight would otherwise save a second copy.
+            if let id = await bankTask?.value {
+                await applyEdits(to: id)
+                dismiss()
+                return
+            }
+            // The bank didn't land, usually because the phone was offline. This
+            // is the retry, and it keeps the old confirm-then-leave behaviour.
             do {
-                try await QuoteService.save(generated, transcript: transcriptText, title: title,
-                                            currency: currency, clientName: clientName)
-                isSaving = false
+                _ = try await QuoteService.save(generated, transcript: transcriptText, title: title,
+                                                currency: currency, clientName: clientName)
                 toast = Toast(style: .success, message: "Quote saved")
                 try? await Task.sleep(for: .seconds(1.0))
                 dismiss()
             } catch {
-                isSaving = false
                 toast = Toast(style: .error, message: "Couldn't save quote")
             }
         }
@@ -406,9 +489,11 @@ struct QuoteRecordingView: View {
                     } else {
                         // Resuming to add more: drop the generated review so the
                         // transcript reappears and re-generates on the next stop.
+                        // The banked draft goes too — the next stop replaces it.
                         if generated != nil || notEnough {
                             generated = nil
                             notEnough = false
+                            discardDraft()
                         }
                         // Resume from whatever is currently shown (incl. hand-edits).
                         recorder.seed(transcriptText)
@@ -444,7 +529,12 @@ struct QuoteRecordingView: View {
                     if isSaving || isGenerating {
                         ProgressView().tint(.white)
                     } else {
-                        Text(generated == nil ? "Generate" : "Save")
+                        // "Done" once a quote exists — it is banked, or about to
+                        // be, so there is nothing left to save. The label doesn't
+                        // wait on the write; flickering Save→Done would only
+                        // advertise a round trip the user shouldn't have to think
+                        // about.
+                        Text(generated == nil ? "Generate" : "Done")
                             .font(.body.weight(.semibold))
                     }
                 }
