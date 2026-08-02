@@ -186,6 +186,21 @@ enum QuoteService {
 
     // MARK: - Customers
 
+    /// Escapes the characters `ILIKE` treats as wildcards, so a client name is
+    /// matched literally. Without this, a name holding `%`, `_` or `*` (which
+    /// PostgREST rewrites to `%`) matches some unrelated customer and the quote
+    /// is silently filed under the wrong person.
+    private static func escapingLikeWildcards(_ text: String) -> String {
+        var escaped = ""
+        for character in text {
+            if character == "\\" || character == "%" || character == "_" || character == "*" {
+                escaped.append("\\")
+            }
+            escaped.append(character)
+        }
+        return escaped
+    }
+
     /// Resolve a typed client name to a customer row, reusing an existing one
     /// with the same name (case-insensitive) so repeat customers don't pile up
     /// as duplicates. Returns nil for an empty name.
@@ -198,7 +213,7 @@ enum QuoteService {
             .from("customers")
             .select("id")
             .eq("user_id", value: userID)
-            .ilike("name", pattern: trimmed)
+            .ilike("name", pattern: escapingLikeWildcards(trimmed))
             .limit(1)
             .execute()
             .value
@@ -365,12 +380,14 @@ enum QuoteService {
             .execute()
     }
 
-    /// Persist a converted quote: new currency plus recomputed subtotal/total.
-    static func updateCurrencyAndTotal(id: UUID, currency: String, total: Double) async throws {
-        struct Payload: Encodable { let currency: String; let subtotal: Double; let total: Double }
+    /// Persist a converted quote: new currency plus the recomputed subtotal.
+    /// `tax_amount` and `total` are derived from the subtotal by a database
+    /// trigger, so sending them here would only be overwritten.
+    static func updateCurrencyAndSubtotal(id: UUID, currency: String, subtotal: Double) async throws {
+        struct Payload: Encodable { let currency: String; let subtotal: Double }
         try await client
             .from("quotes")
-            .update(Payload(currency: currency, subtotal: total, total: total))
+            .update(Payload(currency: currency, subtotal: subtotal))
             .eq("id", value: id)
             .execute()
     }
@@ -476,15 +493,20 @@ enum QuoteService {
             let subtotal: Double?
             let total: Double
             let currency: String?
+            /// Carried over so the copy is taxed like its original — the database
+            /// recomputes tax_amount and total from it, so leaving it out would
+            /// quietly produce a tax-free duplicate.
+            let taxRate: Double?
             enum CodingKeys: String, CodingKey {
                 case title
                 case jobSummary = "job_summary"
                 case scope, notes, subtotal, total, currency
+                case taxRate = "tax_rate"
             }
         }
         let source: SourceQuote = try await client
             .from("quotes")
-            .select("title, job_summary, scope, notes, subtotal, total, currency")
+            .select("title, job_summary, scope, notes, subtotal, total, currency, tax_rate")
             .eq("id", value: id)
             .single()
             .execute()
@@ -500,11 +522,13 @@ enum QuoteService {
             let total: Double
             let status: String
             let currency: String?
+            let taxRate: Double
             enum CodingKeys: String, CodingKey {
                 case userId = "user_id"
                 case title
                 case jobSummary = "job_summary"
                 case scope, notes, subtotal, total, status, currency
+                case taxRate = "tax_rate"
             }
         }
         let copiedTitle = source.title.map { $0.isEmpty ? $0 : "\($0) (copy)" }
@@ -519,7 +543,8 @@ enum QuoteService {
                 subtotal: source.subtotal,
                 total: source.total,
                 status: "draft",
-                currency: source.currency
+                currency: source.currency,
+                taxRate: source.taxRate ?? 0
             ), returning: .representation)
             .select("id")
             .single()

@@ -347,6 +347,7 @@ struct QuoteDetailView: View {
         .sheet(isPresented: $showEdit) {
             EditQuoteView(quoteId: quote.id,
                           currency: currency,
+                          taxRate: quote.taxRate,
                           title: title,
                           jobSummary: jobSummary,
                           scope: scope,
@@ -372,6 +373,7 @@ struct QuoteDetailView: View {
             ConvertCurrencySheet(quoteID: quote.id,
                                  lineItems: lineItems,
                                  currentTotal: total,
+                                 taxRate: quote.taxRate,
                                  fromCode: currency,
                                  toCode: target.id) { newCurrency, newTotal in
                 currency = newCurrency

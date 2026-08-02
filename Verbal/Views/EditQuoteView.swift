@@ -13,6 +13,10 @@ struct EditQuoteView: View {
     let quoteId: UUID
     /// The quote's currency code, for formatting prices and the total.
     let currency: String
+    /// The quote's tax percentage. The database derives the total from the
+    /// subtotal and this rate, so the screen has to apply it too or it would
+    /// show a different number than the one being stored.
+    let taxRate: Double
     /// Called after a successful save with the new title, job summary, scope, and
     /// total so the detail screen can reflect the edits without a full refetch.
     var onSaved: (_ title: String, _ jobSummary: String, _ scope: [String], _ total: Double) -> Void
@@ -26,9 +30,13 @@ struct EditQuoteView: View {
     /// Server ids present when editing began, to compute deletions on save.
     private let originalIDs: Set<UUID>
     @State private var isSaving = false
+    /// Set when a write failed, so the sheet reports it instead of closing on
+    /// edits that were never stored.
+    @State private var saveError = false
 
     init(quoteId: UUID,
          currency: String,
+         taxRate: Double,
          title: String,
          jobSummary: String,
          scope: [String],
@@ -36,6 +44,7 @@ struct EditQuoteView: View {
          onSaved: @escaping (String, String, [String], Double) -> Void) {
         self.quoteId = quoteId
         self.currency = currency
+        self.taxRate = taxRate
         self.onSaved = onSaved
         _title = State(initialValue: title)
         _jobSummary = State(initialValue: jobSummary)
@@ -49,8 +58,15 @@ struct EditQuoteView: View {
     }
 
     /// Live subtotal from the currently-entered quantities and prices.
-    private var total: Double {
+    private var subtotal: Double {
         items.reduce(0) { $0 + ($1.lineTotal ?? 0) }
+    }
+
+    /// Subtotal plus tax — the figure the database will hold once saved, and so
+    /// the one to show here and hand back to the detail screen.
+    private var total: Double {
+        let tax = (subtotal * taxRate / 100).roundedToCents
+        return (subtotal + tax).roundedToCents
     }
 
     var body: some View {
@@ -118,6 +134,11 @@ struct EditQuoteView: View {
                     }
                 }
             }
+            .alert("Couldn't save your changes", isPresented: $saveError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Check your connection and tap Save again. Your edits are still here.")
+            }
         }
     }
 
@@ -125,60 +146,70 @@ struct EditQuoteView: View {
         isSaving = true
         defer { isSaving = false }
 
-        // Delete items removed during editing.
-        let survivingIDs = Set(items.compactMap(\.serverID))
-        for removed in originalIDs.subtracting(survivingIDs) {
-            try? await QuoteService.deleteLineItem(id: removed)
-        }
-
-        // Update existing items and insert new ones, preserving order.
-        for (index, item) in items.enumerated() {
-            let source = item.unitPrice != nil ? "spoken" : "missing"
-            let description = item.description.trimmingCharacters(in: .whitespacesAndNewlines)
-            let unit = item.unit.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let serverID = item.serverID {
-                try? await QuoteService.updateLineItem(
-                    id: serverID,
-                    description: description.isEmpty ? nil : description,
-                    type: item.type,
-                    quantity: item.quantity,
-                    unit: unit.isEmpty ? nil : unit,
-                    unitPrice: item.unitPrice,
-                    priceSource: source,
-                    position: index
-                )
-            } else {
-                try? await QuoteService.insertLineItem(
-                    quoteId: quoteId,
-                    description: description.isEmpty ? nil : description,
-                    type: item.type,
-                    quantity: item.quantity,
-                    unit: unit.isEmpty ? nil : unit,
-                    unitPrice: item.unitPrice,
-                    priceSource: source,
-                    position: index
-                )
-            }
-        }
-
         let newTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let newSummary = jobSummary.trimmingCharacters(in: .whitespacesAndNewlines)
         let newScope = scopeText
             .split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        let subtotal = total
-        try? await QuoteService.updateQuoteCore(
-            id: quoteId,
-            title: newTitle.isEmpty ? nil : newTitle,
-            jobSummary: newSummary.isEmpty ? nil : newSummary,
-            scope: newScope,
-            subtotal: subtotal,
-            total: subtotal
-        )
+        let newSubtotal = subtotal
+        let newTotal = total
+
+        do {
+            // Delete items removed during editing.
+            let survivingIDs = Set(items.compactMap(\.serverID))
+            for removed in originalIDs.subtracting(survivingIDs) {
+                try await QuoteService.deleteLineItem(id: removed)
+            }
+
+            // Update existing items and insert new ones, preserving order.
+            for (index, item) in items.enumerated() {
+                let source = item.unitPrice != nil ? "spoken" : "missing"
+                let description = item.description.trimmingCharacters(in: .whitespacesAndNewlines)
+                let unit = item.unit.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let serverID = item.serverID {
+                    try await QuoteService.updateLineItem(
+                        id: serverID,
+                        description: description.isEmpty ? nil : description,
+                        type: item.type,
+                        quantity: item.quantity,
+                        unit: unit.isEmpty ? nil : unit,
+                        unitPrice: item.unitPrice,
+                        priceSource: source,
+                        position: index
+                    )
+                } else {
+                    try await QuoteService.insertLineItem(
+                        quoteId: quoteId,
+                        description: description.isEmpty ? nil : description,
+                        type: item.type,
+                        quantity: item.quantity,
+                        unit: unit.isEmpty ? nil : unit,
+                        unitPrice: item.unitPrice,
+                        priceSource: source,
+                        position: index
+                    )
+                }
+            }
+
+            try await QuoteService.updateQuoteCore(
+                id: quoteId,
+                title: newTitle.isEmpty ? nil : newTitle,
+                jobSummary: newSummary.isEmpty ? nil : newSummary,
+                scope: newScope,
+                subtotal: newSubtotal,
+                total: newTotal
+            )
+        } catch {
+            // Staying open on a failed write is the point: closing with a
+            // success haptic would tell the user their prices were saved when
+            // they weren't, and they'd find out days later.
+            saveError = true
+            return
+        }
 
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        onSaved(newTitle, newSummary, newScope, subtotal)
+        onSaved(newTitle, newSummary, newScope, newTotal)
         dismiss()
     }
 }

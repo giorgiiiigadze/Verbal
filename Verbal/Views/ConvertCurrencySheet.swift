@@ -13,7 +13,11 @@ import SwiftUI
 struct ConvertCurrencySheet: View {
     let quoteID: UUID
     let lineItems: [QuoteLineItem]
+    /// The quote's stored total, which includes tax.
     let currentTotal: Double
+    /// The quote's tax percentage, so the preview compares a tax-inclusive
+    /// figure with a tax-inclusive one rather than with a bare subtotal.
+    let taxRate: Double
     let fromCode: String
     let toCode: String
     /// Called after the change is persisted. `newTotal == nil` means relabel only.
@@ -29,13 +33,23 @@ struct ConvertCurrencySheet: View {
         (price * rate).rounded()
     }
 
-    /// Preview total after conversion (sum of rounded line totals).
-    private var newTotal: Double? {
+    /// Preview subtotal after conversion (sum of rounded line totals, pre-tax).
+    private var newSubtotal: Double? {
         guard let rate else { return nil }
         return lineItems.reduce(0.0) { sum, item in
             guard let quantity = item.quantity, let unitPrice = item.unitPrice else { return sum }
             return sum + quantity * convertedUnit(unitPrice, rate)
         }
+    }
+
+    /// The converted subtotal grossed up by tax — what the quote will actually
+    /// total once saved, and so the only figure worth putting next to "Now".
+    private var newTotal: Double? { newSubtotal.map(withTax) }
+
+    /// Mirrors the database's arithmetic on a subtotal.
+    private func withTax(_ subtotal: Double) -> Double {
+        let tax = (subtotal * taxRate / 100).roundedToCents
+        return (subtotal + tax).roundedToCents
     }
 
     var body: some View {
@@ -136,20 +150,37 @@ struct ConvertCurrencySheet: View {
         .background(Color(.surface), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
+    /// Convert every priced line item and relabel the quote, restoring any price
+    /// already written if a later write fails. A half-converted quote mixes two
+    /// currencies on the document the customer receives, with nothing on screen
+    /// to say so — leaving it untouched is the only safe way to fail.
+    private func applyConversion(rate: Double, subtotal: Double) async throws {
+        var written: [(id: UUID, unitPrice: Double)] = []
+        do {
+            for item in lineItems {
+                guard let unitPrice = item.unitPrice else { continue }
+                try await QuoteService.updateLineItemPrice(
+                    id: item.id, unitPrice: convertedUnit(unitPrice, rate))
+                written.append((item.id, unitPrice))
+            }
+            try await QuoteService.updateCurrencyAndSubtotal(
+                id: quoteID, currency: toCode, subtotal: subtotal)
+        } catch {
+            for original in written.reversed() {
+                try? await QuoteService.updateLineItemPrice(
+                    id: original.id, unitPrice: original.unitPrice)
+            }
+            throw error
+        }
+    }
+
     private func save(convert: Bool) {
         isSaving = true
         Task {
             do {
-                if convert, let rate {
-                    for item in lineItems {
-                        if let unitPrice = item.unitPrice {
-                            try await QuoteService.updateLineItemPrice(
-                                id: item.id, unitPrice: convertedUnit(unitPrice, rate))
-                        }
-                    }
-                    let total = newTotal ?? currentTotal
-                    try await QuoteService.updateCurrencyAndTotal(id: quoteID, currency: toCode, total: total)
-                    onDone(toCode, total)
+                if convert, let rate, let subtotal = newSubtotal {
+                    try await applyConversion(rate: rate, subtotal: subtotal)
+                    onDone(toCode, withTax(subtotal))
                 } else {
                     try await QuoteService.updateCurrency(id: quoteID, currency: toCode)
                     onDone(toCode, nil)
