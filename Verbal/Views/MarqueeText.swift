@@ -17,10 +17,15 @@ struct MarqueeText: View {
     var gap: CGFloat = 44
     /// Scroll speed in points per second.
     var pointsPerSecond: CGFloat = 28
+    /// Width of the soft fade at each edge. The text is inset by this much so the
+    /// first glyph never sits underneath the leading fade.
+    var fadeWidth: CGFloat = 14
+    /// Beat of stillness at the start of every loop, so the beginning is readable
+    /// before it slides away.
+    var startDelay: Double = 1.2
 
     @State private var textWidth: CGFloat = 0
     @State private var containerWidth: CGFloat = 0
-    @State private var animate = false
 
     private var isOverflowing: Bool { textWidth > containerWidth + 0.5 }
 
@@ -69,31 +74,38 @@ struct MarqueeText: View {
     private var scrolling: some View {
         let distance = textWidth + gap
         let duration = Double(distance / max(pointsPerSecond, 1))
-        return HStack(spacing: gap) {
-            label.fixedSize()
-            label.fixedSize()
+        // Two phases: rest at the start, then travel one full copy-plus-gap. Because
+        // the second copy lands exactly where the first began, snapping back to the
+        // resting phase is invisible — which is what makes the loop seamless.
+        return PhaseAnimator([false, true]) { scrolled in
+            HStack(spacing: gap) {
+                label.fixedSize()
+                label.fixedSize()
+            }
+            .offset(x: scrolled ? -distance : 0)
+            .padding(.leading, fadeWidth)
+            .frame(width: containerWidth, alignment: .leading)
+        } animation: { scrolled in
+            scrolled ? .linear(duration: duration).delay(startDelay)
+                     : .linear(duration: 0)
         }
-        .offset(x: animate ? -distance : 0)
-        .frame(width: containerWidth, alignment: .leading)
         .clipped()
         .mask(edgeFade)
-        .onAppear {
-            animate = false
-            withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
-                animate = true
-            }
-        }
         // Restart the loop cleanly if the text (and thus distance) changes.
         .id(text)
     }
 
     /// Soft fade at both edges so text slides in/out instead of hard-clipping.
+    /// Sized in points rather than percent, so the fade stays consistent whatever
+    /// width the label is given.
     private var edgeFade: some View {
-        LinearGradient(
+        let width = max(containerWidth, 1)
+        let lead = min(fadeWidth / width, 0.5)
+        return LinearGradient(
             stops: [
                 .init(color: .clear, location: 0),
-                .init(color: .black, location: 0.06),
-                .init(color: .black, location: 0.94),
+                .init(color: .black, location: lead),
+                .init(color: .black, location: 1 - lead),
                 .init(color: .clear, location: 1),
             ],
             startPoint: .leading,

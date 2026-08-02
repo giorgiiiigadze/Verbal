@@ -144,7 +144,10 @@ struct QuoteRecordingView: View {
                     } label: {
                         Image(systemName: "arrow.uturn.backward")
                     }
-                    .disabled(transcriptText.isEmpty || recorder.isRecording)
+                    // Once the quote is generated the transcript is history — trimming
+                    // words from it no longer changes anything on screen.
+                    .disabled(transcriptText.isEmpty || recorder.isRecording
+                              || isGenerating || generated != nil || notEnough)
                 }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .topBarTrailing) {
