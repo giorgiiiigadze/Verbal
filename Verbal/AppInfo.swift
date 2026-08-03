@@ -20,11 +20,15 @@ enum AppInfo {
 
     static let supportEmail = "gio.giorgigiorgadze20@gmail.com"
 
-    // IMPORTANT: both pages must be live before submitting to the App Store —
-    // a privacy policy URL is required, and the terms link is required once
-    // subscriptions ship. Replace these with the real addresses.
-    static let privacyPolicyURL = URL(string: "https://giorgiiiigadze.github.io/verbal/privacy")!
-    static let termsURL = URL(string: "https://giorgiiiigadze.github.io/verbal/terms")!
+    /// Served by GitHub Pages from `docs/privacy` on main. The path is
+    /// case-sensitive and has to match the repository name exactly — the
+    /// lowercase spelling this used to carry returned a 404.
+    static let privacyPolicyURL = URL(string: "https://giorgiiiigadze.github.io/Verbal/privacy/")!
+
+    /// Nil until the terms are written. Settings hides the row rather than
+    /// offering a link that goes nowhere. Required once subscriptions ship —
+    /// Apple asks for terms alongside anything billed.
+    static let termsURL: URL? = nil
 
     /// A support email pre-filled with the details that would otherwise be the
     /// first three replies of every conversation.

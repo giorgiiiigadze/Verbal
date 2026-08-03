@@ -97,8 +97,12 @@ struct SettingsView: View {
                 Link(destination: AppInfo.privacyPolicyURL) {
                     Label("Privacy policy", systemImage: "hand.raised")
                 }
-                Link(destination: AppInfo.termsURL) {
-                    Label("Terms of service", systemImage: "doc.text")
+                // Absent until the terms exist: a row that opens a 404 reads as
+                // a broken app, and reviewers follow these links.
+                if let terms = AppInfo.termsURL {
+                    Link(destination: terms) {
+                        Label("Terms of service", systemImage: "doc.text")
+                    }
                 }
                 LabeledContent("Version", value: AppInfo.versionLabel)
             } header: {
