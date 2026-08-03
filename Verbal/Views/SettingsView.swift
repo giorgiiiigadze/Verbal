@@ -17,12 +17,33 @@ struct SettingsView: View {
     @State private var showDeleteSheet = false
     @State private var isDeleting = false
     @State private var toast: Toast?
+    /// The currency the user picked, held until they say what should happen to
+    /// their saved rates.
+    @State private var pendingCurrency: CurrencyTarget?
 
+    /// Identifiable wrapper so a picked code can drive `.sheet(item:)`.
+    private struct CurrencyTarget: Identifiable { let id: String }
+
+    /// Saved rates that a currency switch would reinterpret.
+    private var pricedRates: [RateCardItem] {
+        session.rateCard.filter { $0.unitPrice != nil }
+    }
 
     private var currency: Binding<AppCurrency> {
         Binding(
             get: { AppCurrency(rawValue: currencyCode) ?? .usd },
-            set: { currencyCode = $0.rawValue }
+            set: { picked in
+                guard picked.rawValue != currencyCode else { return }
+                // A rate card stores bare numbers, so this setting is the only
+                // thing saying whether 50 means $50 or £50. Switching it with
+                // rates saved would redenominate all of them in silence, so ask
+                // first. With nothing priced there is nothing to reinterpret.
+                if pricedRates.isEmpty {
+                    currencyCode = picked.rawValue
+                } else {
+                    pendingCurrency = CurrencyTarget(id: picked.rawValue)
+                }
+            }
         )
     }
 
@@ -86,15 +107,28 @@ struct SettingsView: View {
             .listRowBackground(Color(.surface))
 
             Section {
-                Button("Delete account", role: .destructive) {
-                    showDeleteSheet = true
+                // Deletion is a round trip to the edge function followed by a
+                // sign-out. Left as a merely disabled button it reads as a tap
+                // that did nothing, on the one action nobody should have to
+                // wonder about.
+                if isDeleting {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Deleting account…")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Button("Delete account", role: .destructive) {
+                        showDeleteSheet = true
+                    }
                 }
-                .disabled(isDeleting)
             } footer: {
                 Text("Permanently removes your account, quotes, and rate card. This can't be undone.")
             }
             .listRowBackground(Color(.surface))
         }
+        // Nothing else is worth touching while the account is being removed.
+        .disabled(isDeleting)
         .scrollContentBackground(.hidden)
         .background(Color(.homeBackground))
         .navigationTitle("Settings")
@@ -103,6 +137,17 @@ struct SettingsView: View {
             DeleteAccountSheet { reason in
                 showDeleteSheet = false
                 deleteAccount(reason: reason)
+            }
+        }
+        .sheet(item: $pendingCurrency) { target in
+            ConvertRateCardSheet(items: pricedRates,
+                                 fromCode: currencyCode,
+                                 toCode: target.id) { converted in
+                currencyCode = target.id
+                if converted {
+                    Task { await session.refreshRateCard() }
+                    toast = Toast(style: .success, message: "Rates converted to \(target.id)")
+                }
             }
         }
         .toast($toast)

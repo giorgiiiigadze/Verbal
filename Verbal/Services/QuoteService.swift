@@ -449,6 +449,16 @@ enum QuoteService {
         ).execute()
     }
 
+    /// Update one saved rate's price. Used when the user changes their main
+    /// currency and chooses to reprice the rate card rather than relabel it.
+    static func updateRateCardPrice(id: UUID, unitPrice: Double) async throws {
+        try await client
+            .from("rate_card_items")
+            .update(["unit_price": unitPrice])
+            .eq("id", value: id)
+            .execute()
+    }
+
     static func deleteRateCardItem(id: UUID) async throws {
         try await client.from("rate_card_items").delete().eq("id", value: id).execute()
     }

@@ -130,10 +130,8 @@ struct RateCardView: View {
         VStack(spacing: 8) {
             Spacer()
             Image(systemName: "list.bullet.rectangle")
-                .font(.largeTitle)
-                .foregroundStyle(Color(.blueAccentText))
-                .padding(16)
-                .background(Color(.royalBlue25), in: Circle())
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(Color(.mainText))
                 .padding(.bottom, 4)
             Text("No saved prices yet")
                 .font(.headline)
@@ -152,6 +150,9 @@ struct RateCardView: View {
         isLoading = true
         defer { isLoading = false }
         items = (try? await QuoteService.fetchRateCard()) ?? []
+        // Settings decides from this cache whether a currency change would
+        // redenominate saved prices, so it has to see what was just added here.
+        session.cacheRateCard(items)
         hasLoaded = true
     }
 
