@@ -25,6 +25,13 @@ struct QuoteRecordingView: View {
     /// Who the quote is for — the one detail the transcript can't provide.
     @State private var clientName = ""
     @State private var showClientSheet = false
+    /// Drives the microphone priming sheet, and whether it reads as an
+    /// explanation ahead of the system dialog or as a route to Settings.
+    @State private var showMicPermission = false
+    @State private var micAccessBlocked = false
+    /// Set when the user accepts from that sheet, so recording starts once the
+    /// sheet has closed rather than under it.
+    @State private var startAfterMicPermission = false
     @State private var toast: Toast?
     /// Currency for the quote being built — always the user's Settings default.
     /// Changing a quote's currency happens later, on the detail page.
@@ -199,6 +206,18 @@ struct QuoteRecordingView: View {
                 }
             }
         }
+        // Attached to the NavigationStack rather than stacked alongside the
+        // client and transcript sheets inside it: a third .sheet on that same
+        // view is silently ignored, so this one simply never appeared.
+        .sheet(isPresented: $showMicPermission, onDismiss: {
+            guard startAfterMicPermission else { return }
+            startAfterMicPermission = false
+            Task { await beginRecording() }
+        }) {
+            MicPermissionSheet(isBlocked: micAccessBlocked) {
+                startAfterMicPermission = true
+            }
+        }
     }
 
     /// Run the AI extraction, then cross-fade the transcript into the review document.
@@ -285,6 +304,22 @@ struct QuoteRecordingView: View {
                 try? await QuoteService.deleteQuote(id: id)
             }
         }
+    }
+
+    /// Start (or resume) recording from whatever is currently on screen.
+    private func beginRecording() async {
+        // Resuming to add more: drop the generated review so the transcript
+        // reappears and re-generates on the next stop. The banked draft goes
+        // too — the next stop replaces it.
+        if generated != nil || notEnough {
+            generated = nil
+            notEnough = false
+            notEnoughNote = ""
+            discardDraft()
+        }
+        // Resume from whatever is currently shown (incl. hand-edits).
+        recorder.seed(transcriptText)
+        await recorder.start()
     }
 
     /// Removes the trailing word (plus its separating whitespace) — powers word-by-word undo.
@@ -507,17 +542,19 @@ struct QuoteRecordingView: View {
                     if recorder.isRecording {
                         await recorder.stop()
                     } else {
-                        // Resuming to add more: drop the generated review so the
-                        // transcript reappears and re-generates on the next stop.
-                        // The banked draft goes too — the next stop replaces it.
-                        if generated != nil || notEnough {
-                            generated = nil
-                            notEnough = false
-                            discardDraft()
+                        // Make the case for the microphone before iOS asks. Its
+                        // dialog appears once per install and explains nothing,
+                        // and a refusal there can only be undone in Settings.
+                        switch QuoteRecorder.access {
+                        case .ready:
+                            await beginRecording()
+                        case .notAsked:
+                            micAccessBlocked = false
+                            showMicPermission = true
+                        case .blocked:
+                            micAccessBlocked = true
+                            showMicPermission = true
                         }
-                        // Resume from whatever is currently shown (incl. hand-edits).
-                        recorder.seed(transcriptText)
-                        await recorder.start()
                     }
                 }
             } label: {

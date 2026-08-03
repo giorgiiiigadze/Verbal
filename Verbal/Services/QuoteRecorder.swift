@@ -21,6 +21,31 @@ final class QuoteRecorder {
         case unavailable
     }
 
+    /// What recording may do right now, readable without triggering a prompt —
+    /// so the app can explain itself before iOS spends its one-shot dialog.
+    enum Access {
+        /// Both permissions granted; `start()` will just work.
+        case ready
+        /// Never asked. The next `start()` is what raises the system dialogs.
+        case notAsked
+        /// Denied or restricted. iOS will not ask again; only Settings undoes it.
+        case blocked
+    }
+
+    /// Current authorization, read (not requested) from both systems the
+    /// recorder needs: speech recognition and the microphone itself.
+    static var access: Access {
+        let speech = SFSpeechRecognizer.authorizationStatus()
+        let microphone = AVAudioApplication.shared.recordPermission
+        if speech == .denied || speech == .restricted || microphone == .denied {
+            return .blocked
+        }
+        if speech == .authorized && microphone == .granted {
+            return .ready
+        }
+        return .notAsked
+    }
+
     private(set) var state: State = .idle
     private(set) var errorMessage: String?
 
