@@ -105,7 +105,7 @@ struct ProfileView: View {
                 Button {
                     showSettings = true
                 } label: {
-                    Image(systemName: "gearshape")
+                    Image(systemName: "gearshape.fill")
                 }
             }
             ToolbarItemGroup(placement: .keyboard) {

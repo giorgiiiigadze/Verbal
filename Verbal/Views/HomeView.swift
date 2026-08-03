@@ -317,23 +317,15 @@ struct HomeView: View {
 
     /// First run: an invitation into the core loop, not a note that the list
     /// is empty. This is the screen a new user meets straight after onboarding.
+    /// No button of its own — the mic in the tab bar is the way in, and a second
+    /// control for the same thing only splits the attention it needs.
     private var emptyState: some View {
         placeholder(
             icon: "mic.fill",
             title: "Your first quote starts here",
             message: "Describe a job out loud and Verbal turns it into a priced quote."
         ) {
-            Button {
-                showCreate = true
-            } label: {
-                Text("Record a job")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 28)
-                    .frame(height: 50)
-                    .background(Color(.royalBlue600), in: Capsule())
-            }
-            .buttonStyle(.plain)
+            EmptyView()
         }
     }
 
@@ -380,10 +372,8 @@ struct HomeView: View {
         VStack(spacing: 10) {
             Spacer()
             Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(Color(.blueAccentText))
-                .frame(width: 64, height: 64)
-                .background(Color(.royalBlue25), in: Circle())
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(Color(.mainText))
                 .padding(.bottom, 6)
             Text(title)
                 .font(.headline)
