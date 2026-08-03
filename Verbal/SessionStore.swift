@@ -46,9 +46,24 @@ final class SessionStore {
     /// the profile screen reflects the change without a refetch.
     func cacheBusinessProfile(_ profile: BusinessProfile) { businessProfile = profile }
 
+    /// Keep the cached rate card in step with a list the Rate Card tab just
+    /// fetched. Settings reads this to decide whether changing the main
+    /// currency would silently redenominate saved prices, so a stale copy here
+    /// means that question doesn't get asked.
+    func cacheRateCard(_ items: [RateCardItem]) { rateCard = items }
+
+    /// Refetch the rate card after its prices are rewritten elsewhere.
+    func refreshRateCard() async {
+        if let items = try? await QuoteService.fetchRateCard() { rateCard = items }
+    }
+
     /// Line items cached per quote so the detail screen renders instantly on open
     /// (populated by prefetching as list rows appear).
     private var lineItemsCache: [UUID: [QuoteLineItem]] = [:]
+
+    /// The account everything cached here belongs to, so a switch can be told
+    /// apart from an ordinary token refresh.
+    private var cachedUserID: UUID?
 
     /// Cached line items for a quote, if any have been loaded already.
     func lineItems(for quoteID: UUID) -> [QuoteLineItem]? { lineItemsCache[quoteID] }
@@ -118,6 +133,16 @@ final class SessionStore {
     /// Load everything the first screen needs before it's shown.
     /// Add future home-screen preloads here (feed, etc.).
     private func bootstrap() async {
+        // Everything cached below belongs to one account. Signing straight into
+        // a second one never emits a signedOut event, so without this check the
+        // previous user's business details stay on screen — and print onto the
+        // new user's quotes. Refreshes for the same account keep their cache.
+        let userID = client.auth.currentUser?.id
+        if userID != cachedUserID {
+            clearUserData()
+        }
+        cachedUserID = userID
+
         await refreshProfile()
         await preloadAvatar()
         await preloadLists()
@@ -136,10 +161,24 @@ final class SessionStore {
     }
 
     private func clearSession() {
+        clearUserData()
+        state = .signedOut
+    }
+
+    /// Drop everything belonging to the account that was signed in. The stale
+    /// copies matter beyond being wrong on screen: `preloadLists` falls back to
+    /// what it already has when a fetch fails, so anything left here would be
+    /// shown as the new user's own data on a flaky connection.
+    private func clearUserData() {
         profile = nil
         avatarImage = nil
         avatarUIImage = nil
-        state = .signedOut
+        businessProfile = nil
+        quotes = []
+        rateCard = []
+        lineItemsCache = [:]
+        listsLoaded = false
+        cachedUserID = nil
     }
 
     /// Load the current user's profile (name/avatar from Google) for display.
