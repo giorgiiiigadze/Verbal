@@ -36,6 +36,7 @@ struct SaveRatesSheet: View {
     /// Typed price per item id. Blank means "not this one".
     @State private var prices: [UUID: String] = [:]
     @State private var isSaving = false
+    @FocusState private var focusedItem: UUID?
 
     private var currencySymbol: String {
         AppCurrency(rawValue: currency)?.symbol ?? currency
@@ -53,38 +54,53 @@ struct SaveRatesSheet: View {
         }
     }
 
+    /// Sized to the list rather than fixed: two rates shouldn't open a sheet
+    /// with a void under them, and eight shouldn't need scrolling to reach the
+    /// button.
+    private var detentHeight: CGFloat {
+        let visibleRows = CGFloat(min(items.count, 6))
+        return min(232 + visibleRows * 56, 660)
+    }
+
     var body: some View {
-        ScrollView {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Save these prices?")
+                    .font(.robotoSlab(22, relativeTo: .title2))
+                    .foregroundStyle(Color(.mainText))
+                Spacer()
+                Button(role: .close) { dismiss() }
+            }
+
+            Text("Verbal fills them in automatically next time you quote the same work. Leave any blank to skip it.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
+
+            // One bordered table with hairline rules, matching how line items
+            // are drawn on the quote itself — rather than a card per row, each
+            // holding another boxed field.
+            ScrollView {
                 VStack(spacing: 0) {
-                    Image(systemName: "list.bullet.rectangle")
-                        .font(.system(size: 38, weight: .medium))
-                        .foregroundStyle(Color(.blueAccentText))
-                        .frame(height: 46)
-
-                    Text("Remember these prices?")
-                        .font(.robotoSlab(24, relativeTo: .title2))
-                        .foregroundStyle(Color(.mainText))
-                        .multilineTextAlignment(.center)
-                        .padding(.top, 14)
-
-                    Text("Saved rates get filled in automatically next time you quote the same work. Leave any blank to skip it.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 8)
-
-                    VStack(spacing: 10) {
-                        ForEach(items) { item in
-                            row(item)
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        row(item)
+                        if index != items.count - 1 {
+                            Divider()
                         }
                     }
-                    .padding(.top, 22)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
+                .padding(.horizontal, 16)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                )
             }
-        .scrollBounceBehavior(.basedOnSize)
+            .scrollBounceBehavior(.basedOnSize)
+            .padding(.top, 18)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -92,52 +108,44 @@ struct SaveRatesSheet: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 6) {
-                Button {
-                    save()
-                } label: {
-                    Group {
-                        if isSaving {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text(priced.isEmpty
-                                 ? "Add a price to save"
-                                 : "Save \(priced.count) rate\(priced.count == 1 ? "" : "s")")
-                                .font(.headline)
-                        }
+            // A single action. The close control in the header is the way out,
+            // so a second "Not now" underneath would only add weight.
+            Button {
+                save()
+            } label: {
+                Group {
+                    if isSaving {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(priced.isEmpty
+                             ? "Add a price to save"
+                             : "Save \(priced.count) rate\(priced.count == 1 ? "" : "s")")
+                            .font(.headline)
                     }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 54)
-                    .background(priced.isEmpty
-                                ? Color(.royalBlue600).opacity(0.4)
-                                : Color(.royalBlue600),
-                                in: Capsule())
                 }
-                .buttonStyle(.plain)
-                .disabled(priced.isEmpty || isSaving)
-
-                Button("Not now") { dismiss() }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .disabled(isSaving)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background(priced.isEmpty
+                            ? Color(.royalBlue600).opacity(0.4)
+                            : Color(.royalBlue600),
+                            in: Capsule())
             }
+            .buttonStyle(.plain)
+            .disabled(priced.isEmpty || isSaving)
             .padding(.horizontal, 24)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            .padding(.top, 14)
+            .padding(.bottom, 12)
             .background(Color(.surface))
         }
-        // Full height: the list of prices is the point, and a medium detent
-        // hides all but the first row behind the save button.
-        .presentationDetents([.large])
+        .presentationDetents([.height(detentHeight), .large])
         .presentationCornerRadius(28)
         .presentationBackground(Color(.surface))
     }
 
     private func row(_ item: UnpricedItem) -> some View {
-        HStack(spacing: 12) {
+        let isFilled = !(prices[item.id] ?? "").isEmpty
+        return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
                     .font(.callout.weight(.medium))
@@ -150,34 +158,30 @@ struct SaveRatesSheet: View {
                 }
             }
             Spacer(minLength: 8)
-            // Symbol and number share one enclosure, so they read as a single
-            // field rather than a stray glyph beside a right-aligned number.
-            HStack(spacing: 3) {
-                Text(currencySymbol).foregroundStyle(.secondary)
+
+            // Drawn like an amount on the quote rather than a boxed input: the
+            // number is the thing, and a field border around every row turned
+            // the list into a stack of containers.
+            HStack(spacing: 2) {
+                Text(currencySymbol)
                 TextField("0", text: Binding(
                     get: { prices[item.id] ?? "" },
                     set: { prices[item.id] = $0 }
                 ))
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
-                .frame(width: 56)
+                .focused($focusedItem, equals: item.id)
+                .frame(width: 58)
             }
-            .font(.callout.monospacedDigit())
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(Color(.surface), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
+            .font(.callout.weight(.semibold).monospacedDigit())
+            // Matches the placeholder while empty — a coloured symbol beside a
+            // grey zero reads as one of them being wrong.
+            .foregroundStyle(isFilled ? Color(.mainText) : Color.secondary)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        )
+        .padding(.vertical, 14)
+        // The number is a small target; the whole row reaches it.
+        .contentShape(Rectangle())
+        .onTapGesture { focusedItem = item.id }
     }
 
     private func save() {
