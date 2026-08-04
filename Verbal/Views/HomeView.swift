@@ -41,8 +41,8 @@ struct HomeView: View {
         NavigationStack {
             Group {
                 if quotes.isEmpty && !hasLoaded {
-                    // Still loading first paint — stay blank, not "no quotes".
-                    Color(.homeBackground)
+                    // Still loading first paint — placeholders, not "no quotes".
+                    loadingState
                 } else if quotes.isEmpty && loadFailed {
                     // Don't claim the account is empty when the fetch failed.
                     errorState
@@ -179,7 +179,9 @@ struct HomeView: View {
                         NavigationLink {
                             QuoteDetailView(quote: quote,
                                             initialLineItems: session.lineItems(for: quote.id) ?? []) {
-                                quotes.removeAll { $0.id == quote.id }
+                                withAnimation(Self.rowRemoval) {
+                                    quotes.removeAll { $0.id == quote.id }
+                                }
                                 // Delay so the toast animates in on the
                                 // now-visible Home, after the detail view's
                                 // pop finishes (setting it mid-dismiss shows
@@ -341,6 +343,36 @@ struct HomeView: View {
             EmptyView()
         }
     }
+
+    /// Stand-in rows for the moment before the first fetch lands. The splash
+    /// stops waiting on the lists after two seconds so a slow launch still gets
+    /// in, and what followed that was a blank page — which reads as an app that
+    /// broke rather than one that is loading.
+    private var loadingState: some View {
+        VStack(spacing: 10) {
+            ForEach(Array(Self.skeletonWidths.enumerated()), id: \.offset) { _, width in
+                QuoteRowSkeleton(titleWidth: width)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        // One sweep travelling across the whole stack, not four in step.
+        .shimmer(active: true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading your quotes")
+    }
+
+    /// Varied so the placeholders read as quotes rather than as a repeated tile.
+    private static let skeletonWidths: [CGFloat] = [168, 124, 196, 142]
+
+    /// Enough overshoot to feel alive, damped enough not to wobble — this fires
+    /// on a list the user is reading, not on a splash screen.
+    private static let pinSpring = Animation.spring(response: 0.34, dampingFraction: 0.62)
+
+    /// Removal gets no bounce. A row leaving should close up behind itself, not
+    /// spring — the quote is gone and the motion shouldn't be cheerful about it.
+    static let rowRemoval = Animation.easeInOut(duration: 0.28)
 
     /// Quotes exist but the active search or filter matched none of them.
     private var noMatchesState: some View {
@@ -504,7 +536,9 @@ struct HomeView: View {
     private func delete(_ quote: QuoteSummary) async {
         do {
             try await QuoteService.deleteQuote(id: quote.id)
-            quotes.removeAll { $0.id == quote.id }
+            // Every other mutation here animates; a row that simply blinks out
+            // makes the list look like it lost its place rather than obeyed.
+            withAnimation(Self.rowRemoval) { quotes.removeAll { $0.id == quote.id } }
             toast = Toast(style: .success, message: "Quote deleted")
         } catch {
             toast = Toast(style: .error, message: "Couldn't delete quote")
@@ -558,11 +592,15 @@ struct HomeView: View {
         // Fire with the optimistic update so the tap feels instant, not
         // gated on the round trip.
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation { quotes[index].pinned = newValue }
+        // A spring rather than the default curve. Three things move at once —
+        // the pin appears, the tint comes up, and the card travels to the
+        // Pinned section — and a little overshoot makes that read as the card
+        // answering rather than as a list quietly re-sorting itself.
+        withAnimation(Self.pinSpring) { quotes[index].pinned = newValue }
         do {
             try await QuoteService.setPinned(id: quote.id, pinned: newValue)
         } catch {
-            withAnimation { quotes[index].pinned = quote.pinned }
+            withAnimation(Self.pinSpring) { quotes[index].pinned = quote.pinned }
         }
     }
 
@@ -605,6 +643,13 @@ private struct QuoteRow: View {
                         Image(systemName: "pin.fill")
                             .font(.caption2)
                             .foregroundStyle(Color(.royalBlue600))
+                            // Springs in from nothing at the corner it will
+                            // occupy, so the pin reads as being pressed into
+                            // the card rather than fading onto it.
+                            .transition(
+                                .scale(scale: 0.1, anchor: .bottomLeading)
+                                    .combined(with: .opacity)
+                            )
                     }
                     Text(quote.displayTitle)
                         .font(.headline)
@@ -689,6 +734,44 @@ private struct QuoteRow: View {
         case "expired": return Color(.separator).opacity(0.5)
         default: return Color(.royalBlue25)
         }
+    }
+}
+
+// MARK: - Loading placeholder
+
+/// A quote card with its content replaced by bars. Deliberately built to
+/// `QuoteRow`'s geometry — same radius, padding, border and column positions —
+/// so the real cards land where the placeholders were instead of shifting the
+/// page as they arrive.
+private struct QuoteRowSkeleton: View {
+    let titleWidth: CGFloat
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                bar(titleWidth, 15)
+                bar(titleWidth * 0.55, 11)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 8) {
+                bar(62, 13)
+                bar(52, 18)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 18)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
+    }
+
+    private func bar(_ width: CGFloat, _ height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+            .fill(Color(.separator))
+            .frame(width: width, height: height)
     }
 }
 

@@ -159,7 +159,7 @@ struct RateCardView: View {
     private func delete(_ item: RateCardItem) async {
         do {
             try await QuoteService.deleteRateCardItem(id: item.id)
-            items.removeAll { $0.id == item.id }
+            withAnimation(HomeView.rowRemoval) { items.removeAll { $0.id == item.id } }
             toast = Toast(style: .success, message: "Rate deleted")
         } catch {
             toast = Toast(style: .error, message: "Couldn't delete rate")
