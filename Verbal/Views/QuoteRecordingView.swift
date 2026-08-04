@@ -29,6 +29,8 @@ struct QuoteRecordingView: View {
     /// explanation ahead of the system dialog or as a route to Settings.
     @State private var showMicPermission = false
     @State private var micAccessBlocked = false
+    /// Offers the prices the extraction was missing to the rate card.
+    @State private var showSaveRates = false
     /// Set when the user accepts from that sheet, so recording starts once the
     /// sheet has closed rather than under it.
     @State private var startAfterMicPermission = false
@@ -217,6 +219,58 @@ struct QuoteRecordingView: View {
             MicPermissionSheet(isBlocked: micAccessBlocked) {
                 startAfterMicPermission = true
             }
+        }
+        .sheet(isPresented: $showSaveRates) {
+            SaveRatesSheet(items: unpricedItems, currency: currency) { prices, saved in
+                Task {
+                    await applyPrices(prices)
+                    await session.refreshRateCard()
+                    if saved > 0 {
+                        toast = Toast(style: .success,
+                                      message: "\(saved) rate\(saved == 1 ? "" : "s") saved")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Put the prices just typed onto the quote as well as the rate card. Doing
+    /// only the latter would leave the user staring at the same "Needs price"
+    /// line they had just given a number for, and typing it again in the editor.
+    private func applyPrices(_ prices: [UUID: Double]) async {
+        guard var result = generated, !prices.isEmpty else { return }
+
+        var touched: [Int] = []
+        for index in result.lineItems.indices {
+            guard let price = prices[result.lineItems[index].id] else { continue }
+            result.lineItems[index].unitPrice = price
+            result.lineItems[index].priceSource = "rate_card"
+            // An unpriced line often carries no quantity either, and a unit
+            // price without one still totals nothing.
+            if result.lineItems[index].quantity == nil {
+                result.lineItems[index].quantity = 1
+            }
+            touched.append(index)
+        }
+        withAnimation { generated = result }
+
+        // The draft was banked the moment it generated, so the stored copy has
+        // to learn the same prices or the saved quote won't match the screen.
+        guard let quoteID = await bankTask?.value else { return }
+        for index in touched {
+            let item = result.lineItems[index]
+            guard let quantity = item.quantity, let unitPrice = item.unitPrice else { continue }
+            try? await QuoteService.setLineItemPrice(
+                quoteId: quoteID, position: index, quantity: quantity, unitPrice: unitPrice)
+        }
+        let subtotal = result.lineItems.reduce(0.0) { $0 + ($1.lineTotal ?? 0) }
+        try? await QuoteService.updateSubtotal(id: quoteID, subtotal: subtotal)
+    }
+
+    /// The generated lines the extraction had no price for, as rate candidates.
+    private var unpricedItems: [UnpricedItem] {
+        (generated?.lineItems ?? []).filter(\.isMissingPrice).map {
+            UnpricedItem(id: $0.id, name: $0.description, unit: $0.unit, type: $0.type)
         }
     }
 
@@ -503,6 +557,38 @@ struct QuoteRecordingView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                }
+
+                // The gaps are on screen and named; this is the cheapest moment
+                // to teach the rate card, because the user is looking at exactly
+                // the prices Verbal didn't know.
+                if missing > 0 {
+                    Button {
+                        showSaveRates = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "list.bullet.rectangle")
+                                .font(.system(size: 17))
+                                .foregroundStyle(Color(.blueAccentText))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Save these to your rate card")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Color(.mainText))
+                                Text("They'll be priced automatically next time.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(14)
+                        .background(Color(.royalBlue25),
+                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
                 }
             }
         }

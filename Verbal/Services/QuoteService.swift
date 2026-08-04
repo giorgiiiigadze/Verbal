@@ -337,6 +337,42 @@ enum QuoteService {
             .execute()
     }
 
+    /// Fill in a price on a draft that was already banked, addressed by the
+    /// line's position. Line items are inserted in order, so position finds
+    /// them without the review screen having to carry server ids around.
+    /// Quantity goes along because an unpriced line often has none, and a unit
+    /// price with no quantity still totals nothing.
+    static func setLineItemPrice(quoteId: UUID, position: Int,
+                                 quantity: Double, unitPrice: Double) async throws {
+        struct Payload: Encodable {
+            let quantity: Double
+            let unitPrice: Double
+            let priceSource: String
+            enum CodingKeys: String, CodingKey {
+                case quantity
+                case unitPrice = "unit_price"
+                case priceSource = "price_source"
+            }
+        }
+        try await client
+            .from("quote_line_items")
+            .update(Payload(quantity: quantity, unitPrice: unitPrice, priceSource: "rate_card"))
+            .eq("quote_id", value: quoteId)
+            .eq("position", value: position)
+            .execute()
+    }
+
+    /// Recompute a quote's subtotal after its line items changed. `tax_amount`
+    /// and `total` are derived from it by a database trigger.
+    static func updateSubtotal(id: UUID, subtotal: Double) async throws {
+        struct Payload: Encodable { let subtotal: Double }
+        try await client
+            .from("quotes")
+            .update(Payload(subtotal: subtotal))
+            .eq("id", value: id)
+            .execute()
+    }
+
     /// Delete a single line item.
     static func deleteLineItem(id: UUID) async throws {
         try await client.from("quote_line_items").delete().eq("id", value: id).execute()
