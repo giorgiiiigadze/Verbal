@@ -2,7 +2,11 @@
 //  Toast.swift
 //  Verbal
 //
-//  Small native liquid-glass toast shown at the bottom of the screen.
+//  Small native liquid-glass toast shown at the top of the screen.
+//
+//  Top rather than bottom: the bottom edge is where the tab bar, the record
+//  button and the recording screen's own controls live, and a toast landing
+//  over them covered the thing the user had just reached for.
 //
 
 import SwiftUI
@@ -54,11 +58,11 @@ private struct ToastModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .overlay(alignment: .bottom) {
+            .overlay(alignment: .top) {
                 if let toast {
                     ToastView(toast: toast)
-                        .padding(.bottom, 60)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                         .task(id: toast) {
                             try? await Task.sleep(for: .seconds(2.5))
                             withAnimation(.spring(duration: 0.35)) { self.toast = nil }
@@ -70,7 +74,7 @@ private struct ToastModifier: ViewModifier {
 }
 
 extension View {
-    /// Presents a native liquid-glass toast at the bottom, auto-dismissing.
+    /// Presents a native liquid-glass toast at the top, auto-dismissing.
     func toast(_ toast: Binding<Toast?>) -> some View {
         modifier(ToastModifier(toast: toast))
     }
