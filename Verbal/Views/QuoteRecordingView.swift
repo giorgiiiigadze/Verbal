@@ -31,6 +31,8 @@ struct QuoteRecordingView: View {
     @State private var micAccessBlocked = false
     /// Offers the prices the extraction was missing to the rate card.
     @State private var showSaveRates = false
+    /// Which of the generating phrases the banner is currently showing.
+    @State private var phraseIndex = 0
     /// Set when the user accepts from that sheet, so recording starts once the
     /// sheet has closed rather than under it.
     @State private var startAfterMicPermission = false
@@ -280,6 +282,8 @@ struct QuoteRecordingView: View {
         isGenerating = true
         notEnough = false
         notEnoughNote = ""
+        // Always open on the first step, however the last run ended.
+        phraseIndex = 0
         Task {
             defer { isGenerating = false }
             guard let result = try? await QuoteService.generate(transcript: transcriptText) else {
@@ -476,6 +480,19 @@ struct QuoteRecordingView: View {
 
     // MARK: - Status banner (while generating)
 
+    /// What the banner says while the extraction runs. Each names a real step of
+    /// the pipeline rather than filling time with a joke — the person watching
+    /// is waiting on a number they are about to quote a customer, and cleverness
+    /// at that moment reads as the app not taking the job seriously.
+    private static let generatingPhrases = [
+        "Reading the job",
+        "Picking out the work",
+        "Checking your rate card",
+        "Pricing the items",
+        "Adding it up",
+        "Writing it up"
+    ]
+
     private var statusBanner: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -487,21 +504,45 @@ struct QuoteRecordingView: View {
                     .frame(width: 26)
                     .foregroundStyle(Color(.blueAccentText))
                     .shimmer(active: true, highlight: .white)
-                Text("Generating your quote…")
+
+                // Each phrase pushes the last one up and out, so the banner
+                // reads as movement through the work rather than one caption
+                // sitting there for eight seconds.
+                Text(Self.generatingPhrases[phraseIndex])
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color(.mainText))
+                    .foregroundStyle(Color(.blueAccentText))
+                    .shimmer(active: true)
+                    .id(phraseIndex)
+                    .transition(.push(from: .top).combined(with: .opacity))
+
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color("Surface"), in: Capsule())
+            // The outgoing phrase has to be trimmed at the capsule's edge, or
+            // it slides out over the transcript behind it.
+            .clipShape(Capsule())
 
             Text("We'll turn your description into an itemized quote in a moment.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
             Divider()
+        }
+        // Tied to the banner's own lifetime: it starts when the banner appears
+        // and is cancelled when generation ends and the banner goes away.
+        .task { await cyclePhrases() }
+    }
+
+    private func cyclePhrases() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(1.8))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.35)) {
+                phraseIndex = (phraseIndex + 1) % Self.generatingPhrases.count
+            }
         }
     }
 
