@@ -16,6 +16,8 @@ struct HomeView: View {
     @State private var isLoading = false
     @State private var filter: QuoteFilter = .all
     @State private var shareTarget: QuoteSummary?
+    /// Held while business details are collected; shared once that sheet closes.
+    @State private var shareAfterDetails: QuoteSummary?
     @State private var quoteToDelete: QuoteSummary?
     @State private var quoteToDuplicate: QuoteSummary?
     @State private var searchText = ""
@@ -71,6 +73,17 @@ struct HomeView: View {
                               : "line.3.horizontal.decrease.circle.fill")
                     }
                 }
+            }
+            .sheet(item: $shareAfterDetails) { quote in
+                BusinessDetailsSheet {
+                    // Continue to the share panel once the details sheet is
+                    // gone, rather than stacking one on top of the other.
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.35))
+                        shareTarget = quote
+                    }
+                }
+                .environment(session)
             }
             .sheet(item: $shareTarget) { quote in
                 ShareQuotePanel(title: quote.displayTitle,
@@ -435,7 +448,13 @@ struct HomeView: View {
     private func share(_ quote: QuoteSummary) {
         Task {
             await session.prefetchLineItems(for: quote.id)
-            shareTarget = quote
+            // Last chance to put a name on the document before a customer reads
+            // it. Whatever they choose, the share still happens.
+            if BusinessPrompt.shouldAsk(session.businessProfile) {
+                shareAfterDetails = quote
+            } else {
+                shareTarget = quote
+            }
         }
     }
 

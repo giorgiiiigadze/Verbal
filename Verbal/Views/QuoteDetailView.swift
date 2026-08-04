@@ -18,6 +18,8 @@ struct QuoteDetailView: View {
     @State private var transcriptText: String?
     @State private var showTranscript = false
     @State private var showShare = false
+    /// Collects business details before the first share, when there are none.
+    @State private var showBusinessDetails = false
     @State private var showEdit = false
     @State private var showDeleteConfirm = false
     @State private var showClientSheet = false
@@ -360,6 +362,16 @@ struct QuoteDetailView: View {
                 Task { lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? lineItems }
             }
         }
+        .sheet(isPresented: $showBusinessDetails) {
+            BusinessDetailsSheet {
+                // Hand over to the share panel after this one has closed.
+                Task {
+                    try? await Task.sleep(for: .seconds(0.35))
+                    showShare = true
+                }
+            }
+            .environment(session)
+        }
         .sheet(isPresented: $showShare) {
             ShareQuotePanel(title: displayTitle,
                             subtitle: shareSubtitle,
@@ -404,7 +416,13 @@ struct QuoteDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    showShare = true
+                    // Ask for business details first if the document would go
+                    // out unheaded; the share follows either way.
+                    if BusinessPrompt.shouldAsk(session.businessProfile) {
+                        showBusinessDetails = true
+                    } else {
+                        showShare = true
+                    }
                 } label: {
                     Text("Share")
                         .fontWeight(.semibold)
