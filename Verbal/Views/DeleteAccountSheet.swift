@@ -74,7 +74,7 @@ struct DeleteAccountSheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button(role: .cancel) { dismiss() }
                 }
             }
             .alert("Delete your account?", isPresented: $showFinalConfirmation) {

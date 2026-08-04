@@ -121,7 +121,7 @@ struct ConvertCurrencySheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }.disabled(isSaving)
+                    Button(role: .cancel) { dismiss() }.disabled(isSaving)
                 }
             }
         }
