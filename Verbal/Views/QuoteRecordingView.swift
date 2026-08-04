@@ -520,7 +520,7 @@ struct QuoteRecordingView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color("Surface"), in: Capsule())
+            .background(Color(.surface), in: Capsule())
             // The outgoing phrase has to be trimmed at the capsule's edge, or
             // it slides out over the transcript behind it.
             .clipShape(Capsule())
