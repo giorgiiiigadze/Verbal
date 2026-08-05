@@ -62,150 +62,173 @@ struct QuoteRecordingView: View {
         title.isEmpty ? "Untitled quote" : title
     }
 
+    /// Identifies the zero-height view pinned below the transcript.
+    private static let transcriptEndAnchor = "transcriptEnd"
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    Group {
-                        if recorder.isRecording {
-                            Text(displayTitle)
-                                .foregroundStyle(.secondary)
-                                .shimmer(active: recorder.hasContent)
-                        } else {
-                            TextField("Untitled quote", text: $title, axis: .vertical)
-                                .foregroundStyle(Color(.mainText))
-                                .textFieldStyle(.plain)
-                                .lineLimit(2)
-                        }
-                    }
-                    .font(.robotoSlab(34, relativeTo: .largeTitle))
-
-                    if generated != nil || notEnough {
-                        chips
-                            .transition(.opacity)
-                    }
-
-                    if isGenerating {
-                        statusBanner
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-
-                    contentArea
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 12)
-                .animation(.easeInOut(duration: 0.35), value: isGenerating)
-            }
-            .background(Color(.homeBackground))
-            .navigationBarTitleDisplayMode(.inline)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y > 44
-            } action: { _, scrolledPastTitle in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    showHeaderTitle = scrolledPastTitle
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                bottomBar
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 8)
-            }
-            .toast($toast)
-            // Record button: firm press-down feel on start, gentle release on stop.
-            .sensoryFeedback(trigger: recorder.isRecording) { _, isRecording in
-                isRecording ? .impact(weight: .medium) : .impact(weight: .light)
-            }
-            // The magic moment — the spoken job became a quote.
-            .sensoryFeedback(.success, trigger: generated != nil) { wasGenerated, isGenerated in
-                !wasGenerated && isGenerated
-            }
-            .sheet(isPresented: $showClientSheet) {
-                ClientSheet(name: $clientName)
-            }
-            .sheet(isPresented: $showTranscript) {
-                TranscriptSheet(text: transcriptText, editable: $transcriptText) {
-                    // Regenerate: clear the current result and re-run the AI extraction.
-                    // The banked draft goes with it, so the rerun replaces the
-                    // quote rather than leaving two.
-                    generated = nil
-                    notEnough = false
-                    discardDraft()
-                    generate()
-                }
-            }
-            .onChange(of: recorder.transcript) { _, newValue in
-                if recorder.isRecording { transcriptText = newValue }
-            }
-            .onChange(of: recorder.isRecording) { wasRecording, isRecording in
-                // When a recording finishes with content, generate the quote.
-                if wasRecording && !isRecording {
-                    generate()
-                }
-            }
-            .onChange(of: recorder.errorMessage) { _, message in
-                // Surface mic / speech-permission or engine failures — otherwise
-                // tapping the mic would appear to do nothing.
-                if let message { toast = Toast(style: .error, message: message) }
-            }
-            .onAppear {
-                // Use the current Settings currency each time the sheet opens.
-                currency = AppCurrency.current.rawValue
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(role: .close) {
-                        // Closing keeps the draft; it just carries any late edits
-                        // to the title or client with it.
-                        if let pending = bankTask {
-                            Task {
-                                if let id = await pending.value { await applyEdits(to: id) }
+            ScrollViewReader { scroll in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        Group {
+                            if recorder.isRecording {
+                                Text(displayTitle)
+                                    .foregroundStyle(.secondary)
+                                    .shimmer(active: recorder.hasContent)
+                            } else {
+                                TextField("Untitled quote", text: $title, axis: .vertical)
+                                    .foregroundStyle(Color(.mainText))
+                                    .textFieldStyle(.plain)
+                                    .lineLimit(2)
                             }
                         }
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .principal) {
-                    if showHeaderTitle {
-                        MarqueeText(text: displayTitle,
-                                    font: .robotoSlab(17, relativeTo: .headline))
-                            .frame(maxWidth: 220)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        transcriptText = removingLastWord(from: transcriptText)
-                    } label: {
-                        Image(systemName: "arrow.uturn.backward")
-                    }
-                    // Once the quote is generated the transcript is history — trimming
-                    // words from it no longer changes anything on screen. After a
-                    // "not enough detail" pass it is still the live transcript, so
-                    // undo keeps working there.
-                    .disabled(transcriptText.isEmpty || recorder.isRecording
-                              || isGenerating || generated != nil)
-                }
-                ToolbarSpacer(.fixed, placement: .topBarTrailing)
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
+                        .font(.robotoSlab(34, relativeTo: .largeTitle))
+
                         if generated != nil || notEnough {
-                            Button {
-                                showTranscript = true
-                            } label: {
-                                Label("View transcript", systemImage: "text.quote")
+                            chips
+                                .transition(.opacity)
+                        }
+
+                        if isGenerating {
+                            statusBanner
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+
+                        contentArea
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        // Something at the very end to scroll to while dictating.
+                        Color.clear
+                            .frame(height: 1)
+                            .id(Self.transcriptEndAnchor)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .animation(.easeInOut(duration: 0.35), value: isGenerating)
+                }
+                .background(Color(.homeBackground))
+                // Follow the words down as they arrive. Speech runs past the
+                // bottom of the screen after a few lines, and a job description is
+                // the point at which the user most wants to see that it heard
+                // "eight metres" and not "eighty".
+                //
+                // Only while recording: once stopped the transcript is theirs to
+                // scroll and edit, and yanking it around would fight them.
+                .onChange(of: transcriptText) { _, _ in
+                    guard recorder.isRecording else { return }
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        scroll.scrollTo(Self.transcriptEndAnchor, anchor: .bottom)
+                    }
+                }
+                .navigationBarTitleDisplayMode(.inline)
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    geometry.contentOffset.y > 44
+                } action: { _, scrolledPastTitle in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showHeaderTitle = scrolledPastTitle
+                    }
+                }
+                .safeAreaInset(edge: .bottom) {
+                    bottomBar
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 8)
+                }
+                .toast($toast)
+                // Record button: firm press-down feel on start, gentle release on stop.
+                .sensoryFeedback(trigger: recorder.isRecording) { _, isRecording in
+                    isRecording ? .impact(weight: .medium) : .impact(weight: .light)
+                }
+                // The magic moment — the spoken job became a quote.
+                .sensoryFeedback(.success, trigger: generated != nil) { wasGenerated, isGenerated in
+                    !wasGenerated && isGenerated
+                }
+                .sheet(isPresented: $showClientSheet) {
+                    ClientSheet(name: $clientName)
+                }
+                .sheet(isPresented: $showTranscript) {
+                    TranscriptSheet(text: transcriptText, editable: $transcriptText) {
+                        // Regenerate: clear the current result and re-run the AI extraction.
+                        // The banked draft goes with it, so the rerun replaces the
+                        // quote rather than leaving two.
+                        generated = nil
+                        notEnough = false
+                        discardDraft()
+                        generate()
+                    }
+                }
+                .onChange(of: recorder.transcript) { _, newValue in
+                    if recorder.isRecording { transcriptText = newValue }
+                }
+                .onChange(of: recorder.isRecording) { wasRecording, isRecording in
+                    // When a recording finishes with content, generate the quote.
+                    if wasRecording && !isRecording {
+                        generate()
+                    }
+                }
+                .onChange(of: recorder.errorMessage) { _, message in
+                    // Surface mic / speech-permission or engine failures — otherwise
+                    // tapping the mic would appear to do nothing.
+                    if let message { toast = Toast(style: .error, message: message) }
+                }
+                .onAppear {
+                    // Use the current Settings currency each time the sheet opens.
+                    currency = AppCurrency.current.rawValue
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(role: .close) {
+                            // Closing keeps the draft; it just carries any late edits
+                            // to the title or client with it.
+                            if let pending = bankTask {
+                                Task {
+                                    if let id = await pending.value { await applyEdits(to: id) }
+                                }
                             }
-                        }
-                        Button(role: .destructive) {
-                            Task { await recorder.stop() }
-                            recorder.reset()
-                            discardDraft()
                             dismiss()
-                        } label: {
-                            Label("Discard recording", systemImage: "trash")
                         }
-                    } label: {
-                        Image(systemName: "ellipsis")
+                    }
+                    ToolbarItem(placement: .principal) {
+                        if showHeaderTitle {
+                            MarqueeText(text: displayTitle,
+                                        font: .robotoSlab(17, relativeTo: .headline))
+                                .frame(maxWidth: 220)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            transcriptText = removingLastWord(from: transcriptText)
+                        } label: {
+                            Image(systemName: "arrow.uturn.backward")
+                        }
+                        // Once the quote is generated the transcript is history — trimming
+                        // words from it no longer changes anything on screen. After a
+                        // "not enough detail" pass it is still the live transcript, so
+                        // undo keeps working there.
+                        .disabled(transcriptText.isEmpty || recorder.isRecording
+                                  || isGenerating || generated != nil)
+                    }
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            if generated != nil || notEnough {
+                                Button {
+                                    showTranscript = true
+                                } label: {
+                                    Label("View transcript", systemImage: "text.quote")
+                                }
+                            }
+                            Button(role: .destructive) {
+                                Task { await recorder.stop() }
+                                recorder.reset()
+                                discardDraft()
+                                dismiss()
+                            } label: {
+                                Label("Discard recording", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                        }
                     }
                 }
             }
