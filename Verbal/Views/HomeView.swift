@@ -387,6 +387,16 @@ struct HomeView: View {
                         )
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
+                } else {
+                    // Not the sample quote — that is a demonstration, and this
+                    // user has made fifty. Just the mark of the thing the button
+                    // does, so the card has a shape instead of being a heading
+                    // and a button adrift in a box.
+                    Image(systemName: "waveform")
+                        .font(.system(size: 34, weight: .medium))
+                        .foregroundStyle(Color(.blueAccentText))
+                        .frame(height: 92)
+                        .accessibilityHidden(true)
                 }
 
                 VStack(spacing: 12) {
@@ -394,21 +404,20 @@ struct HomeView: View {
                         .font(.robotoSlab(22, relativeTo: .title3))
                         .foregroundStyle(Color(.mainText))
                         .multilineTextAlignment(.center)
-                        .padding(.top, hasEverHadQuotes ? 26 : 0)
 
-                    // The one thing a new user can't guess: that they should
-                    // talk in numbers. Without it the first attempt is vague,
-                    // comes back as "not enough detail", and that is the worst
-                    // possible first impression of the whole idea. Someone who
-                    // has quoted before already knows, and being told again
-                    // reads as the app forgetting them.
-                    if !hasEverHadQuotes {
-                        Text("Try saying: “Re-tile the bathroom floor, eighteen square metres at forty-five a metre, and replace the toilet for ninety.”")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    // The first-run line is the one thing a new user can't
+                    // guess: that they should talk in numbers. Without it the
+                    // first attempt is vague, comes back as "not enough detail",
+                    // and that is the worst possible first impression of the
+                    // idea. Someone who has quoted before already knows, so
+                    // theirs says what happens next instead of how to do it.
+                    Text(hasEverHadQuotes
+                         ? "Describe the next job out loud and it'll be priced and waiting here."
+                         : "Try saying: “Re-tile the bathroom floor, eighteen square metres at forty-five a metre, and replace the toilet for ninety.”")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Button {
                         showCreate = true
@@ -435,13 +444,13 @@ struct HomeView: View {
                     .strokeBorder(Color(.separator), lineWidth: 0.5)
             )
 
-            Text(hasEverHadQuotes
-                 ? "Anything you record from here will show up in this list."
-                 : "Quotes you make are saved here. Share one as a PDF when it's ready.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
+            if !hasEverHadQuotes {
+                Text("Quotes you make are saved here. Share one as a PDF when it's ready.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
 
             Spacer(minLength: 0)
         }
