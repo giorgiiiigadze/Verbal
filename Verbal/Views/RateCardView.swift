@@ -90,40 +90,44 @@ struct RateCardView: View {
     private var list: some View {
         List {
             ForEach(items) { item in
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(item.name)
-                            .font(.headline)
-                            .foregroundStyle(Color(.mainText))
-                        Text(item.type.capitalized)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                Button {
+                    itemToEdit = item
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.name)
+                                .font(.headline)
+                                .foregroundStyle(Color(.mainText))
+                            Text(item.type.capitalized)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if let price = item.priceText {
+                            Text(price)
+                                .font(.subheadline.monospacedDigit().weight(.medium))
+                                .foregroundStyle(Color(.blueAccentText))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color(.royalBlue25), in: Capsule())
+                        } else {
+                            Text("No price")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    Spacer()
-                    if let price = item.priceText {
-                        Text(price)
-                            .font(.subheadline.monospacedDigit().weight(.medium))
-                            .foregroundStyle(Color(.blueAccentText))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color(.royalBlue25), in: Capsule())
-                    } else {
-                        Text("No price")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 18)
+                    .background(Color(.cardSurface),
+                                in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                    )
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 18)
-                .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
+                .buttonStyle(CardPressStyle())
                 .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .onTapGesture { itemToEdit = item }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
                 .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
@@ -315,6 +319,18 @@ struct RateCardView: View {
 
 // MARK: - Add form
 
+/// Presses the card rather than the row it sits in. A bare tap gesture leaves
+/// the List to draw its own highlight, which runs the full width of the row and
+/// squares off the corners the card was drawn with — so the feedback lands on a
+/// shape the user can't see. Matches how a quote row behaves.
+private struct CardPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
 /// New rate, or a correction to one that exists.
 ///
 /// The old version was a Settings-style form: four fields of equal weight, a
@@ -363,29 +379,12 @@ private struct AddRateItemView: View {
         !trimmedName.isEmpty && (price ?? 0) > 0
     }
 
-    /// The saved rate this one looks like, if any. Deliberately loose: a warning
-    /// that misses a duplicate costs a wrong price in a customer's hands, while
-    /// one that over-fires costs a glance — and it names the rate it found, so
-    /// a false alarm is obvious immediately.
+    /// The saved rate this one looks like, if any. Shares its comparison with
+    /// the save-from-quote sheet, so both doors into the rate card agree on
+    /// what counts as the same job.
     private var collision: RateCardItem? {
         guard target == nil, trimmedName.count >= 3 else { return nil }
-        let mine = Self.words(trimmedName)
-        guard !mine.isEmpty else { return nil }
-        return existing.first { candidate in
-            guard candidate.id != editing?.id else { return false }
-            let theirs = Self.words(candidate.name)
-            let a = mine.joined(), b = theirs.joined()
-            if a == b || a.contains(b) || b.contains(a) { return true }
-            // A shared long word: "Replace toilet" against "Toilet Installation".
-            return !mine.filter { $0.count >= 5 && theirs.contains($0) }.isEmpty
-        }
-    }
-
-    /// Lowercased alphanumeric words, so "Re-tiling" and "Re tiling" agree.
-    private static func words(_ text: String) -> [String] {
-        text.lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
+        return existing.first { $0.id != editing?.id && $0.looksLike(trimmedName) }
     }
 
     var body: some View {

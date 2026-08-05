@@ -37,6 +37,14 @@ struct SaveRatesSheet: View {
     @State private var prices: [UUID: String] = [:]
     @State private var isSaving = false
     @FocusState private var focusedItem: UUID?
+    /// The rate card as it stands, loaded on appear so each row can say which
+    /// saved rate it would rewrite rather than doing it out of sight.
+    @State private var existing: [RateCardItem] = []
+
+    /// The saved rate this line would rewrite, if any.
+    private func match(for item: UnpricedItem) -> RateCardItem? {
+        existing.first { $0.looksLike(item.name) }
+    }
 
     private var currencySymbol: String {
         AppCurrency(rawValue: currency)?.symbol ?? currency
@@ -156,6 +164,16 @@ struct SaveRatesSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                // Naming it matters: the comparison is loose enough to pair
+                // "Replacement toilet" with "Toilet Installation", and rewriting
+                // the wrong saved price without showing which would be worse
+                // than the duplicate it prevents.
+                if let match = match(for: item) {
+                    Text("Updates “\(match.name)”")
+                        .font(.caption2)
+                        .foregroundStyle(Color(.blueAccentText))
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 8)
 
@@ -187,16 +205,13 @@ struct SaveRatesSheet: View {
     private func save() {
         isSaving = true
         Task {
-            // Repricing an existing rate beats adding a second one under the
-            // same name: the rate card is handed to the extraction whole, and
-            // duplicates would have it choosing between two prices for one job.
-            let existing = (try? await QuoteService.fetchRateCard()) ?? []
+            // Repricing an existing rate beats adding a second one for the same
+            // job: the card is handed to the extraction whole, and duplicates
+            // would have it choosing between two prices and never saying which.
             var saved = 0
 
             for entry in priced {
-                let match = existing.first {
-                    $0.name.compare(entry.item.name, options: .caseInsensitive) == .orderedSame
-                }
+                let match = match(for: entry.item)
                 do {
                     if let match {
                         try await QuoteService.updateRateCardPrice(id: match.id, unitPrice: entry.price)
