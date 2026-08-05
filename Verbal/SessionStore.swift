@@ -99,6 +99,16 @@ final class SessionStore {
         // session. This avoids a flash of the auth page at cold launch,
         // especially offline where the network state isn't known yet.
         if client.auth.currentSession != nil {
+            // Restore from disk here, synchronously, before anything renders.
+            // Home is built underneath the splash rather than after it, and it
+            // copies these lists into its own state the moment it appears — so
+            // a restore that lands even a beat later is one it never sees, and
+            // the user gets "Couldn't load your quotes" with the quotes sitting
+            // on disk. It is a file read; there is nothing to wait for.
+            if let userID = client.auth.currentUser?.id {
+                cachedUserID = userID
+                restoreFromDisk(userID: userID)
+            }
             // Show the app immediately; don't block first paint on the network.
             // The splash dismisses right away (even offline), and the
             // first-paint data streams in via bootstrap() in the background.
@@ -142,10 +152,31 @@ final class SessionStore {
             clearUserData()
         }
         cachedUserID = userID
+        if let userID { restoreFromDisk(userID: userID) }
 
         await refreshProfile()
         await preloadAvatar()
         await preloadLists()
+    }
+
+    /// Paint from the last known responses before the network is consulted.
+    /// Whatever comes back next replaces them; until it does, the user reads
+    /// their own quotes instead of a placeholder or an error.
+    private func restoreFromDisk(userID: UUID) {
+        if let cached = LocalCache.load([QuoteSummary].self, for: .quotes, userID: userID) {
+            quotes = cached
+        }
+        if let cached = LocalCache.load([RateCardItem].self, for: .rateCard, userID: userID) {
+            rateCard = cached
+        }
+        if let cached = LocalCache.load([BusinessProfile].self, for: .businessProfile, userID: userID) {
+            businessProfile = cached.first
+        }
+        // Lets the splash stop waiting and Home draw real rows. On a first run
+        // there is nothing to restore, so the existing wait still applies.
+        if !quotes.isEmpty || !rateCard.isEmpty {
+            listsLoaded = true
+        }
     }
 
     /// Load the Home and Rate Card lists up front so those tabs show data
@@ -170,6 +201,10 @@ final class SessionStore {
     /// what it already has when a fetch fails, so anything left here would be
     /// shown as the new user's own data on a flaky connection.
     private func clearUserData() {
+        // Wipe the disk copy too, and do it before the id is forgotten. Leaving
+        // one account's quotes and client addresses readable on a shared phone
+        // is the same leak the in-memory clearing exists to prevent.
+        if let cachedUserID { LocalCache.clear(userID: cachedUserID) }
         profile = nil
         avatarImage = nil
         avatarUIImage = nil

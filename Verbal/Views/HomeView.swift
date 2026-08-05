@@ -102,6 +102,14 @@ struct HomeView: View {
                 }
                 await load()
             }
+            // Bootstrap can finish after this view has already read an empty
+            // list — signing in reaches Home before the preload returns. Take
+            // what arrives rather than sitting on the empty copy.
+            .onChange(of: session.listsLoaded) { _, loaded in
+                guard loaded, quotes.isEmpty, !session.quotes.isEmpty else { return }
+                quotes = session.quotes
+                loadFailed = false
+            }
             .task(id: outstandingSignature) { await recalculateOutstanding() }
             .refreshable { await load() }
             .alert("Delete this quote?", isPresented: Binding(

@@ -487,7 +487,15 @@ enum QuoteService {
             .select("id, name, unit, unit_price, type, active")
             .eq("user_id", value: userID)
         let filtered = activeOnly ? query.eq("active", value: true) : query
-        return try await filtered.order("name", ascending: true).execute().value
+        let response: PostgrestResponse<[RateCardItem]> = try await filtered
+            .order("name", ascending: true)
+            .execute()
+        // Only the full card is cached; the active-only variant is a subset and
+        // would overwrite it with less than the Rate Card tab needs to show.
+        if !activeOnly {
+            LocalCache.save(response.data, for: .rateCard, userID: userID)
+        }
+        return response.value
     }
 
     static func addRateCardItem(name: String, unit: String?, unitPrice: Double?, type: String) async throws {
@@ -518,13 +526,16 @@ enum QuoteService {
         guard let userID = client.auth.currentUser?.id else {
             throw QuoteError.notSignedIn
         }
-        return try await client
+        let response: PostgrestResponse<[QuoteSummary]> = try await client
             .from("quotes")
             .select("id, title, job_summary, total, status, created_at, currency, pinned, scope, number, validity_date, subtotal, tax_rate, tax_amount, customers(name)")
             .eq("user_id", value: userID)
             .order("created_at", ascending: false)
             .execute()
-            .value
+        // Keep the bytes, not the models — the next launch decodes them the
+        // same way and shows this list before the network is even reachable.
+        LocalCache.save(response.data, for: .quotes, userID: userID)
+        return response.value
     }
 
     /// Pin or unpin a quote (pinned quotes surface in a section at the top).

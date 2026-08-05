@@ -1,0 +1,67 @@
+//
+//  LocalCache.swift
+//  Verbal
+//
+//  Last-known server responses, kept on disk so the app opens with the user's
+//  quotes on it instead of a spinner or an error.
+//
+//  Tradespeople work in basements, lofts and half-built kitchens. Launching
+//  without signal used to show "Couldn't load your quotes" to someone whose
+//  quotes existed perfectly well — they were just on a server that couldn't be
+//  reached. The list is read far more often than it changes, so the last copy
+//  is nearly always the right one to show while a fresh one is fetched.
+//
+//  What is stored is the raw JSON the server sent, not a re-encoded model. The
+//  same bytes through the same decoder round-trip exactly, so no model needs an
+//  Encodable conformance and the cache cannot drift from the network shape as
+//  columns are added.
+//
+
+import Foundation
+import Supabase
+
+enum LocalCache {
+    enum Key: String {
+        case quotes
+        case rateCard
+        case businessProfile
+    }
+
+    /// Kept per account. One shared file would hand the previous user's quotes
+    /// and client details to whoever signs in next on the same phone.
+    private static func directory(for userID: UUID) -> URL? {
+        guard let base = try? FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        ) else { return nil }
+        return base.appendingPathComponent("Cache/\(userID.uuidString)", isDirectory: true)
+    }
+
+    static func save(_ data: Data, for key: Key, userID: UUID) {
+        guard let directory = directory(for: userID) else { return }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // This holds business details and customer names and addresses, so it
+        // stays unreadable until the phone has been unlocked once since boot.
+        try? data.write(
+            to: directory.appendingPathComponent(key.rawValue),
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+        )
+    }
+
+    static func load<T: Decodable>(_ type: T.Type, for key: Key, userID: UUID) -> T? {
+        guard let directory = directory(for: userID),
+              let data = try? Data(contentsOf: directory.appendingPathComponent(key.rawValue))
+        else { return nil }
+        // Decoded exactly as the live response would have been.
+        return try? PostgrestClient.Configuration.jsonDecoder.decode(type, from: data)
+    }
+
+    /// Drop everything held for an account. Called when it signs out or is
+    /// swapped, so nothing of one user's survives into the next one's session.
+    static func clear(userID: UUID) {
+        guard let directory = directory(for: userID) else { return }
+        try? FileManager.default.removeItem(at: directory)
+    }
+}

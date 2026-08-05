@@ -16,14 +16,16 @@ enum BusinessService {
         guard let userID = client.auth.currentUser?.id else {
             throw QuoteError.notSignedIn
         }
-        let rows: [BusinessProfile] = try await client
+        let response: PostgrestResponse<[BusinessProfile]> = try await client
             .from("business_profiles")
             .select()
             .eq("user_id", value: userID)
             .limit(1)
             .execute()
-            .value
-        return rows.first
+        // Cached because the PDF letterhead is built from it: without this, a
+        // quote shared offline would print with no business name on it.
+        LocalCache.save(response.data, for: .businessProfile, userID: userID)
+        return response.value.first
     }
 
     /// Create or update the user's business profile (keyed on user_id).
