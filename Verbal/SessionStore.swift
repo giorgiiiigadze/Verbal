@@ -228,6 +228,13 @@ final class SessionStore {
         // one account's quotes and client addresses readable on a shared phone
         // is the same leak the in-memory clearing exists to prevent.
         if let cachedUserID { LocalCache.clear(userID: cachedUserID) }
+        // "Has had quotes before" describes an account, not a handset. Left set,
+        // a brand new account signing in on a phone that has been used before
+        // is met by the returning-user card and never sees the one written to
+        // explain the app. Cleared here rather than keyed per user because this
+        // runs on exactly the two occasions that matter — signing out, and
+        // swapping accounts — and a cold launch keeps its own id, so it doesn't.
+        UserDefaults.standard.set(false, forKey: "hasEverHadQuotes")
         profile = nil
         avatarImage = nil
         avatarUIImage = nil
