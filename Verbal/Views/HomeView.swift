@@ -455,6 +455,9 @@ struct HomeView: View {
 
             Spacer(minLength: 0)
         }
+        // The same inset the quote rows sit at, so an empty list and a full one
+        // occupy the same column.
+        .padding(.horizontal, 20)
         .padding(.top, 20)
         .frame(maxWidth: .infinity)
     }
