@@ -105,6 +105,20 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
         guard let validityDate else { return false }
         return validityDate < Calendar.current.startOfDay(for: Date())
     }
+
+    /// How the status reads today. Nothing ever wrote "expired" to the column —
+    /// it was only ever selectable by hand — so a quote whose validity date had
+    /// passed went on counting as money in play for as long as the account
+    /// existed, quietly inflating the Home total.
+    ///
+    /// Only an outstanding offer can lapse. Accepted and declined are outcomes
+    /// and a date can't undo them; a draft was never sent, so nothing about it
+    /// has expired. That leaves sent and viewed — exactly the set the
+    /// outstanding figure is built from.
+    var effectiveStatus: String {
+        guard isPastValidity, status == "sent" || status == "viewed" else { return status }
+        return "expired"
+    }
 }
 
 extension Double {

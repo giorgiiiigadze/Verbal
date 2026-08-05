@@ -48,7 +48,9 @@ struct QuoteDetailView: View {
     init(quote: QuoteSummary, initialLineItems: [QuoteLineItem] = [], onDeleted: @escaping () -> Void) {
         self.quote = quote
         self.onDeleted = onDeleted
-        _status = State(initialValue: quote.status)
+        // The status as the list shows it, so a quote filed under Expired there
+        // doesn't call itself Sent the moment it's opened.
+        _status = State(initialValue: quote.effectiveStatus)
         _currency = State(initialValue: quote.currency ?? AppCurrency.current.rawValue)
         _total = State(initialValue: quote.total)
         _title = State(initialValue: quote.title ?? "")

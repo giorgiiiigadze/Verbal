@@ -87,7 +87,7 @@ struct HomeView: View {
             }
             .sheet(item: $shareTarget) { quote in
                 ShareQuotePanel(title: quote.displayTitle,
-                                subtitle: "Total \(AppCurrency.format(quote.total, code: quote.currency)) · \(quote.status.capitalized)",
+                                subtitle: "Total \(AppCurrency.format(quote.total, code: quote.currency)) · \(quote.effectiveStatus.capitalized)",
                                 shareText: shareText(for: quote),
                                 document: pdfDocument(for: quote)) {
                     Task { await markSent(quote) }
@@ -230,7 +230,7 @@ struct HomeView: View {
 
     /// Quotes with a client and no decision yet — the pipeline.
     private var outstanding: [QuoteSummary] {
-        quotes.filter { $0.status == "sent" || $0.status == "viewed" }
+        quotes.filter { $0.effectiveStatus == "sent" || $0.effectiveStatus == "viewed" }
     }
 
     private var outstandingLabel: String {
@@ -447,7 +447,7 @@ struct HomeView: View {
     private var sections: [(title: String, quotes: [QuoteSummary])] {
         let query = searchQuery.lowercased()
         let filtered = quotes.filter { quote in
-            guard filter.matches(quote.status) else { return false }
+            guard filter.matches(quote.effectiveStatus) else { return false }
             guard !query.isEmpty else { return true }
             return quote.displayTitle.lowercased().contains(query)
                 || (quote.jobSummary?.lowercased().contains(query) ?? false)
@@ -459,7 +459,7 @@ struct HomeView: View {
 
         var groups: [QuoteStatusGroup: [QuoteSummary]] = [:]
         for quote in rest {
-            groups[QuoteStatusGroup(status: quote.status), default: []].append(quote)
+            groups[QuoteStatusGroup(status: quote.effectiveStatus), default: []].append(quote)
         }
         var result: [(title: String, quotes: [QuoteSummary])] = []
         if !pinned.isEmpty {
@@ -703,19 +703,19 @@ private struct QuoteRow: View {
     }
 
     private var pillLabel: String {
-        switch quote.status {
+        switch quote.effectiveStatus {
         case "draft": return "Draft"
         case "sent": return "Sent"
         case "viewed": return "Viewed"
         case "accepted": return "Accepted"
         case "declined": return "Declined"
         case "expired": return "Expired"
-        default: return quote.status.capitalized
+        default: return quote.effectiveStatus.capitalized
         }
     }
 
     private var pillForeground: Color {
-        switch quote.status {
+        switch quote.effectiveStatus {
         case "draft": return .orange
         case "viewed": return Color(.blueAccentText)
         case "accepted": return .green
@@ -726,7 +726,7 @@ private struct QuoteRow: View {
     }
 
     private var pillBackground: Color {
-        switch quote.status {
+        switch quote.effectiveStatus {
         case "draft": return .orange.opacity(0.14)
         case "viewed": return Color(.royalBlue50)
         case "accepted": return .green.opacity(0.14)
