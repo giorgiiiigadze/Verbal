@@ -528,6 +528,28 @@ enum QuoteService {
         ).execute()
     }
 
+    /// Rewrite a saved rate. Until this existed a price could only be corrected
+    /// by deleting the rate and retyping it, which is how the card ended up
+    /// holding the same job twice at different prices.
+    static func updateRateCardItem(id: UUID, name: String, unit: String?,
+                                   unitPrice: Double?, type: String) async throws {
+        struct Payload: Encodable {
+            let name: String
+            let unit: String?
+            let unitPrice: Double?
+            let type: String
+            enum CodingKeys: String, CodingKey {
+                case name, unit, type
+                case unitPrice = "unit_price"
+            }
+        }
+        try await client
+            .from("rate_card_items")
+            .update(Payload(name: name, unit: unit, unitPrice: unitPrice, type: type))
+            .eq("id", value: id)
+            .execute()
+    }
+
     /// Update one saved rate's price. Used when the user changes their main
     /// currency and chooses to reprice the rate card rather than relabel it.
     static func updateRateCardPrice(id: UUID, unitPrice: Double) async throws {

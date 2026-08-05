@@ -15,6 +15,8 @@ struct RateCardView: View {
     @State private var isLoading = false
     @State private var showAdd = false
     @State private var itemToDelete: RateCardItem?
+    /// The rate opened for correction.
+    @State private var itemToEdit: RateCardItem?
     @State private var toast: Toast?
     /// True when the last fetch failed — separates "no rates saved" from
     /// "couldn't reach the server", which look identical without it.
@@ -47,7 +49,13 @@ struct RateCardView: View {
             }
         }
         .sheet(isPresented: $showAdd, onDismiss: { Task { await load() } }) {
-            AddRateItemView()
+            AddRateItemView(existing: items)
+        }
+        // Tapping a rate corrects it. Until now a price could only be changed by
+        // deleting the rate and retyping it, which is how the card came to hold
+        // the same job twice at two different prices.
+        .sheet(item: $itemToEdit, onDismiss: { Task { await load() } }) { item in
+            AddRateItemView(existing: items, editing: item)
         }
         .task {
             // Seed from the splash-time preload so the list shows instantly.
@@ -114,10 +122,17 @@ struct RateCardView: View {
                         .strokeBorder(Color(.separator), lineWidth: 0.5)
                 )
                 .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .onTapGesture { itemToEdit = item }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
                 .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
                 .contextMenu {
+                    Button {
+                        itemToEdit = item
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
                     Button(role: .destructive) {
                         itemToDelete = item
                     } label: {
@@ -300,83 +315,265 @@ struct RateCardView: View {
 
 // MARK: - Add form
 
+/// New rate, or a correction to one that exists.
+///
+/// The old version was a Settings-style form: four fields of equal weight, a
+/// full-height sheet, and a "Custom…" unit that opened a second field — which is
+/// how one card ended up holding both "m²" and "square meters". It also had no
+/// idea what was already saved, so the same job could be entered twice at
+/// different prices, and the whole card goes to the model on every extraction:
+/// two prices for one job means it picks one, and the user never learns which.
+///
+/// So the warning is the centrepiece. It watches what's being typed and names
+/// the rate it collides with, with an offer to correct that one instead.
 private struct AddRateItemView: View {
+    /// What's already saved, so a collision can be spotted while it's typed
+    /// rather than discovered months later in a wrong quote.
+    let existing: [RateCardItem]
+    /// Set when the sheet opened to correct a specific rate.
+    var editing: RateCardItem?
+
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var unit = "each"
-    @State private var customUnit = ""
     @State private var priceText = ""
     @State private var type = "labor"
     @State private var isSaving = false
+    /// The rate being corrected — either the one passed in, or one the user
+    /// adopted from the duplicate warning.
+    @State private var target: RateCardItem?
+    @FocusState private var nameFocused: Bool
 
     private let types = ["labor", "material", "other"]
     private let commonUnits = ["each", "m²", "m", "hour", "day", "job", "litre", "kg"]
-    private let customTag = "__custom__"
 
-    /// The unit to persist — the picked common unit, or the typed custom one.
-    private var resolvedUnit: String? {
-        let value = unit == customTag ? customUnit.trimmingCharacters(in: .whitespaces) : unit
-        return value.isEmpty ? nil : value
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var price: Double? {
+        let cleaned = priceText.replacingOccurrences(of: ",", with: ".")
+            .trimmingCharacters(in: .whitespaces)
+        return cleaned.isEmpty ? nil : Double(cleaned)
+    }
+
+    /// A price is required. A rate without one can't price anything — it just
+    /// rides along in every extraction request as noise.
     private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
+        !trimmedName.isEmpty && (price ?? 0) > 0
+    }
+
+    /// The saved rate this one looks like, if any. Deliberately loose: a warning
+    /// that misses a duplicate costs a wrong price in a customer's hands, while
+    /// one that over-fires costs a glance — and it names the rate it found, so
+    /// a false alarm is obvious immediately.
+    private var collision: RateCardItem? {
+        guard target == nil, trimmedName.count >= 3 else { return nil }
+        let mine = Self.words(trimmedName)
+        guard !mine.isEmpty else { return nil }
+        return existing.first { candidate in
+            guard candidate.id != editing?.id else { return false }
+            let theirs = Self.words(candidate.name)
+            let a = mine.joined(), b = theirs.joined()
+            if a == b || a.contains(b) || b.contains(a) { return true }
+            // A shared long word: "Replace toilet" against "Toilet Installation".
+            return !mine.filter { $0.count >= 5 && theirs.contains($0) }.isEmpty
+        }
+    }
+
+    /// Lowercased alphanumeric words, so "Re-tiling" and "Re tiling" agree.
+    private static func words(_ text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Item") {
-                    TextField("Name (e.g. Re-tiling)", text: $name)
-                    Picker("Type", selection: $type) {
-                        ForEach(types, id: \.self) { Text($0.capitalized).tag($0) }
-                    }
-                }
-                .listRowBackground(Color(.surface))
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(target == nil ? "New rate" : "Edit rate")
+                    .font(.robotoSlab(22, relativeTo: .title2))
+                    .foregroundStyle(Color(.mainText))
+                Spacer()
+                Button(role: .close) { dismiss() }
+            }
 
-                Section("Price") {
-                    TextField("Unit price", text: $priceText)
-                        .keyboardType(.decimalPad)
-                    Picker("Unit", selection: $unit) {
-                        ForEach(commonUnits, id: \.self) { Text($0).tag($0) }
-                        Text("Custom…").tag(customTag)
+            Text("Verbal fills this in automatically next time you quote the same work.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    field("What is it? (e.g. Re-tiling)", text: $name)
+                        .focused($nameFocused)
+                        .textInputAutocapitalization(.sentences)
+
+                    if let collision { duplicateWarning(collision) }
+
+                    HStack(spacing: 10) {
+                        HStack(spacing: 4) {
+                            Text(AppCurrency.current.symbol).foregroundStyle(.secondary)
+                            TextField("0", text: $priceText)
+                                .keyboardType(.decimalPad)
+                        }
+                        .font(.body.monospacedDigit())
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(Color(.cardSurface),
+                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(Color(.separator), lineWidth: 0.5)
+                        )
+
+                        Picker("Type", selection: $type) {
+                            ForEach(types, id: \.self) { Text($0.capitalized).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 168)
                     }
-                    if unit == customTag {
-                        TextField("Custom unit", text: $customUnit)
+
+                    // Tappable rather than a picker with a "Custom…" escape
+                    // hatch: the two-step is what let the same unit be typed
+                    // two different ways.
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Per")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 8) {
+                                ForEach(unitOptions, id: \.self) { option in
+                                    Button { unit = option } label: {
+                                        Text(option)
+                                            .font(.subheadline.weight(.medium))
+                                            .foregroundStyle(unit == option
+                                                             ? .white : Color(.mainText))
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 9)
+                                            .background(unit == option
+                                                        ? Color(.royalBlue600) : Color(.cardSurface),
+                                                        in: Capsule())
+                                            .overlay(
+                                                Capsule().strokeBorder(
+                                                    unit == option ? .clear : Color(.separator),
+                                                    lineWidth: 0.5)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .scrollIndicators(.hidden)
+                        .scrollClipDisabled()
                     }
                 }
-                .listRowBackground(Color(.surface))
+                .padding(.top, 20)
             }
-            .scrollContentBackground(.hidden)
-            .background(Color(.homeBackground))
-            .navigationTitle("New rate")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(role: .cancel) { dismiss() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") { save() }
-                        .disabled(!canSave || isSaving)
-                        .fontWeight(.semibold)
-                }
-            }
+            .scrollBounceBehavior(.basedOnSize)
         }
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
+        .safeAreaInset(edge: .bottom) {
+            Button { save() } label: {
+                Group {
+                    if isSaving {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(target == nil ? "Save rate" : "Update rate").font(.headline)
+                    }
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background(canSave ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
+                            in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSave || isSaving)
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+            .background(Color(.surface))
+        }
+        .presentationDetents([.height(470)])
+        .presentationCornerRadius(28)
+        .presentationBackground(Color(.surface))
+        .task {
+            if let editing { adopt(editing) }
+            try? await Task.sleep(for: .seconds(0.35))
+            nameFocused = true
+        }
+    }
+
+    /// Always offers the current unit, so a rate saved with something unusual
+    /// doesn't lose it just by being opened.
+    private var unitOptions: [String] {
+        commonUnits.contains(unit) ? commonUnits : [unit] + commonUnits
+    }
+
+    private func duplicateWarning(_ item: RateCardItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(LineItemRow.amber)
+                .frame(width: 6, height: 6)
+                .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("You already have “\(item.name)”\(item.priceText.map { " at \($0)" } ?? "")")
+                    .font(.footnote)
+                    .foregroundStyle(Color(.mainText))
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Correct that one instead") { adopt(item) }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color(.blueAccentText))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(LineItemRow.amber.opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    /// Load an existing rate into the form and switch to correcting it.
+    private func adopt(_ item: RateCardItem) {
+        target = item
+        name = item.name
+        unit = item.unit ?? "each"
+        type = item.type
+        priceText = item.unitPrice.map {
+            $0 == $0.rounded() ? String(Int($0)) : String($0)
+        } ?? ""
     }
 
     private func save() {
         isSaving = true
-        let price = Double(priceText.replacingOccurrences(of: ",", with: "."))
         Task {
-            try? await QuoteService.addRateCardItem(
-                name: name.trimmingCharacters(in: .whitespaces),
-                unit: resolvedUnit,
-                unitPrice: price,
-                type: type
-            )
+            if let target {
+                try? await QuoteService.updateRateCardItem(
+                    id: target.id, name: trimmedName, unit: unit,
+                    unitPrice: price, type: type)
+            } else {
+                try? await QuoteService.addRateCardItem(
+                    name: trimmedName, unit: unit, unitPrice: price, type: type)
+            }
             isSaving = false
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             dismiss()
         }
+    }
+
+    private func field(_ placeholder: String, text: Binding<String>) -> some View {
+        TextField(placeholder, text: text)
+            .textFieldStyle(.plain)
+            .foregroundStyle(Color(.mainText))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color(.cardSurface),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
     }
 }
