@@ -10,6 +10,10 @@ struct ContentView: View {
     @State private var session: SessionStore
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
+    /// Set when the user swipes the offline banner away. Cleared on reconnect,
+    /// so dismissing one drop-out doesn't silence the next one.
+    @State private var offlineBannerDismissed = false
+
     @State private var minSplashElapsed = false
     /// Caps how long the splash will wait for the preloaded lists, so a slow
     /// or offline launch still reaches the app promptly.
@@ -44,14 +48,46 @@ struct ContentView: View {
                     .transition(.opacity)
             }
 
-            if !showSplash && !network.isOnline {
+            if !showSplash && !network.isOnline && !offlineBannerDismissed {
                 OfflineBanner()
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    // Arrives from below, but doesn't leave the same way — a
+                    // banner sliding back down reads as being dropped. Going
+                    // out it eases off: shrinks a little, drifts down a touch,
+                    // and fades, so it settles away instead of vanishing.
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .scale(scale: 0.94)
+                            .combined(with: .offset(y: 14))
+                            .combined(with: .opacity)
+                    ))
                     .frame(maxHeight: .infinity, alignment: .bottom)
+                    // Says its piece and leaves. Being told you're offline is
+                    // worth knowing once; sitting over the app for as long as
+                    // the signal is gone is just a thing in the way, and the
+                    // app is built to keep working without a connection.
+                    //
+                    // Tied to the banner's own lifetime, so coming back online
+                    // cancels it rather than leaving a timer to fire into
+                    // nothing.
+                    .task {
+                        try? await Task.sleep(for: .seconds(4))
+                        guard !Task.isCancelled else { return }
+                        // Slower going than coming, and no bounce: a spring
+                        // would draw the eye back to something that is on its
+                        // way out.
+                        withAnimation(.smooth(duration: 0.45)) {
+                            offlineBannerDismissed = true
+                        }
+                    }
             }
         }
         .animation(.easeInOut(duration: 0.35), value: showSplash)
         .animation(.spring(duration: 0.4), value: network.isOnline)
+        .onChange(of: network.isOnline) { _, isOnline in
+            // Re-arm on reconnect: the next time the signal goes, that's news
+            // again and worth saying.
+            if isOnline { offlineBannerDismissed = false }
+        }
         .task {
             await session.start()
         }
