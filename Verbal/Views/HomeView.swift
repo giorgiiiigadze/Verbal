@@ -18,6 +18,8 @@ struct HomeView: View {
     @State private var shareTarget: QuoteSummary?
     /// Held while business details are collected; shared once that sheet closes.
     @State private var shareAfterDetails: QuoteSummary?
+    /// Held while the unpriced-items warning is answered.
+    @State private var shareAfterWarning: QuoteSummary?
     @State private var quoteToDelete: QuoteSummary?
     @State private var quoteToDuplicate: QuoteSummary?
     @State private var searchText = ""
@@ -76,14 +78,25 @@ struct HomeView: View {
             }
             .sheet(item: $shareAfterDetails) { quote in
                 BusinessDetailsSheet {
-                    // Continue to the share panel once the details sheet is
-                    // gone, rather than stacking one on top of the other.
+                    // Continue once the details sheet is gone, rather than
+                    // stacking one on top of the other.
                     Task {
                         try? await Task.sleep(for: .seconds(0.35))
-                        shareTarget = quote
+                        confirmThenShare(quote)
                     }
                 }
                 .environment(session)
+            }
+            // Same shape as the delete and duplicate confirmations below —
+            // a question, a plain action, and Cancel.
+            .alert(unpricedTitle, isPresented: Binding(
+                get: { shareAfterWarning != nil },
+                set: { if !$0 { shareAfterWarning = nil } }
+            ), presenting: shareAfterWarning) { quote in
+                Button("Share anyway") { shareTarget = quote }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("They'll print as “TBC” and the total won't include them.")
             }
             .sheet(item: $shareTarget) { quote in
                 ShareQuotePanel(title: quote.displayTitle,
@@ -493,9 +506,30 @@ struct HomeView: View {
             if BusinessPrompt.shouldAsk(session.businessProfile) {
                 shareAfterDetails = quote
             } else {
-                shareTarget = quote
+                confirmThenShare(quote)
             }
         }
+    }
+
+    /// Warn when the quote still has gaps, then share either way. Never blocks:
+    /// a price the supplier hasn't given yet is a normal thing to send as TBC.
+    private func confirmThenShare(_ quote: QuoteSummary) {
+        if unpricedCount(for: quote) > 0 {
+            shareAfterWarning = quote
+        } else {
+            shareTarget = quote
+        }
+    }
+
+    /// Reads the line items prefetched just before this — the summary row alone
+    /// doesn't know what's inside a quote.
+    private func unpricedCount(for quote: QuoteSummary) -> Int {
+        (session.lineItems(for: quote.id) ?? []).filter(\.isMissingPrice).count
+    }
+
+    private var unpricedTitle: String {
+        let count = shareAfterWarning.map(unpricedCount(for:)) ?? 0
+        return "Share with \(count) item\(count == 1 ? "" : "s") unpriced?"
     }
 
     /// The quote as a printable document, for the share panel's PDF.

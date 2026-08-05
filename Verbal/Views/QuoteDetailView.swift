@@ -20,6 +20,25 @@ struct QuoteDetailView: View {
     @State private var showShare = false
     /// Collects business details before the first share, when there are none.
     @State private var showBusinessDetails = false
+    /// Confirms sending a quote that still has gaps in it.
+    @State private var showUnpricedWarning = false
+
+    /// Ask for business details first if the document would go out unheaded,
+    /// then warn about gaps, then share. Each step is skipped when it has
+    /// nothing to say, so the common case is still one tap.
+    private func beginShare() {
+        if BusinessPrompt.shouldAsk(session.businessProfile) {
+            showBusinessDetails = true
+        } else if missingCount > 0 {
+            showUnpricedWarning = true
+        } else {
+            showShare = true
+        }
+    }
+
+    private var unpricedTitle: String {
+        "Share with \(missingCount) item\(missingCount == 1 ? "" : "s") unpriced?"
+    }
     @State private var showEdit = false
     @State private var showDeleteConfirm = false
     @State private var showClientSheet = false
@@ -366,13 +385,23 @@ struct QuoteDetailView: View {
         }
         .sheet(isPresented: $showBusinessDetails) {
             BusinessDetailsSheet {
-                // Hand over to the share panel after this one has closed.
+                // Hand over after this one has closed — to the warning if there
+                // is one to give, otherwise straight to the share panel.
                 Task {
                     try? await Task.sleep(for: .seconds(0.35))
-                    showShare = true
+                    if missingCount > 0 { showUnpricedWarning = true } else { showShare = true }
                 }
             }
             .environment(session)
+        }
+        // A warning, never a block. A price the supplier hasn't given yet is a
+        // normal thing to send as TBC — the quote just shouldn't leave without
+        // the user knowing it has holes in it.
+        .alert(unpricedTitle, isPresented: $showUnpricedWarning) {
+            Button("Share anyway") { showShare = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("They'll print as “TBC” and the total won't include them.")
         }
         .sheet(isPresented: $showShare) {
             ShareQuotePanel(title: displayTitle,
@@ -418,13 +447,7 @@ struct QuoteDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    // Ask for business details first if the document would go
-                    // out unheaded; the share follows either way.
-                    if BusinessPrompt.shouldAsk(session.businessProfile) {
-                        showBusinessDetails = true
-                    } else {
-                        showShare = true
-                    }
+                    beginShare()
                 } label: {
                     Text("Share")
                         .fontWeight(.semibold)
