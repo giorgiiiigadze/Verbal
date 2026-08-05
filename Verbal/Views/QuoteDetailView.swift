@@ -51,6 +51,8 @@ struct QuoteDetailView: View {
     @State private var scope: [String]
     /// Live status — editable via the status chip menu, persisted to Supabase.
     @State private var status: String
+    /// Live validity — editable via the validity chip, persisted to Supabase.
+    @State private var validityDate: Date?
     /// Live currency — editable via the currency chip, persisted to Supabase.
     @State private var currency: String
     /// Live total — updated when the quote is converted to another currency.
@@ -70,6 +72,7 @@ struct QuoteDetailView: View {
         // The status as the list shows it, so a quote filed under Expired there
         // doesn't call itself Sent the moment it's opened.
         _status = State(initialValue: quote.effectiveStatus)
+        _validityDate = State(initialValue: quote.validityDate)
         _currency = State(initialValue: quote.currency ?? AppCurrency.current.rawValue)
         _total = State(initialValue: quote.total)
         _title = State(initialValue: quote.title ?? "")
@@ -123,13 +126,25 @@ struct QuoteDetailView: View {
                 QuoteChip(text: dateLabel) {
                     Image(systemName: "calendar")
                 }
-                // 4. How long the price holds.
-                if let validityLabel {
-                    QuoteChip(text: validityLabel) {
-                        Image(systemName: quote.isPastValidity
+                // 4. How long the price holds — tap to move it. Until this was
+                // editable an expired quote could not be revived at all: the
+                // date was set once at creation and nothing could reach it, so
+                // extending an offer meant duplicating the quote.
+                Menu {
+                    ForEach(Self.validityExtensions, id: \.days) { option in
+                        Button {
+                            changeValidity(toDaysFromToday: option.days)
+                        } label: {
+                            Label(option.label, systemImage: "clock.arrow.circlepath")
+                        }
+                    }
+                } label: {
+                    QuoteChip(text: validityLabel, tinted: isPastValidity) {
+                        Image(systemName: isPastValidity
                               ? "clock.badge.exclamationmark" : "clock")
                     }
                 }
+                .buttonStyle(.plain)
                 // 3. Currency — tap to change this quote's currency.
                 Menu {
                     Picker("Currency", selection: Binding(
@@ -238,7 +253,7 @@ struct QuoteDetailView: View {
             number: quote.number,
             clientName: clientName.isEmpty ? nil : clientName,
             createdAt: quote.createdAt,
-            validityDate: quote.validityDate,
+            validityDate: validityDate,
             jobSummary: jobSummary.isEmpty ? nil : jobSummary,
             scope: scope,
             lineItems: lineItems,
@@ -254,11 +269,27 @@ struct QuoteDetailView: View {
     private var dateLabel: String { quoteDateLabel(quote.createdAt) }
 
     /// "Valid to 14 Aug 2026" while it still holds, "Expired 2 Aug 2026" after.
-    private var validityLabel: String? {
-        guard let date = quote.validityDate else { return nil }
-        let day = QuoteDateFormat.display(date)
-        return quote.isPastValidity ? "Expired \(day)" : "Valid to \(day)"
+    private var validityLabel: String {
+        guard let validityDate else { return "Add validity" }
+        let day = QuoteDateFormat.display(validityDate)
+        return isPastValidity ? "Expired \(day)" : "Valid to \(day)"
     }
+
+    /// Read from the live date so extending a quote un-expires it immediately,
+    /// rather than after a refetch.
+    private var isPastValidity: Bool {
+        guard let validityDate else { return false }
+        return validityDate < Calendar.current.startOfDay(for: Date())
+    }
+
+    /// Offered from the chip. All relative to today, because the reason to
+    /// touch this is almost always "give them another couple of weeks".
+    private static let validityExtensions: [(days: Int, label: String)] = [
+        (7, "1 week from today"),
+        (14, "2 weeks from today"),
+        (30, "30 days from today"),
+        (60, "60 days from today")
+    ]
 
     private var statusLabel: String { statusLabel(for: status) }
     private var statusIcon: String { statusIcon(for: status) }
@@ -294,6 +325,35 @@ struct QuoteDetailView: View {
     }
 
     /// Optimistically update the chip and persist; revert on failure.
+    private func changeValidity(toDaysFromToday days: Int) {
+        let calendar = Calendar.current
+        guard let newDate = calendar.date(byAdding: .day, value: days,
+                                          to: calendar.startOfDay(for: Date())) else { return }
+        let previousDate = validityDate
+        let previousStatus = status
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            validityDate = newDate
+            // Extending revives a quote the list had filed under Expired, and
+            // that was only ever a reading of the date — so the status chip has
+            // to stop saying it. The stored column is what it reverts to.
+            if status == "expired", quote.status != "expired" {
+                status = quote.status
+            }
+        }
+
+        Task {
+            do {
+                try await QuoteService.updateValidityDate(id: quote.id, date: newDate)
+            } catch {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    validityDate = previousDate
+                    status = previousStatus
+                }
+            }
+        }
+    }
+
     private func changeStatus(to newStatus: String) {
         guard newStatus != status else { return }
         let previous = status

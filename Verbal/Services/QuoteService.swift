@@ -401,6 +401,20 @@ enum QuoteService {
             .execute()
     }
 
+    /// Move a quote's validity date. Sent as "yyyy-MM-dd" because the column is
+    /// a Postgres `date`, not a timestamp — the same format it comes back in.
+    static func updateValidityDate(id: UUID, date: Date) async throws {
+        struct Payload: Encodable {
+            let validityDate: String
+            enum CodingKeys: String, CodingKey { case validityDate = "validity_date" }
+        }
+        try await client
+            .from("quotes")
+            .update(Payload(validityDate: QuoteDateFormat.dayOnly.string(from: date)))
+            .eq("id", value: id)
+            .execute()
+    }
+
     /// Rename a quote. Used when a draft's title is edited after the draft was
     /// already banked at generation time.
     static func updateTitle(id: UUID, title: String?) async throws {
