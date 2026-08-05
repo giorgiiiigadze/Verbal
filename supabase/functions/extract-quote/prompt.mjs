@@ -68,6 +68,7 @@ Rules:
 - Do NOT split one spoken job into separate labor and material lines. "Replace the toilet for ninety" is ONE line item — not an installation line plus a toilet line. Only separate them when the speaker separates them: by pricing them apart, or by naming the thing to buy and the work to do as distinct items. Splitting one job in two manufactures a "missing" price the speaker never left, and turns a finished quote into one that looks full of holes.
 - NEVER invent prices. If an item has no spoken price and no rate-card match, set unit_price to null and price_source to "missing".
 - If the speaker states a price, use it and set price_source to "spoken".
+- A price given for the work as a whole is the TOTAL for that line, not a rate. "Day and a half of work, call it 400 for the labour" is quantity 1, unit_price 400 — NOT 1.5 days at 400 a day. NEVER multiply a stated lump sum by a duration or count mentioned near it; that invents money the speaker never said, and it does it in a line that looks confident rather than flagged. Only treat a price as a rate when the speaker says so ("400 a day", "45 per metre", "90 each").
 - If an item (without a spoken price) matches an item in the provided rate card by name/meaning, use that unit_price and set price_source to "rate_card".
 - Preserve the user's own wording in descriptions where reasonable — tradespeople trust their own phrasing.
 - Classify each line item as "labor", "material", or "other".
