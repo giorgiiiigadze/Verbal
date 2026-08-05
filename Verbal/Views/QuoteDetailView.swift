@@ -409,6 +409,11 @@ struct QuoteDetailView: View {
             if let fresh = try? await QuoteService.fetchLineItems(quoteId: quote.id) {
                 lineItems = fresh
                 session.cacheLineItems(fresh, for: quote.id)
+            } else if lineItems.isEmpty {
+                // Offline, and this quote was opened before its row had a
+                // chance to prefetch. Ask the store, which falls back to disk.
+                await session.prefetchLineItems(for: quote.id)
+                if let stored = session.lineItems(for: quote.id) { lineItems = stored }
             }
             transcriptText = (try? await QuoteService.fetchTranscript(quoteId: quote.id)) ?? nil
         }

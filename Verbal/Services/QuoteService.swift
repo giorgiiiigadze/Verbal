@@ -175,13 +175,18 @@ enum QuoteService {
 
     /// Fetch a quote's line items, in order.
     static func fetchLineItems(quoteId: UUID) async throws -> [QuoteLineItem] {
-        try await client
+        let response: PostgrestResponse<[QuoteLineItem]> = try await client
             .from("quote_line_items")
             .select("id, description, type, quantity, unit, unit_price, price_source, position")
             .eq("quote_id", value: quoteId)
             .order("position", ascending: true)
             .execute()
-            .value
+        // Cached so a quote opened offline shows its work rather than an empty
+        // table — the list surviving without its contents is half a feature.
+        if let userID = client.auth.currentUser?.id {
+            LocalCache.save(response.data, for: .lineItems(quoteID: quoteId), userID: userID)
+        }
+        return response.value
     }
 
     /// Fetch the transcript text saved with a quote.

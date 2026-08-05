@@ -79,6 +79,15 @@ final class SessionStore {
         guard lineItemsCache[quoteID] == nil else { return }
         if let items = try? await QuoteService.fetchLineItems(quoteId: quoteID) {
             lineItemsCache[quoteID] = items
+            return
+        }
+        // Offline. The stored copy is what this quote looked like last time it
+        // was read, which beats opening it to an empty table.
+        if let cachedUserID,
+           let stored = LocalCache.load([QuoteLineItem].self,
+                                        for: .lineItems(quoteID: quoteID),
+                                        userID: cachedUserID) {
+            lineItemsCache[quoteID] = stored
         }
     }
 
@@ -171,6 +180,20 @@ final class SessionStore {
         }
         if let cached = LocalCache.load([BusinessProfile].self, for: .businessProfile, userID: userID) {
             businessProfile = cached.first
+        }
+        // Line items for everything just restored. Without this the memory
+        // cache starts empty, so the only routes to the stored copy are behind
+        // a network call that has to fail first — and offline that failure is
+        // not instant. The quote opens to an empty table, and the items arrive
+        // seconds later or not at all. These are small local reads; doing them
+        // now means a quote opened offline has its contents from the first
+        // frame, the same way the list does.
+        for quote in quotes {
+            if let items = LocalCache.load([QuoteLineItem].self,
+                                           for: .lineItems(quoteID: quote.id),
+                                           userID: userID) {
+                lineItemsCache[quote.id] = items
+            }
         }
         // Lets the splash stop waiting and Home draw real rows. On a first run
         // there is nothing to restore, so the existing wait still applies.

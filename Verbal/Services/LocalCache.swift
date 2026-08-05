@@ -21,10 +21,23 @@ import Foundation
 import Supabase
 
 enum LocalCache {
-    enum Key: String {
+    enum Key {
         case quotes
         case rateCard
         case businessProfile
+        /// One file per quote. Line items are fetched a quote at a time as rows
+        /// come into view, so they're stored the same way rather than as one
+        /// blob that every prefetch would have to rewrite.
+        case lineItems(quoteID: UUID)
+
+        var filename: String {
+            switch self {
+            case .quotes: return "quotes"
+            case .rateCard: return "rateCard"
+            case .businessProfile: return "businessProfile"
+            case .lineItems(let quoteID): return "lineItems-\(quoteID.uuidString)"
+            }
+        }
     }
 
     /// Kept per account. One shared file would hand the previous user's quotes
@@ -45,14 +58,14 @@ enum LocalCache {
         // This holds business details and customer names and addresses, so it
         // stays unreadable until the phone has been unlocked once since boot.
         try? data.write(
-            to: directory.appendingPathComponent(key.rawValue),
+            to: directory.appendingPathComponent(key.filename),
             options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
         )
     }
 
     static func load<T: Decodable>(_ type: T.Type, for key: Key, userID: UUID) -> T? {
         guard let directory = directory(for: userID),
-              let data = try? Data(contentsOf: directory.appendingPathComponent(key.rawValue))
+              let data = try? Data(contentsOf: directory.appendingPathComponent(key.filename))
         else { return nil }
         // Decoded exactly as the live response would have been.
         return try? PostgrestClient.Configuration.jsonDecoder.decode(type, from: data)
