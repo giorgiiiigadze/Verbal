@@ -437,6 +437,7 @@ struct HomeView: View {
                 .padding(.horizontal, 22)
                 .padding(.bottom, 24)
             }
+            .frame(maxWidth: .infinity)
             .background(Color(.royalBlue25),
                         in: RoundedRectangle(cornerRadius: 26, style: .continuous))
             .overlay(
@@ -454,7 +455,6 @@ struct HomeView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
         .padding(.top, 20)
         .frame(maxWidth: .infinity)
     }
