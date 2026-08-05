@@ -472,7 +472,9 @@ enum QuoteService {
                     unitPrice: $0.unitPrice,
                     priceSource: $0.priceSource
                 )
-            }
+            },
+            clientName: q.customer?.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+            flags: q.flags ?? []
         )
     }
 
@@ -725,6 +727,12 @@ struct GeneratedQuote: Sendable {
     var scope: [String]
     var notes: String?
     var lineItems: [GeneratedLineItem]
+    /// The client the speaker named, if they named one. A suggestion only —
+    /// the user's own typing always wins.
+    var clientName: String?
+    /// What the model wants looked at before this goes to a customer: prices it
+    /// couldn't find, quantities it wasn't sure it heard right.
+    var flags: [String]
 }
 
 struct GeneratedLineItem: Identifiable, Sendable {
@@ -836,13 +844,23 @@ private struct ExtractedQuote: Decodable {
     let scope: [String]
     let notes: String?
     let lineItems: [ExtractedLineItem]
+    /// Both are required by the schema, so the model always sends them — but
+    /// their contents are nullable and older responses predate them, so neither
+    /// is worth failing a whole extraction over.
+    let customer: ExtractedCustomer?
+    let flags: [String]?
 
     enum CodingKeys: String, CodingKey {
         case title
         case jobSummary = "job_summary"
-        case scope, notes
+        case scope, notes, customer, flags
         case lineItems = "line_items"
     }
+}
+
+private struct ExtractedCustomer: Decodable {
+    let name: String?
+    let address: String?
 }
 
 private struct ExtractedLineItem: Decodable {

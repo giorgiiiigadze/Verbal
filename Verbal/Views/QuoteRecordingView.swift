@@ -306,6 +306,14 @@ struct QuoteRecordingView: View {
                     if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         title = result.title
                     }
+                    // Same for the client: if the job was described as being for
+                    // someone by name, that name was already extracted, and
+                    // making the user type it again is asking them for something
+                    // they just said. Anything they typed themselves wins.
+                    if clientName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                       let suggested = result.clientName, !suggested.isEmpty {
+                        clientName = suggested
+                    }
                 }
             }
             // Bank it straight away, before the user has a chance to lose it —
@@ -598,6 +606,38 @@ struct QuoteRecordingView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                }
+
+                // What the model wasn't sure about, in its own words. It has
+                // been producing these all along — the schema has always
+                // required them — and nothing ever read them, so the one part
+                // of the extraction that knows where it might be wrong stayed
+                // invisible. Sits above the rate-card prompt because the two
+                // usually concern the same lines.
+                if !quote.flags.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Worth checking")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(LineItemRow.amber)
+                        ForEach(quote.flags, id: \.self) { flag in
+                            HStack(alignment: .top, spacing: 8) {
+                                Circle()
+                                    .fill(LineItemRow.amber)
+                                    .frame(width: 5, height: 5)
+                                    .padding(.top, 6)
+                                Text(flag)
+                                    .font(.footnote)
+                                    .foregroundStyle(Color(.mainText))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(LineItemRow.amber.opacity(0.08),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .padding(.top, 4)
                 }
 
                 // The gaps are on screen and named; this is the cheapest moment
