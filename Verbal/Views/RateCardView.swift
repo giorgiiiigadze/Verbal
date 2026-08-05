@@ -16,12 +16,19 @@ struct RateCardView: View {
     @State private var showAdd = false
     @State private var itemToDelete: RateCardItem?
     @State private var toast: Toast?
+    /// True when the last fetch failed — separates "no rates saved" from
+    /// "couldn't reach the server", which look identical without it.
+    @State private var loadFailed = false
 
     var body: some View {
         Group {
             if items.isEmpty && !hasLoaded {
                 // Still loading first paint — stay blank, not "no prices".
                 Color(.homeBackground)
+            } else if items.isEmpty && loadFailed {
+                // Don't invite someone to save their usual prices when the app
+                // simply couldn't reach the ones they already have.
+                errorState
             } else if items.isEmpty {
                 emptyState
             } else {
@@ -49,6 +56,13 @@ struct RateCardView: View {
                 hasLoaded = session.listsLoaded
             }
             await load()
+        }
+        // Bootstrap can finish after this view has already read an empty list —
+        // signing in reaches the tabs before the preload returns.
+        .onChange(of: session.listsLoaded) { _, loaded in
+            guard loaded, items.isEmpty, !session.rateCard.isEmpty else { return }
+            items = session.rateCard
+            loadFailed = false
         }
         .refreshable { await load() }
         .alert("Delete this rate?", isPresented: Binding(
@@ -126,33 +140,150 @@ struct RateCardView: View {
         .scrollContentBackground(.hidden)
     }
 
+    /// A cousin of the Home empty state, deliberately quieter. This is a
+    /// supporting tab, and if every screen opens with a hero card then none of
+    /// them is the important one — so the sample is two rows rather than a whole
+    /// quote, and the heading stays plain rather than taking the display serif.
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 16) {
+            VStack(spacing: 0) {
+                sampleRates
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
+                    .frame(height: 104, alignment: .top)
+                    .clipped()
+                    .mask(
+                        LinearGradient(colors: [.black, .black, .clear],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+
+                VStack(spacing: 10) {
+                    Text("Save your usual prices")
+                        .font(.headline)
+                        .foregroundStyle(Color(.mainText))
+
+                    Text("Verbal fills them in automatically when you quote the same work. You'll also be offered them after a quote comes back with prices missing.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        showAdd = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus")
+                            Text("Add a rate").fontWeight(.semibold)
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 24)
+                        .frame(height: 46)
+                        .background(Color(.royalBlue600), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                }
+                .padding(.horizontal, 22)
+                .padding(.bottom, 22)
+            }
+            .background(Color(.royalBlue25),
+                        in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// The fetch failed and there's nothing cached to fall back on. Matches the
+    /// shape Home uses for the same situation.
+    private var errorState: some View {
+        VStack(spacing: 10) {
             Spacer()
-            Image(systemName: "list.bullet.rectangle")
+            Image(systemName: "wifi.exclamationmark")
                 .font(.system(size: 30, weight: .medium))
                 .foregroundStyle(Color(.mainText))
-                .padding(.bottom, 4)
-            Text("No saved prices yet")
+                .padding(.bottom, 6)
+            Text("Couldn't load your rates")
                 .font(.headline)
                 .foregroundStyle(Color(.mainText))
-            Text("Add your common labor and material rates so quotes get priced automatically.")
+            Text("Check your connection and try again.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+            Button("Try again") {
+                Task { await load() }
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(Color(.blueAccentText))
+            .padding(.top, 10)
             Spacer()
         }
         .frame(maxWidth: .infinity)
     }
 
+    /// Two rates that don't exist, drawn the way real ones are.
+    private var sampleRates: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(Self.sampleRates.enumerated()), id: \.offset) { index, rate in
+                if index > 0 { Divider() }
+                HStack {
+                    Text(rate.name)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text("\(AppCurrency.format(rate.price)) / \(rate.unit)")
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 11)
+            }
+        }
+        .padding(.horizontal, 14)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
+    }
+
+    private static let sampleRates: [(name: String, price: Double, unit: String)] = [
+        ("Re-tiling", 45, "m²"),
+        ("Replace toilet", 90, "each")
+    ]
+
     private func load() async {
         isLoading = true
         defer { isLoading = false }
-        items = (try? await QuoteService.fetchRateCard()) ?? []
-        // Settings decides from this cache whether a currency change would
-        // redenominate saved prices, so it has to see what was just added here.
-        session.cacheRateCard(items)
+        do {
+            let fetched = try await QuoteService.fetchRateCard()
+            items = fetched
+            // Settings decides from this cache whether a currency change would
+            // redenominate saved prices, so it has to see what was just added
+            // here — but only ever a list that was actually fetched.
+            session.cacheRateCard(fetched)
+            loadFailed = false
+        } catch {
+            // Keep what's on screen, and above all don't cache the failure.
+            // This used to read `?? []`, so one visit to this tab offline
+            // emptied the list, wrote that emptiness into the session, and left
+            // Settings believing there were no saved prices to protect — which
+            // silently disarmed the warning before a currency change rewrites
+            // every rate.
+            loadFailed = true
+            if !items.isEmpty {
+                toast = Toast(style: .error, message: "Couldn't refresh rates")
+            }
+        }
         hasLoaded = true
     }
 
