@@ -33,7 +33,10 @@ enum BusinessService {
         guard let userID = client.auth.currentUser?.id else {
             throw QuoteError.notSignedIn
         }
-        // Email isn't collected in the form — it's the signed-in account email.
+        // Falls back to the signed-in address when the user hasn't given a
+        // business one. It is the contact a customer replies to, so a quote
+        // going out with no email at all is worse than one carrying a personal
+        // address the user can now override.
         var profile = profile
         profile.email = profile.email ?? client.auth.currentUser?.email
         let payload = Payload(userID: userID, profile: profile)

@@ -16,6 +16,7 @@ struct ProfileView: View {
 
     @State private var businessName = ""
     @State private var phone = ""
+    @State private var email = ""
     @State private var address = ""
     @State private var taxNumber = ""
 
@@ -29,11 +30,11 @@ struct ProfileView: View {
     @State private var showSignOutConfirmation = false
 
     private var isDirty: Bool {
-        [businessName, phone, address, taxNumber] != loadedIdentity
+        [businessName, phone, email, address, taxNumber] != loadedIdentity
     }
 
     private var loadedIdentity: [String] {
-        [loaded.businessName ?? "", loaded.phone ?? "",
+        [loaded.businessName ?? "", loaded.phone ?? "", loaded.email ?? "",
          loaded.address ?? "", loaded.taxNumber ?? ""]
     }
 
@@ -64,6 +65,14 @@ struct ProfileView: View {
                     TextField("Phone", text: $phone)
                         .keyboardType(.phonePad)
                         .focused($keyboardShown)
+                    // Placeholder is the account address, because that is what
+                    // gets used when this is blank — leaving it empty should
+                    // not be a mystery about what the customer will see.
+                    TextField(session.email ?? "Email", text: $email)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .focused($keyboardShown)
                     TextField("Address", text: $address, axis: .vertical)
                         .lineLimit(2...4)
                         .focused($keyboardShown)
@@ -72,7 +81,7 @@ struct ProfileView: View {
                 } header: {
                     Text("Business")
                 } footer: {
-                    Text("Appears on the quotes you send to customers.")
+                    Text("Appears on the quotes you send to customers. Leave the email blank to use the one you signed in with.")
                 }
                 .listRowBackground(Color(.surface))
 
@@ -137,6 +146,7 @@ struct ProfileView: View {
         }
         businessName = loaded.businessName ?? ""
         phone = loaded.phone ?? ""
+        email = loaded.email ?? ""
         address = loaded.address ?? ""
         taxNumber = loaded.taxNumber ?? ""
         isLoading = false
@@ -149,13 +159,23 @@ struct ProfileView: View {
         var profile = loaded
         profile.businessName = trimmedOrNil(businessName)
         profile.phone = trimmedOrNil(phone)
+        profile.email = trimmedOrNil(email)
         profile.address = trimmedOrNil(address)
         profile.taxNumber = trimmedOrNil(taxNumber)
         Task {
-            try? await BusinessService.save(profile)
+            defer { isSaving = false }
+            do {
+                try await BusinessService.save(profile)
+            } catch {
+                // `loaded` is deliberately left alone: the fields stay dirty, so
+                // Save stays on screen to be tried again. Reporting success here
+                // would send the next quote out with no business name on it and
+                // the user believing they had fixed that.
+                toast = Toast(style: .error, message: "Couldn't save business details")
+                return
+            }
             session.cacheBusinessProfile(profile)
             loaded = profile
-            isSaving = false
             keyboardShown = false
             toast = Toast(style: .success, message: "Business details saved")
         }

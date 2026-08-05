@@ -23,6 +23,8 @@ struct QuoteDefaultsView: View {
     @State private var loaded = BusinessProfile.empty
     @State private var isLoading = true
     @State private var isSaving = false
+    /// Set when the write failed, so the screen stays put and says so.
+    @State private var saveFailed = false
     @FocusState private var keyboardShown: Bool
 
     /// Typed rate as a number; blank or unparseable means no tax.
@@ -100,6 +102,11 @@ struct QuoteDefaultsView: View {
             }
         }
         .task { await load() }
+        .alert("Couldn't save your defaults", isPresented: $saveFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Check your connection and tap Save again. Your changes are still here.")
+        }
         }
     }
 
@@ -129,9 +136,19 @@ struct QuoteDefaultsView: View {
         profile.defaultTerms = trimmedOrNil(terms)
         profile.defaultNotes = trimmedOrNil(notes)
         Task {
-            try? await BusinessService.save(profile)
+            defer { isSaving = false }
+            do {
+                try await BusinessService.save(profile)
+            } catch {
+                // Closing on a failed write is worse here than anywhere else in
+                // the app: the tax rate set on this screen is copied onto every
+                // quote made afterwards, so a save that quietly didn't happen
+                // means months of quotes priced without VAT on them.
+                saveFailed = true
+                return
+            }
             session.cacheBusinessProfile(profile)
-            isSaving = false
+            loaded = profile
             dismiss()
         }
     }
