@@ -356,14 +356,126 @@ struct HomeView: View {
     /// No button of its own — the mic in the tab bar is the way in, and a second
     /// control for the same thing only splits the attention it needs.
     private var emptyState: some View {
-        placeholder(
-            icon: "mic.fill",
-            title: "Your first quote starts here",
-            message: "Describe a job out loud and Verbal turns it into a priced quote."
-        ) {
-            EmptyView()
+        VStack(spacing: 16) {
+            VStack(spacing: 0) {
+                // The product, drawn the way the app already draws it. A
+                // photograph here would be borrowed atmosphere; a quote is the
+                // thing they came for, and seeing its shape answers "what do I
+                // get out of this?" before they've said a word.
+                sampleQuote
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
+                    .frame(height: 158, alignment: .top)
+                    .clipped()
+                    // Fades into the copy instead of stopping at a hard edge,
+                    // so it reads as a backdrop rather than a real row.
+                    .mask(
+                        LinearGradient(colors: [.black, .black, .clear],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+
+                VStack(spacing: 12) {
+                    Text("Your first quote starts here")
+                        .font(.robotoSlab(22, relativeTo: .title3))
+                        .foregroundStyle(Color(.mainText))
+                        .multilineTextAlignment(.center)
+
+                    // The one thing a new user can't guess: that they should
+                    // talk in numbers. Without it the first attempt is vague,
+                    // comes back as "not enough detail", and that is the worst
+                    // possible first impression of the whole idea.
+                    Text("Try saying: “Re-tile the bathroom floor, eighteen square metres at forty-five a metre, and replace the toilet for ninety.”")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        showCreate = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "mic.fill")
+                            Text("Record a quote").fontWeight(.semibold)
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 26)
+                        .frame(height: 50)
+                        .background(Color(.royalBlue600), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                }
+                .padding(.horizontal, 22)
+                .padding(.bottom, 24)
+            }
+            .background(Color(.royalBlue25),
+                        in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+
+            Text("Quotes you make are saved here. Share one as a PDF when it's ready.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .frame(maxWidth: .infinity)
     }
+
+    /// A quote that doesn't exist, in the user's own currency.
+    private var sampleQuote: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Bathroom re-tiling")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(.mainText))
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(AppCurrency.format(1240, code: currencyCode))
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(Color(.mainText))
+            }
+            .padding(.bottom, 10)
+
+            ForEach(Self.sampleLines, id: \.name) { line in
+                Divider()
+                HStack {
+                    Text(line.name)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(AppCurrency.format(line.amount, code: currencyCode))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 8)
+            }
+        }
+        .padding(14)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
+    }
+
+    /// Sums to the total above — a demo that doesn't add up would be a poor
+    /// advertisement for a quoting app.
+    private static let sampleLines: [(name: String, amount: Double)] = [
+        ("Re-tiling bathroom floor", 810),
+        ("Mixer taps", 340),
+        ("Replacement toilet", 90)
+    ]
 
     /// Stand-in rows for the moment before the first fetch lands. The splash
     /// stops waiting on the lists after two seconds so a slow launch still gets
