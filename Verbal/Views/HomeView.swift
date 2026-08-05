@@ -38,6 +38,10 @@ struct HomeView: View {
     @State private var outstandingIsApproximate = false
     /// Observed so the summary re-converts when the user changes currency.
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
+    /// Set the first time a quote appears in this list, and never unset.
+    /// Someone who deletes every quote still isn't a beginner, and the teaching
+    /// card would greet them by explaining their own job back to them.
+    @AppStorage("hasEverHadQuotes") private var hasEverHadQuotes = false
 
     var body: some View {
         NavigationStack {
@@ -122,6 +126,9 @@ struct HomeView: View {
                 guard loaded, quotes.isEmpty, !session.quotes.isEmpty else { return }
                 quotes = session.quotes
                 loadFailed = false
+            }
+            .onChange(of: quotes.isEmpty) { _, isEmpty in
+                if !isEmpty { hasEverHadQuotes = true }
             }
             .task(id: outstandingSignature) { await recalculateOutstanding() }
             .refreshable { await load() }
@@ -362,35 +369,46 @@ struct HomeView: View {
                 // photograph here would be borrowed atmosphere; a quote is the
                 // thing they came for, and seeing its shape answers "what do I
                 // get out of this?" before they've said a word.
-                sampleQuote
-                    .padding(.horizontal, 18)
-                    .padding(.top, 18)
-                    .frame(height: 158, alignment: .top)
-                    .clipped()
-                    // Fades into the copy instead of stopping at a hard edge,
-                    // so it reads as a backdrop rather than a real row.
-                    .mask(
-                        LinearGradient(colors: [.black, .black, .clear],
-                                       startPoint: .top, endPoint: .bottom)
-                    )
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                //
+                // Only for someone who has never had a quote. Showing it to a
+                // user who has just cleared their list demonstrates a thing they
+                // have done fifty times.
+                if !hasEverHadQuotes {
+                    sampleQuote
+                        .padding(.horizontal, 18)
+                        .padding(.top, 18)
+                        .frame(height: 158, alignment: .top)
+                        .clipped()
+                        // Fades into the copy instead of stopping at a hard edge,
+                        // so it reads as a backdrop rather than a real row.
+                        .mask(
+                            LinearGradient(colors: [.black, .black, .clear],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
 
                 VStack(spacing: 12) {
-                    Text("Your first quote starts here")
+                    Text(hasEverHadQuotes ? "No quotes right now" : "Your first quote starts here")
                         .font(.robotoSlab(22, relativeTo: .title3))
                         .foregroundStyle(Color(.mainText))
                         .multilineTextAlignment(.center)
+                        .padding(.top, hasEverHadQuotes ? 26 : 0)
 
                     // The one thing a new user can't guess: that they should
                     // talk in numbers. Without it the first attempt is vague,
                     // comes back as "not enough detail", and that is the worst
-                    // possible first impression of the whole idea.
-                    Text("Try saying: “Re-tile the bathroom floor, eighteen square metres at forty-five a metre, and replace the toilet for ninety.”")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // possible first impression of the whole idea. Someone who
+                    // has quoted before already knows, and being told again
+                    // reads as the app forgetting them.
+                    if !hasEverHadQuotes {
+                        Text("Try saying: “Re-tile the bathroom floor, eighteen square metres at forty-five a metre, and replace the toilet for ninety.”")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     Button {
                         showCreate = true
@@ -417,7 +435,9 @@ struct HomeView: View {
                     .strokeBorder(Color(.separator), lineWidth: 0.5)
             )
 
-            Text("Quotes you make are saved here. Share one as a PDF when it's ready.")
+            Text(hasEverHadQuotes
+                 ? "Anything you record from here will show up in this list."
+                 : "Quotes you make are saved here. Share one as a PDF when it's ready.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
