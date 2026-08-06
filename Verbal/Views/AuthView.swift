@@ -4,28 +4,55 @@
 //
 
 import SwiftUI
-import GoogleSignInSwift
 
 struct AuthView: View {
     @Environment(SessionStore.self) private var session
 
     @State private var errorMessage: String?
-    @State private var isLoading = false
+    /// Google's sheet is up. The button waits, but the screen behind it stays
+    /// exactly as it was — the user is choosing an account, not signing in.
+    @State private var isChoosingAccount = false
+    /// Google is done and the work is ours now: token exchange, then the
+    /// profile and lists the first screen needs. This is the part worth
+    /// covering the screen for.
+    @State private var isFinishing = false
+    @State private var headlineIndex = 0
 
     var body: some View {
         ZStack {
+            AuthBackground()
+
             VStack(spacing: 24) {
+                // The real mark, not a stand-in glyph. This is the first screen
+                // of the app and it was wearing an SF Symbol.
+                HStack(spacing: 10) {
+                    Image(.brandMark)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 28)
+                        .foregroundStyle(Color(.blueAccentText))
+                    Text("Verbal")
+                        .font(.robotoSlab(26, relativeTo: .title2))
+                        .foregroundStyle(Color(.blueAccentText))
+                }
+                .padding(.top, 8)
+
                 Spacer()
 
-                VStack(spacing: 8) {
-                    Image(systemName: "text.bubble.fill")
-                        .font(.system(size: 56))
-                        .foregroundStyle(.tint)
-                    Text("Verbal")
-                        .font(.largeTitle.bold())
-                    Text("Sign in to continue")
-                        .foregroundStyle(.secondary)
-                }
+                Text(Self.headlines[headlineIndex])
+                    .font(.robotoSlab(32, relativeTo: .largeTitle))
+                    .foregroundStyle(Color(.mainText))
+                    .multilineTextAlignment(.center)
+                    .id(headlineIndex)
+                    // Rises in as the last one lifts away. Deliberately not the
+                    // banner's push: that travels a full line height and would
+                    // need clipping to a fixed frame, which is what cost the mic
+                    // sheet its icon at the larger type sizes.
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .offset(y: 14)),
+                        removal: .opacity.combined(with: .offset(y: -14))
+                    ))
+                    .task { await cycleHeadlines() }
 
                 Spacer()
 
@@ -36,21 +63,73 @@ struct AuthView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                GoogleSignInButton(action: signInWithGoogle)
-                    .frame(maxWidth: .infinity)
-                    .disabled(isLoading)
-                    .opacity(isLoading ? 0.6 : 1)
+                googleButton
+                    .disabled(isChoosingAccount)
 
                 Spacer().frame(height: 8)
             }
             .padding(24)
 
-            if isLoading {
+            if isFinishing {
                 loadingScreen
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: isLoading)
+        .animation(.easeInOut(duration: 0.25), value: isFinishing)
+    }
+
+    /// One promise, said four ways. Not a carousel of different claims — a
+    /// sign-in screen that argues a new point every few seconds reads as an
+    /// advert, and this one is being looked at by someone who has already
+    /// decided to install.
+    private static let headlines = [
+        "Speak the job.\nSend the quote.",
+        "Describe the work.\nWalk out with it priced.",
+        "Say it once.\nThe quote writes itself.",
+        "Talk through the job.\nLeave with it quoted."
+    ]
+
+    /// Slow on purpose. The generating banner turns over every 1.8 seconds
+    /// because something is actually happening; here nothing is, and text that
+    /// changes while it is being read is worse than text that doesn't move.
+    private func cycleHeadlines() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(4.5))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.55)) {
+                headlineIndex = (headlineIndex + 1) % Self.headlines.count
+            }
+        }
+    }
+
+    /// Google's own mark, from the SDK's resources, on the app's own button —
+    /// the SDK's stock control can't take the shape the rest of the app uses.
+    /// The logo sits at the leading edge with the label centred in the full
+    /// width, so a second provider added later stacks under it and lines up.
+    private var googleButton: some View {
+        Button(action: signInWithGoogle) {
+            ZStack {
+                Text("Continue with Google")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color(.mainText))
+                    .opacity(isChoosingAccount ? 0.35 : 1)
+                HStack {
+                    Image(.googleLogo)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                        .opacity(isChoosingAccount ? 0.35 : 1)
+                    Spacer(minLength: 0)
+                    if isChoosingAccount { ProgressView() }
+                }
+            }
+            .padding(.horizontal, 22)
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .background(Color(.surface), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
     }
 
     /// Full-screen overlay shown while signing in and setting up the account.
@@ -74,16 +153,27 @@ struct AuthView: View {
     }
 
     private func signInWithGoogle() {
-        isLoading = true
+        isChoosingAccount = true
         errorMessage = nil
         Task {
             do {
-                try await GoogleAuth.signIn()
-                // Keep the loading screen up — the view is replaced by the app
-                // once the session becomes ready (after profile/data preload).
+                try await GoogleAuth.signIn {
+                    // Google has finished; the wait is ours from here.
+                    isChoosingAccount = false
+                    isFinishing = true
+                }
+                // The loading screen stays up deliberately: this view is
+                // replaced once the session is ready, after the preload, so
+                // there is no gap between it and the app.
             } catch {
-                errorMessage = error.localizedDescription
-                isLoading = false
+                isChoosingAccount = false
+                isFinishing = false
+                // Backing out of Google's sheet is a decision, not a failure.
+                // Saying "the user canceled the sign-in flow" in red tells
+                // someone their own choice went wrong.
+                if !GoogleAuth.isCancellation(error) {
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }
