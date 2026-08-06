@@ -16,6 +16,9 @@ struct QuoteDetailView: View {
     @State private var showHeaderTitle = false
     @State private var lineItems: [QuoteLineItem]
     @State private var transcriptText: String?
+    /// The fetch failed and nothing was cached, so the sheet should say the
+    /// transcript can't be reached rather than that it doesn't exist.
+    @State private var transcriptUnreachable = false
     @State private var showTranscript = false
     @State private var showShare = false
     /// Collects business details before the first share, when there are none.
@@ -428,8 +431,11 @@ struct QuoteDetailView: View {
                 // A successful reply saying there is none is an answer, so it
                 // replaces the cached copy rather than being ignored.
                 transcriptText = try await QuoteService.fetchTranscript(quoteId: quote.id)
+                transcriptUnreachable = false
             } catch {
-                // Unreachable, not absent. Keep what's on disk.
+                // Unreachable, not absent. Keep what's on disk — and only call
+                // it unreachable if there was nothing there to keep.
+                transcriptUnreachable = transcriptText == nil
             }
         }
         .task {
@@ -445,7 +451,7 @@ struct QuoteDetailView: View {
             Task { try? await QuoteService.setClient(quoteId: quote.id, name: current) }
         }
         .sheet(isPresented: $showTranscript) {
-            TranscriptSheet(text: transcriptText)
+            TranscriptSheet(text: transcriptText, unreachable: transcriptUnreachable)
         }
         .sheet(isPresented: $showEdit) {
             EditQuoteView(quoteId: quote.id,
