@@ -212,6 +212,11 @@ final class SessionStore {
         rateCard = await rateResult ?? rateCard
         businessProfile = await bizResult ?? businessProfile
         listsLoaded = true
+
+        // Off the critical path: the list is already on screen, and this is
+        // only worth anything on the launch after next, when there's no signal.
+        let ids = quotes.map(\.id)
+        Task.detached { await QuoteService.cacheMissingTranscripts(for: ids) }
     }
 
     private func clearSession() {

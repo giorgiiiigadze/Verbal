@@ -415,7 +415,22 @@ struct QuoteDetailView: View {
                 await session.prefetchLineItems(for: quote.id)
                 if let stored = session.lineItems(for: quote.id) { lineItems = stored }
             }
-            transcriptText = (try? await QuoteService.fetchTranscript(quoteId: quote.id)) ?? nil
+        }
+        // Its own task, so the disk read isn't queued behind the line-item
+        // request above. Sharing one meant the transcript waited for that
+        // fetch to finish — offline, for it to time out — which is why the
+        // text arrived seconds late while the quote itself was instant.
+        .task {
+            // Before the first await, so it lands with the first frame. Disk
+            // first, network second, the same order the quote list uses.
+            transcriptText = QuoteService.cachedTranscript(quoteId: quote.id)
+            do {
+                // A successful reply saying there is none is an answer, so it
+                // replaces the cached copy rather than being ignored.
+                transcriptText = try await QuoteService.fetchTranscript(quoteId: quote.id)
+            } catch {
+                // Unreachable, not absent. Keep what's on disk.
+            }
         }
         .task {
             // Warm the exchange-rate cache so a conversion opens instantly.

@@ -29,6 +29,11 @@ enum LocalCache {
         /// come into view, so they're stored the same way rather than as one
         /// blob that every prefetch would have to rewrite.
         case lineItems(quoteID: UUID)
+        /// The words the quote was built from, per quote. Unlike everything
+        /// else here this is stored as a plain JSON string rather than the
+        /// server's rows: it is also written at the moment a quote is recorded,
+        /// when there is no server response to keep.
+        case transcript(quoteID: UUID)
 
         var filename: String {
             switch self {
@@ -36,6 +41,7 @@ enum LocalCache {
             case .rateCard: return "rateCard"
             case .businessProfile: return "businessProfile"
             case .lineItems(let quoteID): return "lineItems-\(quoteID.uuidString)"
+            case .transcript(let quoteID): return "transcript-\(quoteID.uuidString)"
             }
         }
     }
@@ -69,6 +75,27 @@ enum LocalCache {
         else { return nil }
         // Decoded exactly as the live response would have been.
         return try? PostgrestClient.Configuration.jsonDecoder.decode(type, from: data)
+    }
+
+    /// Whether something is already stored, without paying to decode it.
+    static func exists(for key: Key, userID: UUID) -> Bool {
+        guard let directory = directory(for: userID) else { return false }
+        return FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent(key.filename).path
+        )
+    }
+
+    /// Drop the files belonging to one quote. A deleted quote leaves its rows
+    /// behind on disk otherwise, and a transcript is a recording of someone
+    /// talking about a customer's house — it should not outlive the quote it
+    /// was taken for.
+    static func clear(quoteID: UUID, userID: UUID) {
+        guard let directory = directory(for: userID) else { return }
+        for key in [Key.lineItems(quoteID: quoteID), .transcript(quoteID: quoteID)] {
+            try? FileManager.default.removeItem(
+                at: directory.appendingPathComponent(key.filename)
+            )
+        }
     }
 
     /// Drop everything held for an account. Called when it signs out or is
