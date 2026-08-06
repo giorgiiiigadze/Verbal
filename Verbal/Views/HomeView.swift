@@ -362,77 +362,68 @@ struct HomeView: View {
     /// is empty. This is the screen a new user meets straight after onboarding.
     /// No button of its own — the mic in the tab bar is the way in, and a second
     /// control for the same thing only splits the attention it needs.
+    /// Two different screens, not two versions of one. A first quote is worth
+    /// selling; an empty list belonging to someone who has made fifty is just a
+    /// state, and dressing it up as an announcement is the app talking when it
+    /// has nothing to say.
+    @ViewBuilder
     private var emptyState: some View {
+        if hasEverHadQuotes {
+            // Plain and centred, in the same shape the no-match and error
+            // states already use — no panel of its own.
+            placeholder(
+                icon: "waveform",
+                title: "No quotes right now",
+                message: "Describe the next job out loud and it'll be priced and waiting here."
+            ) {
+                recordButton
+            }
+        } else {
+            firstQuoteCard
+        }
+    }
+
+    /// The first-run screen. Worth its own container: it has something to show
+    /// and something to teach, and neither survives being reduced to a line.
+    private var firstQuoteCard: some View {
         VStack(spacing: 16) {
             VStack(spacing: 0) {
                 // The product, drawn the way the app already draws it. A
                 // photograph here would be borrowed atmosphere; a quote is the
                 // thing they came for, and seeing its shape answers "what do I
                 // get out of this?" before they've said a word.
-                //
-                // Only for someone who has never had a quote. Showing it to a
-                // user who has just cleared their list demonstrates a thing they
-                // have done fifty times.
-                if !hasEverHadQuotes {
-                    sampleQuote
-                        .padding(.horizontal, 18)
-                        .padding(.top, 18)
-                        .frame(height: 158, alignment: .top)
-                        .clipped()
-                        // Fades into the copy instead of stopping at a hard edge,
-                        // so it reads as a backdrop rather than a real row.
-                        .mask(
-                            LinearGradient(colors: [.black, .black, .clear],
-                                           startPoint: .top, endPoint: .bottom)
-                        )
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                } else {
-                    // Not the sample quote — that is a demonstration, and this
-                    // user has made fifty. Just the mark of the thing the button
-                    // does, so the card has a shape instead of being a heading
-                    // and a button adrift in a box.
-                    Image(systemName: "waveform")
-                        .font(.system(size: 34, weight: .medium))
-                        .foregroundStyle(Color(.blueAccentText))
-                        .frame(height: 92)
-                        .accessibilityHidden(true)
-                }
+                sampleQuote
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
+                    .frame(height: 158, alignment: .top)
+                    .clipped()
+                    // Fades into the copy instead of stopping at a hard edge,
+                    // so it reads as a backdrop rather than a real row.
+                    .mask(
+                        LinearGradient(colors: [.black, .black, .clear],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
 
                 VStack(spacing: 12) {
-                    Text(hasEverHadQuotes ? "No quotes right now" : "Your first quote starts here")
+                    Text("Your first quote starts here")
                         .font(.robotoSlab(22, relativeTo: .title3))
                         .foregroundStyle(Color(.mainText))
                         .multilineTextAlignment(.center)
 
-                    // The first-run line is the one thing a new user can't
-                    // guess: that they should talk in numbers. Without it the
-                    // first attempt is vague, comes back as "not enough detail",
-                    // and that is the worst possible first impression of the
-                    // idea. Someone who has quoted before already knows, so
-                    // theirs says what happens next instead of how to do it.
-                    Text(hasEverHadQuotes
-                         ? "Describe the next job out loud and it'll be priced and waiting here."
-                         : "Try saying: “Re-tile the bathroom floor, eighteen square metres at forty-five a metre, and replace the toilet for ninety.”")
+                    // The one thing a new user can't guess: that they should
+                    // talk in numbers. Without it the first attempt is vague,
+                    // comes back as "not enough detail", and that is the worst
+                    // possible first impression of the whole idea.
+                    Text("Try saying: \u{201C}Re-tile the bathroom floor, eighteen square metres at forty-five a metre, and replace the toilet for ninety.\u{201D}")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Button {
-                        showCreate = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "mic.fill")
-                            Text("Record a quote").fontWeight(.semibold)
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 26)
-                        .frame(height: 50)
-                        .background(Color(.royalBlue600), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 4)
+                    recordButton
+                        .padding(.top, 4)
                 }
                 .padding(.horizontal, 22)
                 .padding(.bottom, 24)
@@ -445,13 +436,11 @@ struct HomeView: View {
                     .strokeBorder(Color(.separator), lineWidth: 0.5)
             )
 
-            if !hasEverHadQuotes {
-                Text("Quotes you make are saved here. Share one as a PDF when it's ready.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-            }
+            Text("Quotes you make are saved here. Share one as a PDF when it's ready.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
 
             Spacer(minLength: 0)
         }
@@ -460,6 +449,22 @@ struct HomeView: View {
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .frame(maxWidth: .infinity)
+    }
+
+    private var recordButton: some View {
+        Button {
+            showCreate = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "mic.fill")
+                Text("Record a quote").fontWeight(.semibold)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 26)
+            .frame(height: 50)
+            .background(Color(.royalBlue600), in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     /// A quote that doesn't exist, in the user's own currency.
