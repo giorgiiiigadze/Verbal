@@ -28,9 +28,23 @@ enum GoogleAuth {
         )
     }
 
+    /// True when the user backed out of Google's sheet. Not a failure — it is
+    /// a decision, and reporting it as an error tells someone their deliberate
+    /// action went wrong.
+    static func isCancellation(_ error: Error) -> Bool {
+        let error = error as NSError
+        return error.domain == kGIDSignInErrorDomain
+            && error.code == GIDSignInError.canceled.rawValue
+    }
+
     /// Presents the native Google sheet and signs the user into Supabase.
+    ///
+    /// `onAuthorized` fires once Google has finished and before the token is
+    /// exchanged — the moment the waiting stops being the user's and starts
+    /// being ours. Anything shown before that would be claiming to sign someone
+    /// in while they are still choosing whether to.
     @MainActor
-    static func signIn() async throws {
+    static func signIn(onAuthorized: (() -> Void)? = nil) async throws {
         guard let root = topViewController() else {
             throw GoogleAuthError.noPresenter
         }
@@ -40,6 +54,7 @@ enum GoogleAuth {
             throw GoogleAuthError.missingIDToken
         }
         let accessToken = result.user.accessToken.tokenString
+        onAuthorized?()
 
         try await SupabaseManager.client.auth.signInWithIdToken(
             credentials: .init(provider: .google, idToken: idToken, accessToken: accessToken)
