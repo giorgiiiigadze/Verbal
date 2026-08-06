@@ -396,13 +396,18 @@ private struct AddRateItemView: View {
                 Spacer()
                 Button(role: .close) { dismiss() }
             }
+            .padding(.horizontal, 24)
 
             Text("Verbal fills this in automatically next time you quote the same work.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
+                .padding(.horizontal, 24)
 
+            // The inset moved off the sheet and onto each piece inside it, so
+            // this scroll view spans the full width. It is what clips the unit
+            // chips, and inset by 24 it cut them off short of the edge.
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     field("What is it? (e.g. Re-tiling)", text: $name)
@@ -441,6 +446,12 @@ private struct AddRateItemView: View {
                         Text("Per")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        // Runs edge to edge, like the chips on a quote. The row
+                        // steps back out of the content inset and puts it back
+                        // on the chips themselves, so they start in line with
+                        // the fields above but keep scrolling to the sheet's
+                        // own edges — the last unit no longer sits against an
+                        // invisible wall with clear space beyond it.
                         ScrollView(.horizontal) {
                             HStack(spacing: 8) {
                                 ForEach(unitOptions, id: \.self) { option in
@@ -463,16 +474,17 @@ private struct AddRateItemView: View {
                                     .buttonStyle(.plain)
                                 }
                             }
+                            .padding(.horizontal, 24)
                         }
                         .scrollIndicators(.hidden)
-                        .scrollClipDisabled()
+                        .padding(.horizontal, -24)
                     }
                 }
                 .padding(.top, 20)
+                .padding(.horizontal, 24)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
-        .padding(.horizontal, 24)
         .padding(.top, 24)
         .safeAreaInset(edge: .bottom) {
             Button { save() } label: {
