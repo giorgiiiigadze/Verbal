@@ -20,7 +20,12 @@
 import Foundation
 import Supabase
 
-enum LocalCache {
+/// Deliberately off the main actor. The project defaults every type onto it,
+/// which quietly made these file reads main-thread work no matter where they
+/// were called from — a background restore would hop straight back and block
+/// the very launch it was meant to keep clear. Nothing here touches shared
+/// state; it is reads and writes against the file system.
+nonisolated enum LocalCache {
     enum Key {
         case quotes
         case rateCard

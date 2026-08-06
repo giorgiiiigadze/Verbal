@@ -181,24 +181,61 @@ final class SessionStore {
         if let cached = LocalCache.load([BusinessProfile].self, for: .businessProfile, userID: userID) {
             businessProfile = cached.first
         }
-        // Line items for everything just restored. Without this the memory
-        // cache starts empty, so the only routes to the stored copy are behind
-        // a network call that has to fail first — and offline that failure is
-        // not instant. The quote opens to an empty table, and the items arrive
-        // seconds later or not at all. These are small local reads; doing them
-        // now means a quote opened offline has its contents from the first
-        // frame, the same way the list does.
-        for quote in quotes {
-            if let items = LocalCache.load([QuoteLineItem].self,
-                                           for: .lineItems(quoteID: quote.id),
-                                           userID: userID) {
-                lineItemsCache[quote.id] = items
-            }
-        }
+        restoreLineItems(userID: userID)
         // Lets the splash stop waiting and Home draw real rows. On a first run
         // there is nothing to restore, so the existing wait still applies.
         if !quotes.isEmpty || !rateCard.isEmpty {
             listsLoaded = true
+        }
+    }
+
+    /// How many quotes' line items are read before the app is allowed to draw.
+    /// About a screenful: enough that anything tappable on arrival is ready.
+    private static let eagerLineItemCount = 12
+
+    /// Line items for the restored quotes. Without these the memory cache
+    /// starts empty, so the only routes to the stored copy are behind a network
+    /// call that has to fail first — and offline that failure is not instant.
+    /// The quote opens to an empty table, and the items arrive seconds later or
+    /// not at all.
+    ///
+    /// Only the first screenful is read here. This runs before anything is
+    /// drawn, and it is one file read and one decode per quote: fine at ten,
+    /// but someone two years into using this has hundreds, and every one of
+    /// them would sit between them and their own app at every launch. The rest
+    /// follow off the main thread, well before any of them can be scrolled to.
+    private func restoreLineItems(userID: UUID) {
+        let pending = quotes.map(\.id).filter { lineItemsCache[$0] == nil }
+        guard !pending.isEmpty else { return }
+
+        for quoteID in pending.prefix(Self.eagerLineItemCount) {
+            if let items = LocalCache.load([QuoteLineItem].self,
+                                           for: .lineItems(quoteID: quoteID),
+                                           userID: userID) {
+                lineItemsCache[quoteID] = items
+            }
+        }
+
+        let remaining = Array(pending.dropFirst(Self.eagerLineItemCount))
+        guard !remaining.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            var restored: [UUID: [QuoteLineItem]] = [:]
+            for quoteID in remaining {
+                if let items = LocalCache.load([QuoteLineItem].self,
+                                               for: .lineItems(quoteID: quoteID),
+                                               userID: userID) {
+                    restored[quoteID] = items
+                }
+            }
+            await self.mergeRestoredLineItems(restored)
+        }
+    }
+
+    /// Fold in what the background read found, leaving alone anything fetched
+    /// while it was working — those came from the server and are newer.
+    private func mergeRestoredLineItems(_ restored: [UUID: [QuoteLineItem]]) {
+        for (quoteID, items) in restored where lineItemsCache[quoteID] == nil {
+            lineItemsCache[quoteID] = items
         }
     }
 
