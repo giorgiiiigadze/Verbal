@@ -101,20 +101,33 @@ struct ProfileView: View {
             SettingsView()
         }
         .toolbar {
+            // Save takes the gear's place while there are edits to keep, rather
+            // than appearing beside it. Two trailing controls at once asks the
+            // user to aim, and the one they'd be aiming past leaves the screen —
+            // this is the moment when tapping the gear loses their typing.
             ToolbarItem(placement: .topBarTrailing) {
                 if isSaving {
                     ProgressView()
                 } else if isDirty {
-                    Button("Save") { save() }
-                        .fontWeight(.semibold)
-                        .disabled(isLoading)
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "gearshape.fill")
+                    // The same button the quote screen uses to send work out:
+                    // this is the one action on the screen that matters, and it
+                    // should look like it does elsewhere.
+                    Button {
+                        save()
+                    } label: {
+                        Text("Save")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(Color(.royalBlue600))
+                    .disabled(isLoading)
+                } else {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                    }
                 }
             }
             ToolbarItemGroup(placement: .keyboard) {
