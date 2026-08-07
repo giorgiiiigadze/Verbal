@@ -52,25 +52,21 @@ struct QuoteDefaultsView: View {
             Color(.homeBackground).ignoresSafeArea()
             Form {
             Section {
-                letterheadPreview
-                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                // Read before the closure: a picker's label is a Sendable
-                // closure and can't touch the main-actor store from inside.
-                let hasLogo = session.businessLogo != nil
-                PhotosPicker(selection: $pickedLogo, matching: .images) {
-                    Label(hasLogo ? "Replace logo" : "Add logo", systemImage: "photo")
+                // One row holding the whole block, on a clear background: as
+                // separate Form rows the controls were divided from the page
+                // they act on, and ruled off from each other as though they
+                // were unrelated settings.
+                VStack(spacing: 12) {
+                    letterheadPreview
+                    logoControls
                 }
-                .disabled(isUploadingLogo)
-                if hasLogo {
-                    Button("Remove logo", role: .destructive) { removeLogo() }
-                        .disabled(isUploadingLogo)
-                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
             } header: {
                 Text("Letterhead")
             } footer: {
                 Text("The top of every quote you send. Your business name and contact details come from Profile.")
             }
-            .listRowBackground(Color(.surface))
 
             Section {
                 Stepper("Valid for \(validityDays) day\(validityDays == 1 ? "" : "s")",
@@ -146,6 +142,42 @@ struct QuoteDefaultsView: View {
 
     // MARK: - Letterhead
 
+    /// Glass, like the toast and the Share button — the app's own material
+    /// rather than a Form row pretending to be a control. Side by side because
+    /// they are two answers to the same question, and Remove only exists once
+    /// there is something to remove, so the pair never has a dead half.
+    private var logoControls: some View {
+        // Read before the closures: a picker's label is a Sendable closure and
+        // can't reach the main-actor store from inside it.
+        let hasLogo = session.businessLogo != nil
+        return HStack(spacing: 10) {
+            PhotosPicker(selection: $pickedLogo, matching: .images) {
+                glassLabel(hasLogo ? "Replace" : "Add logo",
+                           systemImage: "photo",
+                           tint: Color(.blueAccentText))
+            }
+            .disabled(isUploadingLogo)
+
+            if hasLogo {
+                Button { removeLogo() } label: {
+                    glassLabel("Remove", systemImage: "trash", tint: .red)
+                }
+                .buttonStyle(.plain)
+                .disabled(isUploadingLogo)
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func glassLabel(_ title: String, systemImage: String, tint: Color) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(tint)
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+            .glassEffect(in: .capsule)
+    }
+
     /// The header of the printed quote, not a settings row with a thumbnail in
     /// it. A logo is only ever seen next to the business name and contact
     /// lines, and this is the one screen where the user can be shown that
@@ -203,13 +235,15 @@ struct QuoteDefaultsView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal, 16)
         .overlay {
             if isUploadingLogo { ProgressView() }
         }
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
+                .padding(.horizontal, 16)
         )
     }
 
