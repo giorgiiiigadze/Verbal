@@ -24,7 +24,7 @@ struct ScopeList: View {
                         HStack(alignment: .top, spacing: 10) {
                             Circle()
                                 .fill(Color(.mainText))
-                                .frame(width: 6, height: 6)
+                                .frame(width: 7, height: 7)
                                 // Centred on the first line's cap height rather
                                 // than its box, so the dot sits with the text.
                                 .padding(.top, 7)
@@ -39,7 +39,13 @@ struct ScopeList: View {
                         }
                     }
                 }
-                .padding(.leading, 18)
+                // 4, not 18. The bullets used to start 18pt in from their own
+                // heading, so the scope's text ran down a different left edge
+                // to the summary's — two columns on a page that has one. The
+                // dots now sit just off the margin and only the text hangs,
+                // which is what makes a list read as part of the prose rather
+                // than as something pasted beside it.
+                .padding(.leading, 4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
