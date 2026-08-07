@@ -594,29 +594,22 @@ struct QuoteRecordingView: View {
                 .padding(.top, 4)
 
             if !quote.lineItems.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Line items")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(Color(.mainText))
-                    VStack(spacing: 0) {
-                        ForEach(quote.lineItems) { item in
-                            LineItemRow(
-                                description: item.description,
-                                quantityText: item.quantityText,
-                                isMissingPrice: item.isMissingPrice,
-                                lineTotal: item.lineTotal,
-                                currencyCode: currency
-                            )
-                            if item.id != quote.lineItems.last?.id { Divider() }
-                        }
+                // The same card the quote screen uses. Its heading used to sit
+                // outside as a large title while the saved quote's sat inside a
+                // header bar — the same table, introduced two different ways.
+                // No expand control: this quote isn't saved yet, so there's
+                // nothing to edit through.
+                LineItemsCard {
+                    ForEach(quote.lineItems) { item in
+                        LineItemRow(
+                            description: item.description,
+                            quantityText: item.quantityText,
+                            isMissingPrice: item.isMissingPrice,
+                            lineTotal: item.lineTotal,
+                            currencyCode: currency
+                        )
+                        if item.id != quote.lineItems.last?.id { Divider() }
                     }
-                    .padding(.horizontal, 16)
-                    .background(Color(.surface),
-                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color(.separator), lineWidth: 0.5)
-                    )
                 }
                 .padding(.top, 4)
 

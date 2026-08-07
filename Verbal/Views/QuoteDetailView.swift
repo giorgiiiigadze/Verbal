@@ -225,53 +225,20 @@ struct QuoteDetailView: View {
     /// entirely, inside a form about the quote's wording.
     private var lineItemsSection: some View {
         if !lineItems.isEmpty {
-            VStack(spacing: 0) {
-                HStack {
-                    Text("Line items")
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        showLineItems = true
-                    } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            // The glyph is small; the tap target shouldn't be.
-                            .frame(width: 30, height: 30)
-                            .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Edit line items")
-                }
-                .padding(.leading, 16)
-                .padding(.trailing, 8)
-                .padding(.vertical, 6)
-
-                Divider()
-
-                VStack(spacing: 0) {
-                    ForEach(lineItems) { item in
-                        LineItemRow(
-                            description: item.description ?? "Item",
-                            quantityText: item.quantityText,
-                            isMissingPrice: item.isMissingPrice,
-                            lineTotal: item.lineTotal,
-                            currencyCode: currency
-                        )
-                        if item.id != lineItems.last?.id {
-                            Divider()
-                        }
+            LineItemsCard(onExpand: { showLineItems = true }) {
+                ForEach(lineItems) { item in
+                    LineItemRow(
+                        description: item.description ?? "Item",
+                        quantityText: item.quantityText,
+                        isMissingPrice: item.isMissingPrice,
+                        lineTotal: item.lineTotal,
+                        currencyCode: currency
+                    )
+                    if item.id != lineItems.last?.id {
+                        Divider()
                     }
                 }
-                .padding(.horizontal, 16)
             }
-            .background(Color(.surface),
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
         }
     }
 
