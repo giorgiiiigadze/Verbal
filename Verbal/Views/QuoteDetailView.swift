@@ -510,15 +510,14 @@ struct QuoteDetailView: View {
                     }
                 }
 
-                // 12 on top of the stack's own 20, so a section starts a clear
-                // step away from the one before it. Blocks of prose need more
-                // air between them than the lines inside them, or the reader has
-                // to work out where one thought ends.
+                // 4 on top of the stack's own 20. A section still starts a step
+                // away from the one before it — 24 against the 8 under a heading
+                // — but the blocks stay close enough to read as one document.
                 ScopeList(items: scope)
-                    .padding(.top, 12)
+                    .padding(.top, 4)
 
                 lineItemsSection
-                    .padding(.top, 12)
+                    .padding(.top, 4)
             }
             // 20, matching Home and the rate card. A quote opened from the list
             // used to step 4pt inward from the row that was tapped.

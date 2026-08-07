@@ -581,17 +581,17 @@ struct QuoteRecordingView: View {
 
     @ViewBuilder
     private func reviewDocument(_ quote: GeneratedQuote) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        // 20 and 4, exactly as the quote screen — the same document, so the
+        // two were not allowed to drift apart by four points.
+        VStack(alignment: .leading, spacing: 20) {
             Text(quote.jobSummary)
                 .font(.callout)
                 .fontWeight(.medium)
                 .foregroundStyle(Color(.mainText))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Matches the quote screen — this review is the same document, and
-            // the two shouldn't breathe differently.
             ScopeList(items: quote.scope)
-                .padding(.top, 12)
+                .padding(.top, 4)
 
             if !quote.lineItems.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
@@ -618,7 +618,7 @@ struct QuoteRecordingView: View {
                             .strokeBorder(Color(.separator), lineWidth: 0.5)
                     )
                 }
-                .padding(.top, 12)
+                .padding(.top, 4)
 
                 let subtotal = quote.lineItems.compactMap(\.lineTotal).reduce(0, +)
                 let missing = quote.lineItems.filter(\.isMissingPrice).count
