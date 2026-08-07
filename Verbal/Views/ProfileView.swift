@@ -8,7 +8,6 @@
 //
 
 import SwiftUI
-import PhotosUI
 
 struct ProfileView: View {
     @Environment(SessionStore.self) private var session
@@ -29,11 +28,6 @@ struct ProfileView: View {
 
     @State private var toast: Toast?
     @State private var showSignOutConfirmation = false
-    /// The logo saves on its own, the moment it's picked — it isn't part of the
-    /// dirty-fields Save, because choosing a picture already reads as a decision
-    /// and nobody expects to confirm it twice.
-    @State private var pickedLogo: PhotosPickerItem?
-    @State private var isUploadingLogo = false
 
     private var isDirty: Bool {
         [businessName, phone, email, address, taxNumber] != loadedIdentity
@@ -66,11 +60,6 @@ struct ProfileView: View {
                 }
 
                 Section {
-                    logoRow
-                    if session.businessLogo != nil {
-                        Button("Remove logo", role: .destructive) { removeLogo() }
-                            .disabled(isUploadingLogo)
-                    }
                     TextField("Business name", text: $businessName)
                         .focused($keyboardShown)
                     TextField("Phone", text: $phone)
@@ -155,132 +144,7 @@ struct ProfileView: View {
             Text("Your quotes stay safe — you'll just need to sign in again.")
         }
         .toast($toast)
-        .onChange(of: pickedLogo) { _, item in
-            guard let item else { return }
-            Task { await applyLogo(item) }
-        }
         .task { await load() }
-    }
-
-    // MARK: - Logo
-
-    /// The whole row is the picker. A separate "Remove logo" button sits under
-    /// it rather than a small × inside it: two targets in one row means the
-    /// user has to aim, and one of them deletes their letterhead.
-    private var logoRow: some View {
-        // Read out here, not inside the picker's label. That closure is
-        // nonisolated, so touching the store from within it is an error under
-        // Swift 6 — the same trap that made the background cache read hop back
-        // onto the main thread.
-        let logo = session.businessLogo
-        // No `photoLibrary: .shared()`. That runs the picker inside the app and
-        // makes iOS ask for library access first — "Verbal can only access the
-        // items you select", a privacy question raised over choosing a logo.
-        // The default picker runs out of process: the app is handed the one
-        // image and never gets access to the library at all.
-        return PhotosPicker(selection: $pickedLogo, matching: .images) {
-            HStack(spacing: 14) {
-                logoTile(logo)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Logo")
-                        .foregroundStyle(Color(.mainText))
-                    Text(logo == nil
-                         ? "Printed at the top of every quote"
-                         : "Tap to replace")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-            }
-            .padding(.vertical, 4)
-        }
-        .disabled(isUploadingLogo)
-    }
-
-    /// Shows the mark on white, at the size and on the ground it will print on,
-    /// so what's on this screen is what the customer receives.
-    private func logoTile(_ logo: UIImage?) -> some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color(.cardSurface))
-            .frame(width: 58, height: 58)
-            .overlay {
-                if let logo {
-                    Image(uiImage: logo)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(7)
-                        .opacity(isUploadingLogo ? 0.3 : 1)
-                } else {
-                    Image(systemName: "photo.badge.plus")
-                        .font(.system(size: 20, weight: .light))
-                        .foregroundStyle(Color(.blueAccentText))
-                }
-            }
-            .overlay {
-                if isUploadingLogo { ProgressView() }
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
-    }
-
-    /// Shown immediately, uploaded after. The picture is already on screen in
-    /// the picker when they tap it; making the row wait for a round trip before
-    /// agreeing would be the app doubting a choice the user has made.
-    private func applyLogo(_ item: PhotosPickerItem) async {
-        isUploadingLogo = true
-        defer { isUploadingLogo = false; pickedLogo = nil }
-
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else {
-            toast = Toast(style: .error, message: "Couldn't read that image")
-            return
-        }
-
-        let previousURL = loaded.logoUrl
-        let previousImage = session.businessLogo
-        session.cacheBusinessLogo(image)
-
-        var profile = loaded
-        do {
-            profile.logoUrl = try await LogoService.upload(image)
-            try await BusinessService.save(profile)
-        } catch {
-            // Put back exactly what was there, including the case where that
-            // was nothing. A logo that looks saved and isn't goes out on the
-            // next quote as a blank letterhead.
-            session.cacheBusinessLogo(previousImage)
-            toast = Toast(style: .error, message: "Couldn't save your logo")
-            return
-        }
-        loaded = profile
-        session.cacheBusinessProfile(profile)
-        // Only once the new one is safely referenced. Deleting first would risk
-        // a failed upload leaving the user with no logo at all.
-        await LogoService.removeStored(at: previousURL)
-        toast = Toast(style: .success, message: "Logo saved")
-    }
-
-    private func removeLogo() {
-        let previousURL = loaded.logoUrl
-        let previousImage = session.businessLogo
-        session.cacheBusinessLogo(nil)
-        var profile = loaded
-        profile.logoUrl = nil
-        Task {
-            do {
-                try await BusinessService.save(profile)
-            } catch {
-                session.cacheBusinessLogo(previousImage)
-                toast = Toast(style: .error, message: "Couldn't remove your logo")
-                return
-            }
-            loaded = profile
-            session.cacheBusinessProfile(profile)
-            await LogoService.removeStored(at: previousURL)
-            toast = Toast(style: .success, message: "Logo removed")
-        }
     }
 
     // MARK: - Data

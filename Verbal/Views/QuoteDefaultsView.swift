@@ -8,10 +8,18 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 struct QuoteDefaultsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
+
+    /// The logo saves the moment it's picked, on its own — it isn't part of the
+    /// Save button, because choosing a picture already reads as a decision and
+    /// nobody expects to confirm it twice.
+    @State private var pickedLogo: PhotosPickerItem?
+    @State private var isUploadingLogo = false
+    @State private var toast: Toast?
 
     @State private var validityDays = 14
     /// Percentage as typed, e.g. "20". Empty means not tax registered.
@@ -43,6 +51,27 @@ struct QuoteDefaultsView: View {
         ZStack {
             Color(.homeBackground).ignoresSafeArea()
             Form {
+            Section {
+                letterheadPreview
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                // Read before the closure: a picker's label is a Sendable
+                // closure and can't touch the main-actor store from inside.
+                let hasLogo = session.businessLogo != nil
+                PhotosPicker(selection: $pickedLogo, matching: .images) {
+                    Label(hasLogo ? "Replace logo" : "Add logo", systemImage: "photo")
+                }
+                .disabled(isUploadingLogo)
+                if hasLogo {
+                    Button("Remove logo", role: .destructive) { removeLogo() }
+                        .disabled(isUploadingLogo)
+                }
+            } header: {
+                Text("Letterhead")
+            } footer: {
+                Text("The top of every quote you send. Your business name and contact details come from Profile.")
+            }
+            .listRowBackground(Color(.surface))
+
             Section {
                 Stepper("Valid for \(validityDays) day\(validityDays == 1 ? "" : "s")",
                         value: $validityDays, in: 1...365)
@@ -102,11 +131,143 @@ struct QuoteDefaultsView: View {
             }
         }
         .task { await load() }
+        .onChange(of: pickedLogo) { _, item in
+            guard let item else { return }
+            Task { await applyLogo(item) }
+        }
+        .toast($toast)
         .alert("Couldn't save your defaults", isPresented: $saveFailed) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Check your connection and tap Save again. Your changes are still here.")
         }
+        }
+    }
+
+    // MARK: - Letterhead
+
+    /// The header of the printed quote, not a settings row with a thumbnail in
+    /// it. A logo is only ever seen next to the business name and contact
+    /// lines, and this is the one screen where the user can be shown that
+    /// arrangement instead of asked to imagine it.
+    ///
+    /// White regardless of the app's appearance, because paper is. The same
+    /// reason the text on it is set in black rather than the theme's ink.
+    private var letterheadPreview: some View {
+        let logo = session.businessLogo
+        let profile = session.businessProfile
+        let name = profile?.businessName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let contact = [profile?.phone, profile?.email, profile?.address]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 5) {
+                if let logo {
+                    Image(uiImage: logo)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 120, maxHeight: 42, alignment: .leading)
+                        .padding(.bottom, 3)
+                        .opacity(isUploadingLogo ? 0.3 : 1)
+                } else {
+                    // Holds the space the logo will occupy, so adding one
+                    // rearranges nothing — and shows its size before committing.
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .foregroundStyle(.black.opacity(0.18))
+                        .frame(width: 76, height: 42)
+                        .overlay {
+                            Image(systemName: "photo")
+                                .font(.system(size: 15, weight: .light))
+                                .foregroundStyle(.black.opacity(0.3))
+                        }
+                        .padding(.bottom, 3)
+                }
+                Text(name?.isEmpty == false ? name! : "Your business name")
+                    .font(.robotoSlab(16, relativeTo: .headline))
+                    .foregroundStyle(name?.isEmpty == false ? .black : .black.opacity(0.35))
+                ForEach(contact, id: \.self) { line in
+                    Text(line)
+                        .font(.system(size: 8))
+                        .foregroundStyle(.black.opacity(0.6))
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 12)
+            // The other half of the printed header, so the preview reads as a
+            // page rather than as a picture of a logo.
+            Text("QUOTE")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color(.royalBlue800))
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            if isUploadingLogo { ProgressView() }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
+    }
+
+    /// Shown immediately, uploaded after. The picture is already on screen in
+    /// the picker when they tap it; making the preview wait for a round trip
+    /// before agreeing would be the app doubting a choice the user has made.
+    private func applyLogo(_ item: PhotosPickerItem) async {
+        isUploadingLogo = true
+        defer { isUploadingLogo = false; pickedLogo = nil }
+
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            toast = Toast(style: .error, message: "Couldn't read that image")
+            return
+        }
+
+        let previousURL = loaded.logoUrl
+        let previousImage = session.businessLogo
+        session.cacheBusinessLogo(image)
+
+        var profile = loaded
+        do {
+            profile.logoUrl = try await LogoService.upload(image)
+            try await BusinessService.save(profile)
+        } catch {
+            // Put back exactly what was there, including the case where that
+            // was nothing. A logo that looks saved and isn't goes out on the
+            // next quote as a blank letterhead.
+            session.cacheBusinessLogo(previousImage)
+            toast = Toast(style: .error, message: "Couldn't save your logo")
+            return
+        }
+        loaded = profile
+        session.cacheBusinessProfile(profile)
+        // Only once the new one is safely referenced. Deleting first would risk
+        // a failed upload leaving the user with no logo at all.
+        await LogoService.removeStored(at: previousURL)
+        toast = Toast(style: .success, message: "Logo saved")
+    }
+
+    private func removeLogo() {
+        let previousURL = loaded.logoUrl
+        let previousImage = session.businessLogo
+        session.cacheBusinessLogo(nil)
+        var profile = loaded
+        profile.logoUrl = nil
+        Task {
+            do {
+                try await BusinessService.save(profile)
+            } catch {
+                session.cacheBusinessLogo(previousImage)
+                toast = Toast(style: .error, message: "Couldn't remove your logo")
+                return
+            }
+            loaded = profile
+            session.cacheBusinessProfile(profile)
+            await LogoService.removeStored(at: previousURL)
+            toast = Toast(style: .success, message: "Logo removed")
         }
     }
 
