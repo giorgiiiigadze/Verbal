@@ -205,20 +205,42 @@ struct HomeView: View {
                         // Zero-opacity link so the row navigates without the
                         // default trailing chevron.
                         NavigationLink {
-                            QuoteDetailView(quote: quote,
-                                            initialLineItems: session.lineItems(for: quote.id) ?? []) {
-                                withAnimation(Self.rowRemoval) {
-                                    quotes.removeAll { $0.id == quote.id }
-                                }
-                                // Delay so the toast animates in on the
-                                // now-visible Home, after the detail view's
-                                // pop finishes (setting it mid-dismiss shows
-                                // it off-screen and it's effectively missed).
-                                Task {
-                                    try? await Task.sleep(for: .seconds(0.4))
-                                    toast = Toast(style: .success, message: "Quote deleted")
-                                }
-                            }
+                            QuoteDetailView(
+                                quote: quote,
+                                initialLineItems: session.lineItems(for: quote.id) ?? [],
+                                onDeleted: {
+                                    withAnimation(Self.rowRemoval) {
+                                        quotes.removeAll { $0.id == quote.id }
+                                    }
+                                    // Delay so the toast animates in on the
+                                    // now-visible Home, after the detail view's
+                                    // pop finishes (setting it mid-dismiss shows
+                                    // it off-screen and it's effectively missed).
+                                    Task {
+                                        try? await Task.sleep(for: .seconds(0.4))
+                                        toast = Toast(style: .success, message: "Quote deleted")
+                                    }
+                                },
+                                onRenamed: { newTitle in
+                                    // This list holds its own copy of the rows
+                                    // and only refetches on its own schedule,
+                                    // so the row keeps the old name until told.
+                                    guard let index = quotes.firstIndex(where: { $0.id == quote.id })
+                                    else { return }
+                                    quotes[index].title = newTitle
+                                },
+                                onPinChanged: { isPinned in
+                                    guard let index = quotes.firstIndex(where: { $0.id == quote.id })
+                                    else { return }
+                                    // The same spring the row's own pin uses, so
+                                    // popping back finds the card already where
+                                    // it belongs rather than watching it jump.
+                                    withAnimation(Self.pinSpring) {
+                                        quotes[index].pinned = isPinned
+                                    }
+                                },
+                                onDuplicated: { Task { await load() } }
+                            )
                             .environment(session)
                         } label: { EmptyView() }
                         .opacity(0)

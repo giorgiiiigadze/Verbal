@@ -7,12 +7,23 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct QuoteDetailView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     let quote: QuoteSummary
     var onDeleted: () -> Void
+    /// Lets the list behind this screen show the new name straight away. Home
+    /// keeps its own copy of the rows and only refetches on its own schedule,
+    /// so without this a rename doesn't reach the list you came from.
+    var onRenamed: (String?) -> Void = { _ in }
+    /// Same reason as `onRenamed`: the list holds its own rows, and a pin has
+    /// to move the card into the Pinned section behind this screen.
+    var onPinChanged: (Bool) -> Void = { _ in }
+    /// The copy is a new row the list knows nothing about, so it has to refetch
+    /// rather than be handed an edit to one it already holds.
+    var onDuplicated: () -> Void = { }
     @State private var showHeaderTitle = false
     @State private var lineItems: [QuoteLineItem]
     @State private var transcriptText: String?
@@ -20,6 +31,14 @@ struct QuoteDetailView: View {
     /// transcript can't be reached rather than that it doesn't exist.
     @State private var transcriptUnreachable = false
     @State private var showTranscript = false
+    /// Renaming, and the field's contents while the alert is up. Seeded from
+    /// the current name each time it opens, so an abandoned edit doesn't come
+    /// back the next time.
+    @State private var showRename = false
+    @State private var renameText = ""
+    @State private var toast: Toast?
+    @State private var pinned: Bool
+    @State private var showDuplicateConfirm = false
     @State private var showShare = false
     /// Collects business details before the first share, when there are none.
     @State private var showBusinessDetails = false
@@ -69,9 +88,17 @@ struct QuoteDetailView: View {
     /// Statuses offered in the status-chip menu, in workflow order.
     private let selectableStatuses = ["draft", "sent", "viewed", "accepted", "declined", "expired"]
 
-    init(quote: QuoteSummary, initialLineItems: [QuoteLineItem] = [], onDeleted: @escaping () -> Void) {
+    init(quote: QuoteSummary, initialLineItems: [QuoteLineItem] = [],
+         onDeleted: @escaping () -> Void,
+         onRenamed: @escaping (String?) -> Void = { _ in },
+         onPinChanged: @escaping (Bool) -> Void = { _ in },
+         onDuplicated: @escaping () -> Void = { }) {
         self.quote = quote
         self.onDeleted = onDeleted
+        self.onRenamed = onRenamed
+        self.onPinChanged = onPinChanged
+        self.onDuplicated = onDuplicated
+        _pinned = State(initialValue: quote.pinned)
         // The status as the list shows it, so a quote filed under Expired there
         // doesn't call itself Sent the moment it's opened.
         _status = State(initialValue: quote.effectiveStatus)
@@ -370,6 +397,64 @@ struct QuoteDetailView: View {
         }
     }
 
+    /// Copy the quote and stay put. Following the new draft would take someone
+    /// away from what they were reading to a screen identical to it; the copy
+    /// is waiting on the list when they go back.
+    private func duplicateQuote() {
+        Task {
+            do {
+                try await QuoteService.duplicateQuote(id: quote.id)
+                onDuplicated()
+                toast = Toast(style: .success, message: "Copy saved as a draft")
+            } catch {
+                toast = Toast(style: .error, message: "Couldn't duplicate this quote")
+            }
+        }
+    }
+
+    /// Optimistic like the rest, and reported back so the card moves into the
+    /// Pinned section on the list behind this screen.
+    private func togglePin() {
+        let newValue = !pinned
+        // Fired with the optimistic update, not after the round trip, so the
+        // tap answers immediately.
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        pinned = newValue
+        onPinChanged(newValue)
+        Task {
+            do {
+                try await QuoteService.setPinned(id: quote.id, pinned: newValue)
+            } catch {
+                pinned = !newValue
+                onPinChanged(!newValue)
+                toast = Toast(style: .error,
+                              message: newValue ? "Couldn't pin this quote"
+                                                : "Couldn't unpin this quote")
+            }
+        }
+    }
+
+    /// Optimistic, like the status and pin changes: the new name is on screen
+    /// before the write lands, and put back if it doesn't.
+    private func rename() {
+        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Nothing typed is a slip, not an instruction to strip the name off a
+        // quote — leave it as it was.
+        guard !trimmed.isEmpty, trimmed != title else { return }
+        let previous = title
+        withAnimation(.easeInOut(duration: 0.2)) { title = trimmed }
+        onRenamed(trimmed)
+        Task {
+            do {
+                try await QuoteService.setTitle(quoteId: quote.id, title: trimmed)
+            } catch {
+                withAnimation(.easeInOut(duration: 0.2)) { title = previous }
+                onRenamed(previous)
+                toast = Toast(style: .error, message: "Couldn't rename this quote")
+            }
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -545,6 +630,37 @@ struct QuoteDetailView: View {
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    // A ControlGroup inside a Menu is what gives Notes and
+                    // Photos that row of icons across the top — the system
+                    // draws it, so it matches whatever the OS does next.
+                    //
+                    // What earns a place here: acting on the quote and handing
+                    // the screen straight back. The items below it all open
+                    // something instead, which is why they stay a list.
+                    ControlGroup {
+                        Button {
+                            togglePin()
+                        } label: {
+                            Label(pinned ? "Unpin" : "Pin",
+                                  systemImage: pinned ? "pin.slash" : "pin")
+                        }
+                        Button {
+                            showDuplicateConfirm = true
+                        } label: {
+                            Label("Duplicate", systemImage: "plus.square.on.square")
+                        }
+                        Button {
+                            // Seeded with what's on screen, including the
+                            // summary standing in for a quote that was never
+                            // named — the field should open on the name being
+                            // changed.
+                            renameText = displayTitle
+                            showRename = true
+                        } label: {
+                            Label("Rename", systemImage: "character.cursor.ibeam")
+                        }
+                    }
+                    Divider()
                     Button {
                         showEdit = true
                     } label: {
@@ -566,6 +682,18 @@ struct QuoteDetailView: View {
                 }
             }
         }
+        .alert("Duplicate this quote?", isPresented: $showDuplicateConfirm) {
+            Button("Duplicate") { duplicateQuote() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This creates a copy of “\(displayTitle)” as a new draft.")
+        }
+        .alert("Rename quote", isPresented: $showRename) {
+            TextField("Quote name", text: $renameText)
+                .textInputAutocapitalization(.sentences)
+            Button("Save") { rename() }
+            Button("Cancel", role: .cancel) {}
+        }
         .alert("Delete this quote?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 Task {
@@ -578,5 +706,6 @@ struct QuoteDetailView: View {
         } message: {
             Text("This permanently deletes “\(displayTitle)” and its line items. This can't be undone.")
         }
+        .toast($toast)
     }
 }

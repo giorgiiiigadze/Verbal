@@ -22,7 +22,11 @@ struct EditQuoteView: View {
     var onSaved: (_ title: String, _ jobSummary: String, _ scope: [String], _ total: Double) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var title: String
+    /// Carried through untouched. Renaming lives in the detail screen's menu,
+    /// behind a native alert; this screen still has to write the title back,
+    /// because saving rewrites the whole row and a title left out is a title
+    /// erased.
+    private let title: String
     @State private var jobSummary: String
     /// Scope edited as one bullet per line; blank lines are dropped on save.
     @State private var scopeText: String
@@ -46,7 +50,7 @@ struct EditQuoteView: View {
         self.currency = currency
         self.taxRate = taxRate
         self.onSaved = onSaved
-        _title = State(initialValue: title)
+        self.title = title
         _jobSummary = State(initialValue: jobSummary)
         _scopeText = State(initialValue: scope.joined(separator: "\n"))
         // Build with an explicit loop (not `.map`) so the value-type initializer
@@ -73,7 +77,6 @@ struct EditQuoteView: View {
         NavigationStack {
             Form {
                 Section("Details") {
-                    TextField("Title", text: $title)
                     TextField("Job summary", text: $jobSummary, axis: .vertical)
                         .lineLimit(2...5)
                 }

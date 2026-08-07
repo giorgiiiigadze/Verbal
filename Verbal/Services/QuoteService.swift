@@ -13,7 +13,8 @@ import Supabase
 /// Lightweight quote row for the Home list.
 struct QuoteSummary: Identifiable, Decodable, Sendable {
     let id: UUID
-    let title: String?
+    /// Mutable so Home can reflect a rename made on the detail screen.
+    var title: String?
     let jobSummary: String?
     let total: Double
     /// Mutable so Home can optimistically reflect a status change from the menu.
@@ -360,6 +361,18 @@ enum QuoteService {
     }
 
     // MARK: - Editing
+
+    /// Rename a quote, and nothing else. `updateQuoteCore` would do it, but it
+    /// writes the scope and both totals alongside — figures this caller has no
+    /// business restating just to change a name.
+    static func setTitle(quoteId: UUID, title: String) async throws {
+        struct Payload: Encodable { let title: String }
+        try await client
+            .from("quotes")
+            .update(Payload(title: title))
+            .eq("id", value: quoteId)
+            .execute()
+    }
 
     /// Update a quote's core editable fields plus recomputed totals.
     static func updateQuoteCore(id: UUID, title: String?, jobSummary: String?,
