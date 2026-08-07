@@ -14,6 +14,20 @@
 import SwiftUI
 
 struct AuthBackground: View {
+    @Environment(\.colorScheme) private var scheme
+
+    /// The waves are drawn in the deep brand blue, which has no dark variant —
+    /// #192868 over a #1C1C1E background is dark navy on near-black, so at
+    /// these opacities the whole drawing simply wasn't there. In dark mode they
+    /// invert to white, which is the same gesture read the other way round.
+    ///
+    /// The opacities carry over unchanged: white at 10% over the dark ground
+    /// lands about as far from it as the navy does from the light one, so the
+    /// lines stay as quiet in one appearance as the other.
+    private var lineColor: Color {
+        scheme == .dark ? .white : Color(.royalBlue600)
+    }
+
     var body: some View {
         ZStack {
             Color(.homeBackground)
@@ -36,7 +50,7 @@ struct AuthBackground: View {
                     Wave(amplitude: wave.amplitude,
                          wavelength: wave.wavelength,
                          phase: wave.phase)
-                        .stroke(Color(.royalBlue600).opacity(wave.opacity),
+                        .stroke(lineColor.opacity(wave.opacity),
                                 style: StrokeStyle(lineWidth: wave.width, lineCap: .round))
                         .frame(height: 220)
                         .position(x: proxy.size.width / 2,
