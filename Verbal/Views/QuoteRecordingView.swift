@@ -102,7 +102,9 @@ struct QuoteRecordingView: View {
                             .frame(height: 1)
                             .id(Self.transcriptEndAnchor)
                     }
-                    .padding(.horizontal, 24)
+                    // 20, as everywhere else. The review that appears here shares
+                    // its shape with the quote screen, and the two were 4pt apart.
+                    .padding(.horizontal, 20)
                     .padding(.top, 12)
                     .animation(.easeInOut(duration: 0.35), value: isGenerating)
                 }
@@ -130,7 +132,7 @@ struct QuoteRecordingView: View {
                 }
                 .safeAreaInset(edge: .bottom) {
                     bottomBar
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, 20)
                         .padding(.bottom, 8)
                 }
                 .toast($toast)

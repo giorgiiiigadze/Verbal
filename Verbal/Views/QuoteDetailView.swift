@@ -293,7 +293,9 @@ struct QuoteDetailView: View {
                 }
             }
         }
-        .padding(.horizontal, 24)
+        // Kept in line with the content scrolling above it, so the total sits
+        // under the prices rather than inset from them.
+        .padding(.horizontal, 20)
         .padding(.vertical, 14)
         .background(.bar)
         .overlay(alignment: .top) {
@@ -514,7 +516,9 @@ struct QuoteDetailView: View {
                 lineItemsSection
                     .padding(.top, 8)
             }
-            .padding(.horizontal, 24)
+            // 20, matching Home and the rate card. A quote opened from the list
+            // used to step 4pt inward from the row that was tapped.
+            .padding(.horizontal, 20)
             .padding(.top, 12)
         }
         .background(Color(.homeBackground))
