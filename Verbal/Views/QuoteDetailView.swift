@@ -498,7 +498,7 @@ struct QuoteDetailView: View {
                 chips
 
                 if !jobSummary.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text("Summary")
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(Color(.mainText))
@@ -510,11 +510,15 @@ struct QuoteDetailView: View {
                     }
                 }
 
+                // 12 on top of the stack's own 20, so a section starts a clear
+                // step away from the one before it. Blocks of prose need more
+                // air between them than the lines inside them, or the reader has
+                // to work out where one thought ends.
                 ScopeList(items: scope)
-                    .padding(.top, 8)
+                    .padding(.top, 12)
 
                 lineItemsSection
-                    .padding(.top, 8)
+                    .padding(.top, 12)
             }
             // 20, matching Home and the rate card. A quote opened from the list
             // used to step 4pt inward from the row that was tapped.

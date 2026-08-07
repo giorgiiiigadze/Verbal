@@ -588,8 +588,10 @@ struct QuoteRecordingView: View {
                 .foregroundStyle(Color(.mainText))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            // Matches the quote screen — this review is the same document, and
+            // the two shouldn't breathe differently.
             ScopeList(items: quote.scope)
-                .padding(.top, 8)
+                .padding(.top, 12)
 
             if !quote.lineItems.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
@@ -616,7 +618,7 @@ struct QuoteRecordingView: View {
                             .strokeBorder(Color(.separator), lineWidth: 0.5)
                     )
                 }
-                .padding(.top, 8)
+                .padding(.top, 12)
 
                 let subtotal = quote.lineItems.compactMap(\.lineTotal).reduce(0, +)
                 let missing = quote.lineItems.filter(\.isMissingPrice).count

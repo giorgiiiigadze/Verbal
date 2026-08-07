@@ -12,7 +12,10 @@ struct ScopeList: View {
 
     var body: some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            // 8 under the heading, against the 32 above it. Space belongs above
+            // a heading, not below: it should read as attached to what follows
+            // rather than floating between two blocks.
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Scope of work")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color(.mainText))
@@ -21,10 +24,16 @@ struct ScopeList: View {
                         HStack(alignment: .top, spacing: 10) {
                             Circle()
                                 .fill(Color(.mainText))
-                                .frame(width: 5, height: 5)
+                                .frame(width: 6, height: 6)
+                                // Centred on the first line's cap height rather
+                                // than its box, so the dot sits with the text.
                                 .padding(.top, 7)
+                            // The same weight as the summary above it. These are
+                            // two halves of one description of the job and were
+                            // set as though one mattered more.
                             Text(item)
                                 .font(.callout)
+                                .fontWeight(.medium)
                                 .foregroundStyle(Color(.mainText))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
