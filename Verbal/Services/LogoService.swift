@@ -33,7 +33,11 @@ enum LogoService {
         guard let data = pngData(from: image) else {
             throw LogoError.unreadableImage
         }
-        let path = "\(userID.uuidString)/\(UUID().uuidString).png"
+        // Lowercased, because that is how Postgres renders a uuid and the
+        // storage policy compares this folder name to `auth.uid()`. Swift's
+        // uuidString is uppercase, which made every upload fail the row-level
+        // check and surface as "couldn't save your logo".
+        let path = "\(userID.uuidString.lowercased())/\(UUID().uuidString.lowercased()).png"
         try await client.storage
             .from(bucket)
             .upload(path, data: data, options: FileOptions(contentType: "image/png"))
