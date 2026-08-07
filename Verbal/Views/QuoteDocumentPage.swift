@@ -141,8 +141,14 @@ struct QuoteDocumentPage: View {
                     Image(uiImage: logo)
                         .resizable()
                         .scaledToFit()
-                        .frame(maxWidth: 150, maxHeight: 44, alignment: .leading)
-                        .padding(.bottom, 6)
+                        // 54 rather than 44: a square mark is capped by height
+                        // and so never touched the width it was allowed, which
+                        // printed it as a stamp beside a 20pt business name. A
+                        // wide wordmark still runs out of width first, so this
+                        // only lifts the marks that were being shortchanged —
+                        // and it stays under the name it belongs to.
+                        .frame(maxWidth: 160, maxHeight: 54, alignment: .leading)
+                        .padding(.bottom, 8)
                 }
                 Text(document.businessName)
                     .font(.custom("RobotoSlab-Regular", size: 20))
