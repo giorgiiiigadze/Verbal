@@ -21,9 +21,10 @@ struct QuoteDetailView: View {
     /// Same reason as `onRenamed`: the list holds its own rows, and a pin has
     /// to move the card into the Pinned section behind this screen.
     var onPinChanged: (Bool) -> Void = { _ in }
-    /// The copy is a new row the list knows nothing about, so it has to refetch
-    /// rather than be handed an edit to one it already holds.
-    var onDuplicated: () -> Void = { }
+    /// For changes the list can't be handed directly — a duplicate is a row it
+    /// knows nothing about, and edited line items change a total it holds a
+    /// stale copy of. Both mean: refetch.
+    var onNeedsRefresh: () -> Void = { }
     @State private var showHeaderTitle = false
     @State private var lineItems: [QuoteLineItem]
     @State private var transcriptText: String?
@@ -62,6 +63,7 @@ struct QuoteDetailView: View {
         "Share with \(missingCount) item\(missingCount == 1 ? "" : "s") unpriced?"
     }
     @State private var showEdit = false
+    @State private var showLineItems = false
     @State private var showDeleteConfirm = false
     @State private var showClientSheet = false
     /// Seeded from the quote and kept in sync after an edit, so the chip
@@ -92,12 +94,12 @@ struct QuoteDetailView: View {
          onDeleted: @escaping () -> Void,
          onRenamed: @escaping (String?) -> Void = { _ in },
          onPinChanged: @escaping (Bool) -> Void = { _ in },
-         onDuplicated: @escaping () -> Void = { }) {
+         onNeedsRefresh: @escaping () -> Void = { }) {
         self.quote = quote
         self.onDeleted = onDeleted
         self.onRenamed = onRenamed
         self.onPinChanged = onPinChanged
-        self.onDuplicated = onDuplicated
+        self.onNeedsRefresh = onNeedsRefresh
         _pinned = State(initialValue: quote.pinned)
         // The status as the list shows it, so a quote filed under Expired there
         // doesn't call itself Sent the moment it's opened.
@@ -216,12 +218,38 @@ struct QuoteDetailView: View {
     }
 
     @ViewBuilder
+    /// A titled panel with its own header bar, after the code blocks in Claude:
+    /// a quiet label on the left and the control that opens it on the right.
+    /// The heading used to float above a bordered list, which named the section
+    /// but gave it nothing to be tapped by — editing was somewhere else
+    /// entirely, inside a form about the quote's wording.
     private var lineItemsSection: some View {
         if !lineItems.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Line items")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(Color(.mainText))
+            VStack(spacing: 0) {
+                HStack {
+                    Text("Line items")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        showLineItems = true
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            // The glyph is small; the tap target shouldn't be.
+                            .frame(width: 30, height: 30)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Edit line items")
+                }
+                .padding(.leading, 16)
+                .padding(.trailing, 8)
+                .padding(.vertical, 6)
+
+                Divider()
+
                 VStack(spacing: 0) {
                     ForEach(lineItems) { item in
                         LineItemRow(
@@ -237,11 +265,13 @@ struct QuoteDetailView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
             }
+            .background(Color(.surface),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
         }
     }
 
@@ -404,7 +434,7 @@ struct QuoteDetailView: View {
         Task {
             do {
                 try await QuoteService.duplicateQuote(id: quote.id)
-                onDuplicated()
+                onNeedsRefresh()
                 toast = Toast(style: .success, message: "Copy saved as a draft")
             } catch {
                 toast = Toast(style: .error, message: "Couldn't duplicate this quote")
@@ -540,18 +570,27 @@ struct QuoteDetailView: View {
         }
         .sheet(isPresented: $showEdit) {
             EditQuoteView(quoteId: quote.id,
-                          currency: currency,
-                          taxRate: quote.taxRate,
                           title: title,
                           jobSummary: jobSummary,
-                          scope: scope,
-                          lineItems: lineItems) { newTitle, newSummary, newScope, newTotal in
-                title = newTitle
+                          scope: scope) { newSummary, newScope in
                 jobSummary = newSummary
                 scope = newScope
+            }
+        }
+        .sheet(isPresented: $showLineItems) {
+            LineItemsSheet(quoteId: quote.id,
+                           currency: currency,
+                           taxRate: quote.taxRate,
+                           lineItems: lineItems) { _, newTotal in
                 total = newTotal
-                // Reload items so descriptions/prices/order reflect the edits.
-                Task { lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? lineItems }
+                // Refetched rather than handed back: items added in the sheet
+                // have no server id until they're inserted, and the rows here
+                // are keyed by it.
+                Task {
+                    lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? lineItems
+                }
+                // The list's copy of this quote still holds the old total.
+                onNeedsRefresh()
             }
         }
         .sheet(isPresented: $showBusinessDetails) {

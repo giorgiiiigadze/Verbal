@@ -239,7 +239,7 @@ struct HomeView: View {
                                         quotes[index].pinned = isPinned
                                     }
                                 },
-                                onDuplicated: { Task { await load() } }
+                                onNeedsRefresh: { Task { await load() } }
                             )
                             .environment(session)
                         } label: { EmptyView() }
@@ -837,8 +837,15 @@ struct HomeView: View {
         do {
             try await QuoteService.duplicateQuote(id: quote.id)
             await load()
+            // The copy lands wherever the sort puts it, which on a long list is
+            // out of sight. Without a word, confirming the alert looked like it
+            // had done nothing — and the obvious response to that is to tap it
+            // again and end up with three.
+            toast = Toast(style: .success, message: "Copy saved as a draft")
         } catch {
-            // Leave the list unchanged if the copy failed.
+            // Leave the list unchanged if the copy failed, but say so — the
+            // silence read as success.
+            toast = Toast(style: .error, message: "Couldn't duplicate this quote")
         }
     }
 }

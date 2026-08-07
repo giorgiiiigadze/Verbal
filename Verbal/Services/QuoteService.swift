@@ -374,25 +374,24 @@ enum QuoteService {
             .execute()
     }
 
-    /// Update a quote's core editable fields plus recomputed totals.
-    static func updateQuoteCore(id: UUID, title: String?, jobSummary: String?,
-                                scope: [String], subtotal: Double, total: Double) async throws {
+    /// Update the written parts of a quote. Deliberately no money in it: the
+    /// figures belong to the line items, and a payload that carried them would
+    /// have to restate them correctly every time a sentence was edited.
+    static func updateQuoteText(id: UUID, title: String?, jobSummary: String?,
+                                scope: [String]) async throws {
         struct Payload: Encodable {
             let title: String?
             let jobSummary: String?
             let scope: [String]
-            let subtotal: Double
-            let total: Double
             enum CodingKeys: String, CodingKey {
                 case title
                 case jobSummary = "job_summary"
-                case scope, subtotal, total
+                case scope
             }
         }
         try await client
             .from("quotes")
-            .update(Payload(title: title, jobSummary: jobSummary, scope: scope,
-                            subtotal: subtotal, total: total))
+            .update(Payload(title: title, jobSummary: jobSummary, scope: scope))
             .eq("id", value: id)
             .execute()
     }

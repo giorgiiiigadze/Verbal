@@ -607,6 +607,8 @@ struct QuoteRecordingView: View {
                         }
                     }
                     .padding(.horizontal, 16)
+                    .background(Color(.surface),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .strokeBorder(Color(.separator), lineWidth: 0.5)
