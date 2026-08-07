@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// A4 at 72dpi, the unit CoreGraphics uses for PDF pages.
 enum PageMetrics {
@@ -34,6 +35,11 @@ struct QuoteDocument {
     let total: Double
     let currency: String?
     let business: BusinessProfile?
+    /// Passed as an image rather than a URL: the page is rendered synchronously
+    /// into a PDF, so there is no moment at which it could wait for a download.
+    /// It comes from the copy the session already holds, which is also why a
+    /// quote shared with no signal still goes out headed.
+    var logo: UIImage?
 
     var businessName: String {
         let name = business?.businessName?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -127,6 +133,17 @@ struct QuoteDocumentPage: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
+                // Above the name, not beside it: a mark set next to the
+                // business name competes with it, and the widths vary wildly —
+                // a square badge and a long horizontal wordmark would each
+                // shove the name somewhere different.
+                if let logo = document.logo {
+                    Image(uiImage: logo)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 150, maxHeight: 44, alignment: .leading)
+                        .padding(.bottom, 6)
+                }
                 Text(document.businessName)
                     .font(.custom("RobotoSlab-Regular", size: 20))
                     .foregroundStyle(.black)

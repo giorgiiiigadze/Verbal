@@ -39,6 +39,11 @@ nonisolated enum LocalCache {
         /// server's rows: it is also written at the moment a quote is recorded,
         /// when there is no server response to keep.
         case transcript(quoteID: UUID)
+        /// The business logo's bytes, not JSON. Kept so a quote shared from a
+        /// basement still prints the user's mark on it — the profile row was
+        /// already cached for exactly that reason, and a letterhead that loses
+        /// its logo offline is half a letterhead.
+        case businessLogo
 
         var filename: String {
             switch self {
@@ -47,6 +52,7 @@ nonisolated enum LocalCache {
             case .businessProfile: return "businessProfile"
             case .lineItems(let quoteID): return "lineItems-\(quoteID.uuidString)"
             case .transcript(let quoteID): return "transcript-\(quoteID.uuidString)"
+            case .businessLogo: return "businessLogo"
             }
         }
     }
@@ -82,12 +88,24 @@ nonisolated enum LocalCache {
         return try? PostgrestClient.Configuration.jsonDecoder.decode(type, from: data)
     }
 
+    /// The stored bytes as they were written, for things that aren't JSON.
+    static func loadData(for key: Key, userID: UUID) -> Data? {
+        guard let directory = directory(for: userID) else { return nil }
+        return try? Data(contentsOf: directory.appendingPathComponent(key.filename))
+    }
+
     /// Whether something is already stored, without paying to decode it.
     static func exists(for key: Key, userID: UUID) -> Bool {
         guard let directory = directory(for: userID) else { return false }
         return FileManager.default.fileExists(
             atPath: directory.appendingPathComponent(key.filename).path
         )
+    }
+
+    /// Drop one stored item.
+    static func clear(key: Key, userID: UUID) {
+        guard let directory = directory(for: userID) else { return }
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent(key.filename))
     }
 
     /// Drop the files belonging to one quote. A deleted quote leaves its rows
