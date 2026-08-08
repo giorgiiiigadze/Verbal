@@ -10,5 +10,6 @@ Verbal turns a spoken description of a job into a written, priced quote for
 tradespeople.
 
 - [Privacy Policy](privacy/)
+- [Terms of Service](terms/)
 
 Questions or problems: **gio.giorgigiorgadze20@gmail.com**

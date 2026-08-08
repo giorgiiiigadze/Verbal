@@ -25,10 +25,10 @@ enum AppInfo {
     /// lowercase spelling this used to carry returned a 404.
     static let privacyPolicyURL = URL(string: "https://giorgiiiigadze.github.io/Verbal/privacy/")!
 
-    /// Nil until the terms are written. Settings hides the row rather than
-    /// offering a link that goes nowhere. Required once subscriptions ship —
-    /// Apple asks for terms alongside anything billed.
-    static let termsURL: URL? = nil
+    /// Same host and the same case-sensitivity trap as the privacy policy.
+    /// Optional in type only now — the row it feeds has to be reachable from
+    /// the paywall once subscriptions ship, and App Review checks.
+    static let termsURL: URL? = URL(string: "https://giorgiiiigadze.github.io/Verbal/terms/")
 
     /// A support email pre-filled with the details that would otherwise be the
     /// first three replies of every conversation.
