@@ -30,6 +30,19 @@ enum AppInfo {
     /// the paywall once subscriptions ship, and App Review checks.
     static let termsURL: URL? = URL(string: "https://giorgiiiigadze.github.io/Verbal/terms/")
 
+    /// Nil until the app is on the App Store and has a numeric id. Until then
+    /// there is nothing to review and no page to open.
+    static let appStoreID: String? = nil
+
+    /// Opens the App Store straight onto the review sheet. Preferred over
+    /// `requestReview` for a row the user deliberately tapped: Apple throttles
+    /// that prompt and will silently show nothing, and a control that sometimes
+    /// does nothing teaches people the app is unreliable.
+    static var reviewURL: URL? {
+        guard let appStoreID else { return nil }
+        return URL(string: "https://apps.apple.com/app/id\(appStoreID)?action=write-review")
+    }
+
     /// A support email pre-filled with the details that would otherwise be the
     /// first three replies of every conversation.
     static var supportMailURL: URL? {

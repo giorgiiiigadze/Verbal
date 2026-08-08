@@ -4,13 +4,9 @@
 //
 
 import SwiftUI
-import StoreKit
 
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
-    /// The system review prompt — Apple limits how often it actually appears,
-    /// so this is a request rather than a guarantee.
-    @Environment(\.requestReview) private var requestReview
 
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
@@ -49,29 +45,27 @@ struct SettingsView: View {
 
     var body: some View {
         List {
+            // Currency belongs here rather than in a section of its own: it is
+            // a quote-formatting setting, and one row wrapped in its own header
+            // and footer is more chrome than content on a screen this short.
             Section {
                 NavigationLink {
                     QuoteDefaultsView()
                 } label: {
                     Label("Quote defaults", systemImage: "doc.plaintext")
                 }
-            } header: {
-                Text("Quotes")
-            } footer: {
-                Text("Validity, terms, and notes pre-filled on every new quote.")
-            }
-            .listRowBackground(Color(.surface))
-
-            Section {
                 Picker("Main currency", selection: currency) {
                     ForEach(AppCurrency.allCases) { option in
                         Text(option.label).tag(option)
                     }
                 }
             } header: {
-                Text("Currency")
+                Text("Quotes")
             } footer: {
-                Text("Used to format totals in your quotes and rate card.")
+                // Names the letterhead: it is the most visible thing behind
+                // that row and this description was written before it moved
+                // there, so it was pointing at a screen it no longer described.
+                Text("Your letterhead, validity, tax and standard terms, applied to every new quote. The currency also formats your rate card.")
             }
             .listRowBackground(Color(.surface))
 
@@ -81,10 +75,14 @@ struct SettingsView: View {
                         Label("Contact support", systemImage: "envelope")
                     }
                 }
-                Button {
-                    requestReview()
-                } label: {
-                    Label("Rate Verbal", systemImage: "star")
+                // Absent until the app is on the App Store. `requestReview` is
+                // callable at any time but shows nothing before release and is
+                // throttled after it, so as a row the user taps on purpose it
+                // would do nothing on most taps — the worst kind of control.
+                if let review = AppInfo.reviewURL {
+                    Link(destination: review) {
+                        Label("Rate Verbal", systemImage: "star")
+                    }
                 }
             } header: {
                 Text("Support")
