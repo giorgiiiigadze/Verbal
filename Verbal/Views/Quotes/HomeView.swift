@@ -769,6 +769,14 @@ struct HomeView: View {
             quotes = try await fetchAllowingOneRetry()
             loadFailed = false
         } catch {
+            // A load that was cancelled did not fail. `.task` is cancelled the
+            // moment this view goes away — tapping a quote, switching tab,
+            // opening the recorder — and the request in flight throws for that
+            // reason. Reporting it put a red cross on screen for the ordinary
+            // act of tapping something, which is exactly why it looked random:
+            // it depended on whether you touched anything during the fraction
+            // of a second the fetch takes.
+            guard !error.isCancellation else { return }
             // Keep whatever we had on screen; the flag lets the empty state
             // report a failure instead of claiming there are no quotes.
             loadFailed = true
@@ -795,6 +803,8 @@ struct HomeView: View {
         do {
             return try await QuoteService.fetchQuotes()
         } catch {
+            // Don't wait out a retry for a load nobody is waiting on any more.
+            guard !error.isCancellation else { throw error }
             try await Task.sleep(for: .milliseconds(600))
             return try await QuoteService.fetchQuotes()
         }

@@ -10,6 +10,7 @@ import SwiftUI
 
 struct RateCardView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(NetworkMonitor.self) private var network
     @State private var items: [RateCardItem] = []
     @State private var hasLoaded = false
     @State private var isLoading = false
@@ -298,8 +299,13 @@ struct RateCardView: View {
             // Settings believing there were no saved prices to protect — which
             // silently disarmed the warning before a currency change rewrites
             // every rate.
+            // Cancelled is not failed — this tab's load is called off every
+            // time the user leaves it, and saying so is telling them their own
+            // tap went wrong.
+            guard !error.isCancellation else { return }
             loadFailed = true
-            if !items.isEmpty {
+            // Silent offline: the banner already says it.
+            if !items.isEmpty, network.isOnline {
                 toast = Toast(style: .error, message: "Couldn't refresh rates")
             }
         }
