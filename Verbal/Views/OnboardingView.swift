@@ -60,9 +60,23 @@ struct OnboardingView: View {
 
                 footer
             }
-            .padding(24)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            // Less than the sides: the home indicator already reserves space
+            // below this, and matching 24 to it left the button floating well
+            // clear of the bottom of the screen.
+            .padding(.bottom, 8)
         }
         .animation(.easeInOut(duration: 0.3), value: step)
+        // Swiping back is what the sideways transition promises, so it should
+        // work. It is not the only way back — an invisible gesture can't be the
+        // whole answer — but leaving it out would make the animation a lie.
+        .gesture(
+            DragGesture(minimumDistance: 30)
+                .onEnded { drag in
+                    if drag.translation.width > 80, step > 0 { step -= 1 }
+                }
+        )
     }
 
     // MARK: - Chrome
@@ -94,9 +108,9 @@ struct OnboardingView: View {
     }
 
     private var footer: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             Button {
-                if step < 2 { step += 1 } else { onContinue() }
+                advance()
             } label: {
                 Text(step < 2 ? "Continue" : "Get started")
                     .font(.headline)
@@ -107,19 +121,35 @@ struct OnboardingView: View {
             }
             .buttonStyle(.plain)
 
-            // Never a wall. Both questions have sensible answers already, and
-            // nobody should be stuck on the way to the thing they installed the
-            // app for.
-            if step > 0 {
-                Button("Skip") { if step < 2 { step += 1 } else { onContinue() } }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                // Holds the space so the primary button doesn't jump between
-                // steps one and two.
-                Color.clear.frame(height: 20)
+            // Back and Skip share one row under the button rather than
+            // crowding the header, which holds the mark and the progress and
+            // has no room for a third thing. Both are secondary, so they sit
+            // together and leave the primary action the full width it earns.
+            //
+            // The row keeps its height on the first step, where neither
+            // applies, so the button above doesn't shift as the steps change.
+            HStack {
+                if step > 0 {
+                    Button("Back") { step -= 1 }
+                        .font(.subheadline)
+                        .foregroundStyle(Color(.blueAccentText))
+                }
+                Spacer()
+                // Never a wall. Both questions have sensible answers already,
+                // and nobody should be stuck on the way to the thing they
+                // installed the app for.
+                if step > 0 {
+                    Button("Skip") { advance() }
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .frame(height: 22)
         }
+    }
+
+    private func advance() {
+        if step < 2 { step += 1 } else { onContinue() }
     }
 
     // MARK: - Step 1 · what it does
