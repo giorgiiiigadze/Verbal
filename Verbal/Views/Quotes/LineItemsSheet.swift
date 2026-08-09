@@ -84,7 +84,7 @@ struct LineItemsSheet: View {
                 } footer: {
                     Text("Swipe a line to remove it.")
                 }
-                .listRowBackground(Color(.surface))
+                .listRowBackground(Color(.cardSurface))
 
                 Section {
                     HStack {
@@ -94,7 +94,7 @@ struct LineItemsSheet: View {
                             .font(.headline.monospacedDigit())
                     }
                 }
-                .listRowBackground(Color(.surface))
+                .listRowBackground(Color(.cardSurface))
             }
             .scrollContentBackground(.hidden)
             .background(Color(.homeBackground))
@@ -251,7 +251,7 @@ private struct LineItemEditorView: View {
                 TextField("e.g. Re-tiling bathroom floor", text: $item.description, axis: .vertical)
                     .lineLimit(1...3)
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
 
             Section("Pricing") {
                 LabeledContent("Quantity") {
@@ -275,7 +275,7 @@ private struct LineItemEditorView: View {
                     ForEach(types, id: \.self) { Text($0.capitalized).tag($0) }
                 }
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
 
             Section {
                 LabeledContent("Line total") {
@@ -287,7 +287,7 @@ private struct LineItemEditorView: View {
                     }
                 }
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
         }
         .scrollContentBackground(.hidden)
         .background(Color(.homeBackground))

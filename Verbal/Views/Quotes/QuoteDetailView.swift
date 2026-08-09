@@ -165,35 +165,10 @@ struct QuoteDetailView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                // 2. Reference number, assigned when the quote was created.
-                if let numberLabel = quote.numberLabel {
-                    QuoteChip(text: numberLabel) {
-                        Image(systemName: "number")
-                    }
-                }
-                // 3. Creation date.
+                // 2. Creation date.
                 QuoteChip(text: dateLabel) {
                     Image(systemName: "calendar")
                 }
-                // 4. How long the price holds — tap to move it. Until this was
-                // editable an expired quote could not be revived at all: the
-                // date was set once at creation and nothing could reach it, so
-                // extending an offer meant duplicating the quote.
-                Menu {
-                    ForEach(Self.validityExtensions, id: \.days) { option in
-                        Button {
-                            changeValidity(toDaysFromToday: option.days)
-                        } label: {
-                            Label(option.label, systemImage: "clock.arrow.circlepath")
-                        }
-                    }
-                } label: {
-                    QuoteChip(text: validityLabel, tinted: isPastValidity) {
-                        Image(systemName: isPastValidity
-                              ? "clock.badge.exclamationmark" : "clock")
-                    }
-                }
-                .buttonStyle(.plain)
                 // 3. Currency — tap to change this quote's currency.
                 Menu {
                     Picker("Currency", selection: Binding(
@@ -228,6 +203,35 @@ struct QuoteDetailView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                // 5. How long the price holds — tap to move it. Until this was
+                // editable an expired quote could not be revived at all: the
+                // date was set once at creation and nothing could reach it, so
+                // extending an offer meant duplicating the quote.
+                Menu {
+                    ForEach(Self.validityExtensions, id: \.days) { option in
+                        Button {
+                            changeValidity(toDaysFromToday: option.days)
+                        } label: {
+                            Label(option.label, systemImage: "clock.arrow.circlepath")
+                        }
+                    }
+                } label: {
+                    QuoteChip(text: validityLabel, tinted: isPastValidity) {
+                        Image(systemName: isPastValidity
+                              ? "clock.badge.exclamationmark" : "clock")
+                    }
+                }
+                .buttonStyle(.plain)
+                // 6. Reference number, assigned when the quote was created.
+                // Last on purpose: it is the only chip here that can't be
+                // tapped or changed, and a reference nobody reads until
+                // they quote it back to you doesn't belong in front of the
+                // things the user actually adjusts.
+                if let numberLabel = quote.numberLabel {
+                    QuoteChip(text: numberLabel) {
+                        Image(systemName: "number")
+                    }
+                }
             }
         }
         .scrollIndicators(.hidden)

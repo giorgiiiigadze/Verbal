@@ -67,7 +67,7 @@ struct SettingsView: View {
                 // there, so it was pointing at a screen it no longer described.
                 Text("Your letterhead, validity, tax and standard terms, applied to every new quote. The currency also formats your rate card.")
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
 
             Section {
                 if let mail = AppInfo.supportMailURL {
@@ -89,7 +89,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Questions, bugs, or ideas — the email arrives with your app version attached.")
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
 
             Section {
                 Link(destination: AppInfo.privacyPolicyURL) {
@@ -106,7 +106,7 @@ struct SettingsView: View {
             } header: {
                 Text("About")
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
 
             Section {
                 // Deletion is a round trip to the edge function followed by a
@@ -127,7 +127,7 @@ struct SettingsView: View {
             } footer: {
                 Text("Permanently removes your account, quotes, and rate card. This can't be undone.")
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
         }
         // Nothing else is worth touching while the account is being removed.
         .disabled(isDeleting)

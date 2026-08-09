@@ -49,7 +49,7 @@ struct EditQuoteView: View {
                     TextField("Job summary", text: $jobSummary, axis: .vertical)
                         .lineLimit(2...5)
                 }
-                .listRowBackground(Color(.surface))
+                .listRowBackground(Color(.cardSurface))
 
                 Section {
                     TextField("One item per line", text: $scopeText, axis: .vertical)
@@ -59,7 +59,7 @@ struct EditQuoteView: View {
                 } footer: {
                     Text("Each line becomes a bullet on the quote.")
                 }
-                .listRowBackground(Color(.surface))
+                .listRowBackground(Color(.cardSurface))
 
             }
             .scrollContentBackground(.hidden)

@@ -83,14 +83,14 @@ struct ProfileView: View {
                 } footer: {
                     Text("Appears on the quotes you send to customers. Leave the email blank to use the one you signed in with.")
                 }
-                .listRowBackground(Color(.surface))
+                .listRowBackground(Color(.cardSurface))
 
                 Section {
                     Button("Sign out", role: .destructive) {
                         showSignOutConfirmation = true
                     }
                 }
-                .listRowBackground(Color(.surface))
+                .listRowBackground(Color(.cardSurface))
             }
             .scrollContentBackground(.hidden)
             .disabled(isLoading)

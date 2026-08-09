@@ -74,7 +74,7 @@ struct QuoteDefaultsView: View {
             } footer: {
                 Text("How long a new quote stays valid for.")
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
 
             Section {
                 LabeledContent("Tax rate") {
@@ -91,21 +91,21 @@ struct QuoteDefaultsView: View {
             } footer: {
                 Text("Added to new quotes and shown as a separate line on the PDF. Leave at 0 if you're not tax registered.")
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
 
             Section("Terms & conditions") {
                 TextField("Standard terms shown on every quote", text: $terms, axis: .vertical)
                     .lineLimit(3...8)
                     .focused($keyboardShown)
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
 
             Section("Notes / footer") {
                 TextField("A note added to the bottom of each quote", text: $notes, axis: .vertical)
                     .lineLimit(2...6)
                     .focused($keyboardShown)
             }
-            .listRowBackground(Color(.surface))
+            .listRowBackground(Color(.cardSurface))
         }
         .scrollContentBackground(.hidden)
         .navigationTitle("Quote defaults")
