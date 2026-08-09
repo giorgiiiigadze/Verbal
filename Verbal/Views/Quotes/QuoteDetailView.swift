@@ -45,6 +45,8 @@ struct QuoteDetailView: View {
     @State private var showBusinessDetails = false
     /// Confirms sending a quote that still has gaps in it.
     @State private var showUnpricedWarning = false
+    /// Confirms sending a fully priced quote that isn't addressed to anyone.
+    @State private var showNoClientWarning = false
 
     /// Ask for business details first if the document would go out unheaded,
     /// then warn about gaps, then share. Each step is skipped when it has
@@ -54,6 +56,21 @@ struct QuoteDetailView: View {
             showBusinessDetails = true
         } else if missingCount > 0 {
             showUnpricedWarning = true
+        } else {
+            shareOrAskForClient()
+        }
+    }
+
+    /// The last gate before sharing. A quote with every price on it and no name
+    /// at the top is a document the customer can't tell was written for them,
+    /// and it's the one detail the transcript often doesn't carry.
+    ///
+    /// Reached after the unpriced warning as well as instead of it, so a quote
+    /// missing both is asked about both rather than having the second silently
+    /// waived by answering the first.
+    private func shareOrAskForClient() {
+        if clientName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            showNoClientWarning = true
         } else {
             showShare = true
         }
@@ -574,7 +591,7 @@ struct QuoteDetailView: View {
                 // is one to give, otherwise straight to the share panel.
                 Task {
                     try? await Task.sleep(for: .seconds(0.35))
-                    if missingCount > 0 { showUnpricedWarning = true } else { showShare = true }
+                    if missingCount > 0 { showUnpricedWarning = true } else { shareOrAskForClient() }
                 }
             }
             .environment(session)
@@ -583,10 +600,27 @@ struct QuoteDetailView: View {
         // normal thing to send as TBC — the quote just shouldn't leave without
         // the user knowing it has holes in it.
         .alert(unpricedTitle, isPresented: $showUnpricedWarning) {
-            Button("Share anyway") { showShare = true }
+            // Onto the client question rather than straight out, after a beat:
+            // one alert cannot replace another in the same breath, the same
+            // reason the business sheet hands over on a delay.
+            Button("Share anyway") {
+                Task {
+                    try? await Task.sleep(for: .seconds(0.35))
+                    shareOrAskForClient()
+                }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("They'll print as “TBC” and the total won't include them.")
+        }
+        // The same shape as the warning above it: a question, a plain action,
+        // and Cancel. Cancel is the useful half — it puts them back on the
+        // screen with the client chip at the top of it.
+        .alert("Share without a client?", isPresented: $showNoClientWarning) {
+            Button("Share anyway") { showShare = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The quote will go out with no name on it. Add one from the chip at the top.")
         }
         .sheet(isPresented: $showShare) {
             ShareQuotePanel(title: displayTitle,

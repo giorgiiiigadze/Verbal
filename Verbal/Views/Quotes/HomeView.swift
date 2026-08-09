@@ -10,6 +10,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(NetworkMonitor.self) private var network
     @Binding var showCreate: Bool
     @State private var quotes: [QuoteSummary] = []
     @State private var hasLoaded = false
@@ -20,6 +21,8 @@ struct HomeView: View {
     @State private var shareAfterDetails: QuoteSummary?
     /// Held while the unpriced-items warning is answered.
     @State private var shareAfterWarning: QuoteSummary?
+    /// Held while the missing-client warning is answered.
+    @State private var shareAfterNoClient: QuoteSummary?
     @State private var quoteToDelete: QuoteSummary?
     @State private var quoteToDuplicate: QuoteSummary?
     @State private var searchText = ""
@@ -97,10 +100,28 @@ struct HomeView: View {
                 get: { shareAfterWarning != nil },
                 set: { if !$0 { shareAfterWarning = nil } }
             ), presenting: shareAfterWarning) { quote in
-                Button("Share anyway") { shareTarget = quote }
+                // Onto the client question rather than straight out, after a
+                // beat: one alert can't replace another in the same breath.
+                Button("Share anyway") {
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.35))
+                        shareOrAskForClient(quote)
+                    }
+                }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
                 Text("They'll print as “TBC” and the total won't include them.")
+            }
+            // Same shape again. Cancel is the useful half: it returns them to
+            // the list, where opening the quote puts the client chip in reach.
+            .alert("Share without a client?", isPresented: Binding(
+                get: { shareAfterNoClient != nil },
+                set: { if !$0 { shareAfterNoClient = nil } }
+            ), presenting: shareAfterNoClient) { quote in
+                Button("Share anyway") { shareTarget = quote }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("The quote will go out with no name on it. Open it to add one.")
             }
             .sheet(item: $shareTarget) { quote in
                 ShareQuotePanel(title: quote.displayTitle,
@@ -688,6 +709,17 @@ struct HomeView: View {
         if unpricedCount(for: quote) > 0 {
             shareAfterWarning = quote
         } else {
+            shareOrAskForClient(quote)
+        }
+    }
+
+    /// The last gate, matching the quote screen's. A fully priced quote with no
+    /// name at the top is a document the customer can't tell was written for
+    /// them, and the transcript often doesn't carry that detail.
+    private func shareOrAskForClient(_ quote: QuoteSummary) {
+        if (quote.clientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            shareAfterNoClient = quote
+        } else {
             shareTarget = quote
         }
     }
@@ -734,17 +766,38 @@ struct HomeView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            quotes = try await QuoteService.fetchQuotes()
+            quotes = try await fetchAllowingOneRetry()
             loadFailed = false
         } catch {
             // Keep whatever we had on screen; the flag lets the empty state
             // report a failure instead of claiming there are no quotes.
             loadFailed = true
-            if !quotes.isEmpty {
+            // Silent with no connection. The offline banner is already on
+            // screen saying exactly this, and a red toast over the top tells
+            // the user off twice for the same thing.
+            if !quotes.isEmpty, network.isOnline {
                 toast = Toast(style: .error, message: "Couldn't refresh quotes")
             }
         }
         hasLoaded = true
+    }
+
+    /// Cold launch lands on this screen deliberately holding a token that may
+    /// have expired — it is refreshed underneath rather than blocking first
+    /// paint — and this load races the one bootstrap starts at the same moment.
+    /// Either can arrive inside that window and come back unauthorised.
+    ///
+    /// Bootstrap's copy swallows that with `try?` and says nothing, so the same
+    /// transient failure was invisible on one path and a red cross on the
+    /// other. A single retry after a beat is long enough for a refresh already
+    /// in flight to land.
+    private func fetchAllowingOneRetry() async throws -> [QuoteSummary] {
+        do {
+            return try await QuoteService.fetchQuotes()
+        } catch {
+            try await Task.sleep(for: .milliseconds(600))
+            return try await QuoteService.fetchQuotes()
+        }
     }
 
     private func delete(_ quote: QuoteSummary) async {

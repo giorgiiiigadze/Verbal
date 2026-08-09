@@ -31,7 +31,7 @@ struct LineItemsCard<Rows: View>: View {
                 Spacer()
                 if let onExpand {
                     Button(action: onExpand) {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        Image(systemName: "arrow.down.left.and.arrow.up.right")
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.secondary)
                             // The glyph is small; the tap target shouldn't be.
