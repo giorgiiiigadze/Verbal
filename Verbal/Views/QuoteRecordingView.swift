@@ -311,7 +311,8 @@ struct QuoteRecordingView: View {
         phraseIndex = 0
         Task {
             defer { isGenerating = false }
-            guard let result = try? await QuoteService.generate(transcript: transcriptText) else {
+            guard let result = try? await QuoteService.generate(transcript: transcriptText,
+                                                             tradeContext: session.businessProfile?.trade) else {
                 toast = Toast(style: .error, message: "Couldn't generate quote")
                 return
             }

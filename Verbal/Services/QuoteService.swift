@@ -541,14 +541,18 @@ enum QuoteService {
 
     /// Run the AI extraction on a transcript, returning the structured quote (not persisted).
     /// Passes the user's active rate card so the AI can price known items.
-    static func generate(transcript: String) async throws -> GeneratedQuote {
+    /// `tradeContext` is passed in rather than fetched: the caller already
+    /// holds the preloaded profile, and a round trip here would sit on the
+    /// critical path of the one moment the user is watching a spinner.
+    static func generate(transcript: String, tradeContext: String?) async throws -> GeneratedQuote {
         let rateCard = (try? await fetchRateCard(activeOnly: true)) ?? []
         let request = ExtractRequest(
             transcript: transcript,
             rate_card: rateCard.map {
                 RateCardPayload(name: $0.name, unit: $0.unit, unit_price: $0.unitPrice, type: $0.type)
             },
-            currency: AppCurrency.current.rawValue
+            currency: AppCurrency.current.rawValue,
+            trade_context: tradeContext
         )
         let extraction: ExtractResponse = try await client.functions.invoke(
             "extract-quote",
@@ -973,6 +977,10 @@ private struct ExtractRequest: Encodable {
     let transcript: String
     let rate_card: [RateCardPayload]
     let currency: String
+    /// The user's trade. The prompt has had a slot for this since it was
+    /// written and nothing ever filled it — "eight of the 20 mil" is cable to
+    /// an electrician and pipe to a plumber, and the model was guessing.
+    let trade_context: String?
 }
 
 private struct RateCardPayload: Encodable {

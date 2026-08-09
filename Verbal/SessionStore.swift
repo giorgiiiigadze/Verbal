@@ -209,9 +209,32 @@ final class SessionStore {
         await refreshProfile()
         await preloadAvatar()
         await preloadLists()
-        // After the lists, because it reads the profile they just fetched.
+        // Both read the business profile the preload just fetched.
+        await adoptPendingTrade()
         await refreshBusinessLogo()
     }
+
+    /// Onboarding runs before there is an account, so the trade it collects has
+    /// to wait on the device until one exists. Written once and then forgotten,
+    /// so a user who later clears it in their profile doesn't find it restored
+    /// on the next launch.
+    private func adoptPendingTrade() async {
+        let pending = UserDefaults.standard.string(forKey: Self.pendingTradeKey)
+        guard let pending, !pending.isEmpty else { return }
+        var profile = businessProfile ?? .empty
+        // Never overwrite a trade the account already has: the phone's answer
+        // is older than anything the user has since typed on another device.
+        if profile.trade?.isEmpty == false {
+            UserDefaults.standard.removeObject(forKey: Self.pendingTradeKey)
+            return
+        }
+        profile.trade = pending
+        guard (try? await BusinessService.save(profile)) != nil else { return }
+        businessProfile = profile
+        UserDefaults.standard.removeObject(forKey: Self.pendingTradeKey)
+    }
+
+    private static let pendingTradeKey = "pendingTrade"
 
     /// Paint from the last known responses before the network is consulted.
     /// Whatever comes back next replaces them; until it does, the user reads

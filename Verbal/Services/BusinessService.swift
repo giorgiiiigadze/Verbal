@@ -53,6 +53,7 @@ enum BusinessService {
         let userID: UUID
         let businessName: String?
         let logoUrl: String?
+        let trade: String?
         let phone: String?
         let email: String?
         let address: String?
@@ -67,6 +68,7 @@ enum BusinessService {
             self.userID = userID
             self.businessName = profile.businessName
             self.logoUrl = profile.logoUrl
+            self.trade = profile.trade
             self.phone = profile.phone
             self.email = profile.email
             self.address = profile.address
@@ -82,6 +84,7 @@ enum BusinessService {
             case userID = "user_id"
             case businessName = "business_name"
             case logoUrl = "logo_url"
+            case trade
             case phone, email, address
             case taxNumber = "tax_number"
             case currency

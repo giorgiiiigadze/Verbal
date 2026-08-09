@@ -12,6 +12,9 @@ import Foundation
 struct BusinessProfile: Codable, Sendable {
     var businessName: String?
     var logoUrl: String?
+    /// What they do — "Electrician", "Plumber". Asked once at onboarding and
+    /// sent with every extraction as trade context.
+    var trade: String?
     var phone: String?
     var email: String?
     var address: String?
@@ -27,6 +30,7 @@ struct BusinessProfile: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case businessName = "business_name"
         case logoUrl = "logo_url"
+        case trade
         case phone, email, address
         case taxNumber = "tax_number"
         case currency
@@ -38,7 +42,7 @@ struct BusinessProfile: Codable, Sendable {
 
     /// A blank profile using the app's current currency and the DB default validity.
     static var empty: BusinessProfile {
-        BusinessProfile(businessName: nil, logoUrl: nil, phone: nil, email: nil,
+        BusinessProfile(businessName: nil, logoUrl: nil, trade: nil, phone: nil, email: nil,
                         address: nil, taxNumber: nil,
                         currency: AppCurrency.current.rawValue,
                         defaultValidityDays: 14, defaultTaxRate: 0,
