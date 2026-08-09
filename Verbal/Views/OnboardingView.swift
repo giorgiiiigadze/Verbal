@@ -68,13 +68,19 @@ struct OnboardingView: View {
             .padding(.bottom, 8)
         }
         .animation(.easeInOut(duration: 0.3), value: step)
-        // Swiping back is what the sideways transition promises, so it should
-        // work. It is not the only way back — an invisible gesture can't be the
-        // whole answer — but leaving it out would make the animation a lie.
+        // The only way back, so it is worth being generous about what counts as
+        // one: a shallow drag rightwards, the same direction the steps travel,
+        // rather than a precise edge swipe nobody would find.
+        //
+        // Vertical movement is ignored, so a thumb sliding down the chips
+        // doesn't jump a step.
         .gesture(
-            DragGesture(minimumDistance: 30)
+            DragGesture(minimumDistance: 20)
                 .onEnded { drag in
-                    if drag.translation.width > 80, step > 0 { step -= 1 }
+                    guard step > 0 else { return }
+                    let sideways = drag.translation.width
+                    let vertical = abs(drag.translation.height)
+                    if sideways > 60, sideways > vertical * 1.5 { step -= 1 }
                 }
         )
     }
@@ -121,20 +127,18 @@ struct OnboardingView: View {
             }
             .buttonStyle(.plain)
 
-            // Back and Skip share one row under the button rather than
-            // crowding the header, which holds the mark and the progress and
-            // has no room for a third thing. Both are secondary, so they sit
-            // together and leave the primary action the full width it earns.
+            // Skip alone, centred. Going back is the swipe — see the gesture on
+            // the body. Two text buttons flanking the primary one made the
+            // footer read as a toolbar, and this screen has one thing to do.
             //
-            // The row keeps its height on the first step, where neither
-            // applies, so the button above doesn't shift as the steps change.
-            HStack {
-                if step > 0 {
-                    Button("Back") { step -= 1 }
-                        .font(.subheadline)
-                        .foregroundStyle(Color(.blueAccentText))
-                }
-                Spacer()
+            // The row keeps its height on the first step, where Skip doesn't
+            // apply, so the button above doesn't shift as the steps change.
+            // Color.clear rather than an empty branch: a `Group` with nothing
+            // in it collapses to an EmptyView, which reserves no height no
+            // matter what frame is put on it — so the button was sitting 36pt
+            // lower on the first step and jumping up on the second.
+            ZStack {
+                Color.clear
                 // Never a wall. Both questions have sensible answers already,
                 // and nobody should be stuck on the way to the thing they
                 // installed the app for.
