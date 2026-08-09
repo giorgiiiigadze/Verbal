@@ -422,28 +422,30 @@ private struct AddRateItemView: View {
 
                     if let collision { duplicateWarning(collision) }
 
-                    HStack(spacing: 10) {
-                        HStack(spacing: 4) {
-                            Text(AppCurrency.current.symbol).foregroundStyle(.secondary)
-                            TextField("0", text: $priceText)
-                                .keyboardType(.decimalPad)
-                        }
-                        .font(.body.monospacedDigit())
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                        .background(Color(.cardSurface),
-                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(Color(.separator), lineWidth: 0.5)
-                        )
-
-                        Picker("Type", selection: $type) {
-                            ForEach(types, id: \.self) { Text($0.capitalized).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(width: 168)
+                    HStack(spacing: 4) {
+                        Text(AppCurrency.current.symbol).foregroundStyle(.secondary)
+                        TextField("0", text: $priceText)
+                            .keyboardType(.decimalPad)
                     }
+                    .font(.body.monospacedDigit())
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.cardSurface),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                    )
+
+                    // Its own line. Squeezed into 168pt beside the price it was
+                    // already truncating "Material" to "Mater…", and a segmented
+                    // control that can't fit its own labels only gets worse at
+                    // larger text sizes.
+                    Picker("Type", selection: $type) {
+                        ForEach(types, id: \.self) { Text($0.capitalized).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
 
                     // Tappable rather than a picker with a "Custom…" escape
                     // hatch: the two-step is what let the same unit be typed
@@ -514,7 +516,7 @@ private struct AddRateItemView: View {
             .padding(.bottom, 10)
             .background(Color(.surface))
         }
-        .presentationDetents([.height(470)])
+        .presentationDetents([.height(530)])
         .presentationCornerRadius(28)
         .presentationBackground(Color(.surface))
         .task {
