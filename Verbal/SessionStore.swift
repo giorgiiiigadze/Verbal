@@ -252,6 +252,17 @@ final class SessionStore {
         if let data = LocalCache.loadData(for: .businessLogo, userID: userID) {
             businessLogo = UIImage(data: data)
         }
+        // Who they are, restored with everything else they own. Without this a
+        // launch with no signal showed a stranger's placeholder on the one
+        // screen that is meant to be theirs.
+        if let cached = LocalCache.load(Profile.self, for: .profile, userID: userID) {
+            profile = cached
+        }
+        if let data = LocalCache.loadData(for: .avatar, userID: userID),
+           let image = UIImage(data: data) {
+            avatarImage = Image(uiImage: image)
+            avatarUIImage = image
+        }
         restoreLineItems(userID: userID)
         // Lets the splash stop waiting and Home draw real rows. On a first run
         // there is nothing to restore, so the existing wait still applies.
@@ -357,6 +368,9 @@ final class SessionStore {
         // the next user's logo is judged "unchanged" against the last one's URL
         // and never downloaded.
         UserDefaults.standard.removeObject(forKey: Self.logoURLKey)
+        // Same reason: left behind, the next user's avatar is judged
+        // "unchanged" against the last one's URL and never downloaded.
+        UserDefaults.standard.removeObject(forKey: Self.avatarURLKey)
         quotes = []
         rateCard = []
         lineItemsCache = [:]
@@ -368,33 +382,51 @@ final class SessionStore {
     func refreshProfile() async {
         guard let userID = client.auth.currentUser?.id else { return }
         do {
-            let profile: Profile = try await client
+            let response: PostgrestResponse<Profile> = try await client
                 .from("profiles")
                 .select()
                 .eq("id", value: userID)
                 .single()
                 .execute()
-                .value
-            self.profile = profile
+            profile = response.value
+            // Kept for the same reason the business profile is: offline this is
+            // the only thing that knows the user's name, and the URL of their
+            // face.
+            LocalCache.save(response.data, for: .profile, userID: userID)
         } catch {
-            // Row may lag right after signup; the greeting just stays generic.
+            // Row may lag right after signup, and offline this always fails.
+            // Whatever was restored from disk stays put rather than being
+            // replaced with nothing.
         }
     }
 
     /// Download and decode the avatar so it's ready before the UI appears.
+    ///
+    /// Skipped when the bytes on disk already belong to the URL the profile
+    /// names. Bootstrap runs on every token refresh as well as at launch, so
+    /// without this the same picture is fetched and decoded again every few
+    /// hours for as long as the app is open.
     private func preloadAvatar() async {
-        guard let urlString = profile?.avatarUrl,
+        guard let userID = cachedUserID,
+              let urlString = profile?.avatarUrl,
               let url = URL(string: urlString) else { return }
+        if UserDefaults.standard.string(forKey: Self.avatarURLKey) == urlString,
+           avatarUIImage != nil { return }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let image = UIImage(data: data) {
                 avatarImage = Image(uiImage: image)
                 avatarUIImage = image
+                LocalCache.save(data, for: .avatar, userID: userID)
+                UserDefaults.standard.set(urlString, forKey: Self.avatarURLKey)
             }
         } catch {
-            // Fall back to the placeholder icon if the download fails.
+            // Keep whatever was restored from disk; the placeholder is only for
+            // a user who has never been online with this account.
         }
     }
+
+    private static let avatarURLKey = "cachedAvatarURL"
 
     // MARK: - Auth actions
 

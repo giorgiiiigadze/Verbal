@@ -44,12 +44,20 @@ nonisolated enum LocalCache {
         /// already cached for exactly that reason, and a letterhead that loses
         /// its logo offline is half a letterhead.
         case businessLogo
+        /// The signed-in identity from Google: name and avatar URL. Everything
+        /// else here survives a launch with no signal, and without this the one
+        /// screen that shows who you are is the one that forgets.
+        case profile
+        /// The avatar's bytes, alongside the row that names it.
+        case avatar
 
         var filename: String {
             switch self {
             case .quotes: return "quotes"
             case .rateCard: return "rateCard"
             case .businessProfile: return "businessProfile"
+            case .profile: return "profile"
+            case .avatar: return "avatar"
             case .lineItems(let quoteID): return "lineItems-\(quoteID.uuidString)"
             case .transcript(let quoteID): return "transcript-\(quoteID.uuidString)"
             case .businessLogo: return "businessLogo"
