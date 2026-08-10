@@ -22,6 +22,9 @@ struct RateCardView: View {
     /// True when the last fetch failed — separates "no rates saved" from
     /// "couldn't reach the server", which look identical without it.
     @State private var loadFailed = false
+    /// Line-item prices this card has filled in. Nil until it's known, so the
+    /// header says nothing rather than claiming zero.
+    @State private var fillCount: Int?
 
     var body: some View {
         Group {
@@ -88,76 +91,133 @@ struct RateCardView: View {
         .toast($toast)
     }
 
-    private var list: some View {
-        List {
-            ForEach(items) { item in
-                Button {
-                    itemToEdit = item
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(item.name)
-                                .font(.headline)
-                                .foregroundStyle(Color(.mainText))
-                            Text(item.type.capitalized)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if let price = item.priceText {
-                            Text(price)
-                                .font(.subheadline.monospacedDigit().weight(.medium))
-                                .foregroundStyle(Color(.blueAccentText))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color(.royalBlue25), in: Capsule())
-                        } else {
-                            Text("No price")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 18)
-                    .background(Color(.cardSurface),
-                                in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(Color(.separator), lineWidth: 0.5)
-                    )
-                }
-                .buttonStyle(CardPressStyle())
-                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
-                .contextMenu {
-                    Button {
-                        itemToEdit = item
-                    } label: {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                    Button(role: .destructive) {
-                        itemToDelete = item
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    // No .destructive role: it would animate the row out on tap,
-                    // before the confirmation alert is answered.
-                    Button {
-                        itemToDelete = item
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    .tint(.red)
+    /// What the card is, and what it has actually done. The screen used to open
+    /// straight into rows, with nothing at the top saying either — so a page of
+    /// identical cards was all it ever amounted to.
+    private var summaryHeader: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(items.count) rate\(items.count == 1 ? "" : "s")")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color(.mainText))
+            // The promise the empty state makes, kept or restated. A count of
+            // prices this card has filled in is the one number here that says
+            // whether saving them was worth the trouble.
+            Group {
+                if let fillCount, fillCount > 0 {
+                    Text("Filled in \(fillCount) price\(fillCount == 1 ? "" : "s") on your quotes")
+                } else {
+                    Text("Verbal fills these in automatically when you quote the same work.")
                 }
             }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var list: some View {
+        List {
+            summaryHeader
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 14, trailing: 20))
+
+            listRows
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+    }
+
+    @ViewBuilder
+    private var listRows: some View {
+        ForEach(items) { item in
+            Button {
+                itemToEdit = item
+            } label: {
+                // One line, where the type used to have a row of its own.
+                // "Labor" written under every name spent a whole line of
+                // height on almost nothing, and it's what made the list read
+                // as a wall of identical cards.
+                HStack(spacing: 10) {
+                    Text(item.name)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(item.type.capitalized)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let price = item.priceText {
+                        // Plain and weighted, not a blue capsule. Every row
+                        // carrying the accent meant the accent said nothing,
+                        // and the price is what the eye is here for.
+                        Text(price)
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(Color(.mainText))
+                            .lineLimit(1)
+                    } else {
+                        Text("No price")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                // As tall as a quote row, and for its sake rather than its own:
+                // iOS draws swipe actions as a circular icon above its label
+                // only when the row gives it the room, and drops to a compact
+                // icon-beside-text pill when it doesn't. One line of text put
+                // this row under that height, so the same two actions came out
+                // looking like a different control on each tab. The padding
+                // stays as a floor for when large text needs more than this.
+                .frame(minHeight: 78)
+                .background(Color(.cardSurface),
+                            in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                )
+            }
+            .buttonStyle(CardPressStyle())
+            .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+            .contextMenu {
+                Button {
+                    itemToEdit = item
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+                Button(role: .destructive) {
+                    itemToDelete = item
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+            // Two actions, in the order and tints a quote row uses. Delete on
+            // its own opened as one wide red block, which reads as a warning
+            // where a quote's swipe reads as a choice.
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                // No .destructive role: it would animate the row out on tap,
+                // before the confirmation alert is answered.
+                Button {
+                    itemToDelete = item
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .tint(.red)
+
+                Button {
+                    itemToEdit = item
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+                .tint(Color(.royalBlue300))
+            }
+        }
     }
 
     /// A cousin of the Home empty state, deliberately quieter. This is a
@@ -310,6 +370,12 @@ struct RateCardView: View {
             }
         }
         hasLoaded = true
+        // Best effort, and deliberately last: the header line is the least of
+        // what this screen owes the user, and a count that won't come back
+        // shouldn't cost them the rates themselves.
+        if let count = try? await QuoteService.rateCardFillCount() {
+            fillCount = count
+        }
     }
 
     private func delete(_ item: RateCardItem) async {

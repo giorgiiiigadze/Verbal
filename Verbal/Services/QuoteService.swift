@@ -642,6 +642,20 @@ enum QuoteService {
             .execute()
     }
 
+    /// How many line-item prices the rate card has filled in, across every quote
+    /// the user has made — the card's own case for existing.
+    ///
+    /// No join and no user filter: row-level security on `quote_line_items`
+    /// already scopes this to the signed-in user's own quotes.
+    static func rateCardFillCount() async throws -> Int {
+        let response = try await client
+            .from("quote_line_items")
+            .select("id", head: true, count: .exact)
+            .eq("price_source", value: "rate_card")
+            .execute()
+        return response.count ?? 0
+    }
+
     static func deleteRateCardItem(id: UUID) async throws {
         try await client.from("rate_card_items").delete().eq("id", value: id).execute()
     }
