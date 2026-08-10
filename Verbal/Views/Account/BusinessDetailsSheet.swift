@@ -97,9 +97,9 @@ struct BusinessDetailsSheet: View {
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 54)
+                    .frame(height: 52)
                     .background(canSave ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
-                                in: Capsule())
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSave || isSaving)
