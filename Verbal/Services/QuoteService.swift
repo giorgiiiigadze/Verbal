@@ -653,6 +653,18 @@ enum QuoteService {
     /// is already saved by definition, and a `missing` one has no price to save.
     static func rateCandidates(notIn existing: [RateCardItem],
                                limit: Int = 80) async throws -> [RateCandidate] {
+        try await recentSpokenPrices(limit: limit).filter { candidate in
+            !existing.contains { $0.looksLike(candidate.name) }
+        }
+    }
+
+    /// The same lines, before they're measured against the rate card.
+    ///
+    /// Split out so the fetch can run alongside the rate card during bootstrap
+    /// instead of queueing behind it — the comparison is cheap and local, and
+    /// waiting for one list to arrive before asking for the other is what would
+    /// make the offer show up late.
+    static func recentSpokenPrices(limit: Int = 80) async throws -> [RateCandidate] {
         struct Row: Decodable {
             let description: String?
             let unit: String?
@@ -683,7 +695,6 @@ enum QuoteService {
             // The same job quoted three times is one thing to offer, and the
             // newest wording of it is the one the user last chose.
             guard seen.insert(name.lowercased()).inserted else { continue }
-            guard !existing.contains(where: { $0.looksLike(name) }) else { continue }
             candidates.append(RateCandidate(name: name, unit: row.unit,
                                             unitPrice: price, type: row.type))
         }

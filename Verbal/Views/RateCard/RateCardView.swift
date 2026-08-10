@@ -28,9 +28,13 @@ struct RateCardView: View {
     @State private var searchText = ""
     /// Nil is "All". Holds a raw type ("labor"), not a label.
     @State private var typeFilter: String?
-    /// Prices spoken into recent quotes that aren't saved here yet.
-    @State private var candidates: [RateCandidate] = []
     @State private var showCandidates = false
+
+    /// Prices spoken into recent quotes that aren't saved here yet. Read from
+    /// the session rather than held here: preloaded with the lists so the offer
+    /// is on screen with everything else, and derived from the rate card so
+    /// accepting one takes it off the list without a refetch.
+    private var candidates: [RateCandidate] { session.rateCandidates }
 
     var body: some View {
         Group {
@@ -592,10 +596,8 @@ struct RateCardView: View {
             // So the next visit to this tab opens on the same number it left on.
             session.cacheRateCardFillCount(count)
         }
-        // Compared against the rates that just loaded, so a price saved a moment
-        // ago stops being offered.
-        if let found = try? await QuoteService.rateCandidates(notIn: items) {
-            candidates = found
+        if let spoken = try? await QuoteService.recentSpokenPrices() {
+            session.cacheSpokenPrices(spoken)
         }
     }
 

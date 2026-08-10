@@ -102,6 +102,23 @@ final class SessionStore {
 
     func cacheRateCardFillCount(_ count: Int) { rateCardFillCount = count }
 
+    /// Prices spoken into recent quotes, as fetched — before any of them are
+    /// measured against the rate card.
+    ///
+    /// Kept raw on purpose. The offer is which of these aren't saved yet, and
+    /// that answer changes the moment a rate is added or deleted; derived here
+    /// it re-answers itself, where a stored list would keep offering a price the
+    /// user just accepted.
+    private(set) var spokenPrices: [RateCandidate] = []
+
+    var rateCandidates: [RateCandidate] {
+        spokenPrices.filter { candidate in
+            !rateCard.contains { $0.looksLike(candidate.name) }
+        }
+    }
+
+    func cacheSpokenPrices(_ prices: [RateCandidate]) { spokenPrices = prices }
+
     /// Refetch the rate card after its prices are rewritten elsewhere.
     func refreshRateCard() async {
         if let items = try? await QuoteService.fetchRateCard() { rateCard = items }
@@ -338,10 +355,15 @@ final class SessionStore {
         // heading is written from both, and fetching it on arrival is what made
         // that line change under the user a beat after the screen appeared.
         async let fillResult = try? await QuoteService.rateCardFillCount()
+        // Fetched beside the rate card, not after it. The offer needs both, but
+        // only the comparison does — asking for one and then the other would put
+        // a second round trip in front of the tab for no gain.
+        async let spokenResult = try? await QuoteService.recentSpokenPrices()
         quotes = await quotesResult ?? quotes
         rateCard = await rateResult ?? rateCard
         businessProfile = await bizResult ?? businessProfile
         rateCardFillCount = await fillResult ?? rateCardFillCount
+        spokenPrices = await spokenResult ?? spokenPrices
         listsLoaded = true
 
         // Off the critical path: the list is already on screen, and this is
@@ -386,6 +408,7 @@ final class SessionStore {
         quotes = []
         rateCard = []
         rateCardFillCount = nil
+        spokenPrices = []
         lineItemsCache = [:]
         listsLoaded = false
         cachedUserID = nil
