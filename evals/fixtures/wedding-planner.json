@@ -1,0 +1,39 @@
+{
+  "name": "wedding-planner",
+  "note": "The quote that exposed pronoun pricing on 2026-08-10. 'Day-of coordination with two assistants, they're 200 each' priced the ASSISTANTS — one run split it correctly, the next folded both into a single 400 line and silently swallowed the planner's own coordination fee. Same prompt, same words: the reading was never stable, which is exactly what this fixture is here to catch. Also covers a service business rather than a trade, an item excluded outright (the photographer), and one folded into another line (venue liaison).",
+  "transcript": "This one's for Tamar Beridze, wedding on the 20th of September at Lopota Lake Resort. She's expecting a hundred and forty guests — sorry, hundred and fifty, her cousins confirmed yesterday. Full planning package, that's my standard three thousand. Day-of coordination with two assistants, they're 200 each for the day. Floral design, she wants the big centerpieces on twelve tables plus the arch — I need to talk to the florist first so I can't price that yet. Photographer referral, but she's booking him directly so nothing from me. Venue liaison and vendor management, that's included in the package. Oh and the tasting session in August, 150 per person for four people. Deposit is thirty percent to hold the date, quote's good for ten days.",
+  "rate_card": [],
+  "currency": "USD",
+  "expect": [
+    {
+      "label": "full planning package",
+      "any": ["planning package", "full planning"],
+      "exclude": ["coordinat", "assistant"],
+      "price": 3000
+    },
+    {
+      "label": "day-of coordination, unpriced",
+      "any": ["coordinat"],
+      "exclude": ["assistant"],
+      "price": null
+    },
+    {
+      "label": "two assistants at 200 each",
+      "any": ["assistant"],
+      "exclude": [],
+      "price": 200
+    },
+    {
+      "label": "floral design, unpriced pending florist",
+      "any": ["floral", "centerpiece", "flower"],
+      "exclude": [],
+      "price": null
+    },
+    {
+      "label": "tasting session for four",
+      "any": ["tasting"],
+      "exclude": [],
+      "price": 150
+    }
+  ]
+}
