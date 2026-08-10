@@ -193,8 +193,19 @@ struct HomeView: View {
         List {
             // Money in play, above the list — the number worth opening the app
             // for. Hidden while searching or filtering, when it'd be misleading.
-            if outstandingTotal != nil, outstandingCount > 0, searchQuery.isEmpty, filter == .all {
-                outstandingSummary
+            // Stays up under the waiting filter, where it describes exactly the
+            // set on screen — and is the way back out of it.
+            if outstandingTotal != nil, outstandingCount > 0, searchQuery.isEmpty,
+               filter == .all || filter == .waiting {
+                Button {
+                    // The band names a specific set of quotes, so touching it
+                    // shows them. Same filter the toolbar menu offers, put where
+                    // the eye already is.
+                    withAnimation { filter = filter == .waiting ? .all : .waiting }
+                } label: {
+                    outstandingSummary
+                }
+                    .buttonStyle(BandPressStyle())
                     // Full-bleed tinted band rather than a floating card, so the
                     // top of the screen reads as its own header zone.
                     .listRowBackground(
@@ -343,6 +354,16 @@ struct HomeView: View {
         outstandingIsApproximate = converted
     }
 
+    /// Age of the oldest quote still waiting on a client.
+    ///
+    /// Read from `createdAt` because that's all a summary carries — there's no
+    /// sent-at timestamp — so this says "oldest", not "sent", and doesn't claim
+    /// to date something it can't see.
+    private var oldestLabel: String? {
+        guard let oldest = outstanding.map(\.createdAt).min() else { return nil }
+        return "Oldest · \(oldest.formatted(.relative(presentation: .named)))"
+    }
+
     private var outstandingSummary: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 3) {
@@ -354,13 +375,26 @@ struct HomeView: View {
                 Text(outstandingLabel)
                     .font(.title3.weight(.semibold).monospacedDigit())
                     .foregroundStyle(Color(.mainText))
+                // The total on its own is a fact. The age is the part that says
+                // whether anything needs chasing.
+                if let oldestLabel {
+                    Text(oldestLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 8)
-            Text("\(outstandingCount) quote\(outstandingCount == 1 ? "" : "s")")
-                .font(.caption)
-                .foregroundStyle(Color(.blueAccentText))
+            HStack(spacing: 4) {
+                Text("\(outstandingCount) quote\(outstandingCount == 1 ? "" : "s")")
+                Image(systemName: filter == .waiting ? "chevron.left" : "chevron.right")
+                    .font(.caption2.weight(.semibold))
+            }
+            .font(.caption)
+            .foregroundStyle(Color(.blueAccentText))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // The band is mostly empty space, and all of it should be the target.
+        .contentShape(.rect)
     }
 
     /// Long-press context menu for a quote card.
@@ -1062,6 +1096,16 @@ private struct QuoteRowSkeleton: View {
 // MARK: - Status grouping & filtering
 
 /// Status buckets shown as list sections (in display order).
+/// A full-bleed List row draws no highlight of its own, so without this a tap on
+/// the summary band looks like nothing happened until the list rearranges.
+private struct BandPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
 private enum QuoteStatusGroup: CaseIterable, Hashable {
     case drafts, waiting, accepted, declined, expired, other
 
