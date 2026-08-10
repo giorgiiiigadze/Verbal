@@ -25,6 +25,12 @@ struct RateCardView: View {
     /// Line-item prices this card has filled in. Nil until it's known, so the
     /// header says nothing rather than claiming zero.
     @State private var fillCount: Int?
+    @State private var searchText = ""
+    /// Nil is "All". Holds a raw type ("labor"), not a label.
+    @State private var typeFilter: String?
+    /// Prices spoken into recent quotes that aren't saved here yet.
+    @State private var candidates: [RateCandidate] = []
+    @State private var showCandidates = false
 
     var body: some View {
         Group {
@@ -43,6 +49,10 @@ struct RateCardView: View {
         }
         .background(Color(.homeBackground))
         .navigationTitle("Rate card")
+        // The same search Home has, in the same place. A card of eight rates
+        // doesn't need it; the card this screen is trying to encourage does.
+        .searchable(text: $searchText, prompt: "Search rates")
+        .searchToolbarBehavior(.minimize)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -61,12 +71,23 @@ struct RateCardView: View {
         .sheet(item: $itemToEdit, onDismiss: { Task { await load() } }) { item in
             AddRateItemView(existing: items, editing: item)
         }
+        .sheet(isPresented: $showCandidates, onDismiss: { Task { await load() } }) {
+            ReadyToAddSheet(candidates: candidates) { added in
+                toast = Toast(style: .success,
+                              message: "\(added) rate\(added == 1 ? "" : "s") saved")
+            }
+        }
         .task {
             // Seed from the splash-time preload so the list shows instantly.
             if !hasLoaded {
                 items = session.rateCard
                 hasLoaded = session.listsLoaded
             }
+            // The heading is seeded the same way, and every time this tab is
+            // opened rather than only the first. Held back, it wrote "4 rates
+            // saved" and then rewrote itself once the count landed — a line
+            // changing under the reader for no reason they can see.
+            fillCount = session.rateCardFillCount ?? fillCount
             await load()
         }
         // Bootstrap can finish after this view has already read an empty list —
@@ -95,25 +116,36 @@ struct RateCardView: View {
     /// straight into rows, with nothing at the top saying either — so a page of
     /// identical cards was all it ever amounted to.
     private var summaryHeader: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("\(items.count) rate\(items.count == 1 ? "" : "s")")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Color(.mainText))
-            // The promise the empty state makes, kept or restated. A count of
-            // prices this card has filled in is the one number here that says
-            // whether saving them was worth the trouble.
-            Group {
-                if let fillCount, fillCount > 0 {
-                    Text("Filled in \(fillCount) price\(fillCount == 1 ? "" : "s") on your quotes")
-                } else {
-                    Text("Verbal fills these in automatically when you quote the same work.")
-                }
+        Group {
+            if let fillCount, fillCount > 0 {
+                Text(filledInLine(fillCount))
+            } else {
+                Text("\(items.count) rate\(items.count == 1 ? "" : "s") saved")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Two weights on one line, built as an attributed string rather than by
+    /// adding two `Text`s — that operator is deprecated as of iOS 26.
+    ///
+    /// The count of rates leads with nothing: it's four cards, you can see that.
+    /// The prices they've filled in is the number that says whether keeping them
+    /// was worth it, so it goes first and takes the only emphasis on the line.
+    private func filledInLine(_ fillCount: Int) -> AttributedString {
+        var filled = AttributedString(
+            "\(fillCount) price\(fillCount == 1 ? "" : "s") filled in")
+        filled.font = .subheadline.weight(.medium)
+        filled.foregroundColor = Color(.mainText)
+
+        var from = AttributedString(
+            " from your \(items.count) rate\(items.count == 1 ? "" : "s")")
+        from.font = .subheadline
+        from.foregroundColor = .secondary
+
+        return filled + from
     }
 
     private var list: some View {
@@ -121,103 +153,285 @@ struct RateCardView: View {
             summaryHeader
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 14, trailing: 20))
+                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 12, trailing: 20))
 
-            listRows
+            if typeOptions.count > 1 {
+                typeFilterRow
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 14, trailing: 0))
+            }
+
+            if !candidates.isEmpty, searchText.isEmpty, typeFilter == nil {
+                readyToAddCard
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 18, trailing: 20))
+            }
+
+            if groups.isEmpty {
+                noMatchesRow
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 24, leading: 20, bottom: 0, trailing: 20))
+            }
+
+            ForEach(groups, id: \.label) { group in
+                // Set and placed exactly as Home sets its status headings, and
+                // as a normal row rather than a Section header for the same
+                // reason: it scrolls away with its rates instead of pinning to
+                // the top of the screen.
+                Text(group.label)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 8, trailing: 20))
+
+                ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                    rateRow(item,
+                            isFirst: index == 0,
+                            isLast: index == group.items.count - 1)
+                }
+            }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
     }
 
-    @ViewBuilder
-    private var listRows: some View {
-        ForEach(items) { item in
-            Button {
-                itemToEdit = item
-            } label: {
-                // One line, where the type used to have a row of its own.
-                // "Labor" written under every name spent a whole line of
-                // height on almost nothing, and it's what made the list read
-                // as a wall of identical cards.
-                HStack(spacing: 10) {
+    // MARK: - Filtering
+
+    /// The types actually present, so the row never offers a filter that would
+    /// empty the screen.
+    private var typeOptions: [String] {
+        let present = Set(items.map(\.type))
+        return Self.typeOrder.filter(present.contains)
+            + present.subtracting(Self.typeOrder).sorted()
+    }
+
+    private static let typeOrder = ["labor", "material", "other"]
+    private static let typeLabels = ["labor": "Labor", "material": "Materials",
+                                     "other": "Other"]
+
+    private static func label(for type: String) -> String {
+        typeLabels[type] ?? type.capitalized
+    }
+
+    private var typeFilterRow: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                filterChip("All", isSelected: typeFilter == nil) { typeFilter = nil }
+                ForEach(typeOptions, id: \.self) { type in
+                    filterChip(Self.label(for: type), isSelected: typeFilter == type) {
+                        // Tapping the active one clears it, so the row doesn't
+                        // need "All" to be a target you must aim back at.
+                        typeFilter = typeFilter == type ? nil : type
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func filterChip(_ title: String,
+                            isSelected: Bool,
+                            select: @escaping () -> Void) -> some View {
+        Button {
+            UISelectionFeedbackGenerator().selectionChanged()
+            withAnimation(.snappy(duration: 0.18)) { select() }
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(isSelected ? .white : Color(.mainText))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(isSelected ? Color(.royalBlue600) : Color(.cardSurface),
+                            in: Capsule())
+                .overlay(
+                    Capsule().strokeBorder(isSelected ? .clear : Color(.separator),
+                                           lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Rates by type, after the search and the chip, in the order the add form
+    /// offers them. Anything unrecognised sorts last so a rate can't go missing.
+    private var groups: [(label: String, items: [RateCardItem])] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = items.filter { item in
+            guard typeFilter == nil || item.type == typeFilter else { return false }
+            guard !query.isEmpty else { return true }
+            return item.name.lowercased().contains(query)
+                || (item.unit?.lowercased().contains(query) ?? false)
+        }
+        let byType = Dictionary(grouping: filtered, by: \.type)
+        // Counted in the heading, the way Home writes "Drafts · 5".
+        let known = Self.typeOrder.compactMap { type in
+            byType[type].map { ("\(Self.label(for: type)) · \($0.count)", $0) }
+        }
+        let rest = byType.keys.filter { !Self.typeOrder.contains($0) }.sorted().map { type in
+            let group = byType[type] ?? []
+            return ("\(Self.label(for: type)) · \(group.count)", group)
+        }
+        return known + rest
+    }
+
+    private var noMatchesRow: some View {
+        Text(searchText.isEmpty
+             ? "Nothing saved under this type yet."
+             : "No rates match “\(searchText)”.")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    // MARK: - Rows
+
+    /// One saved price, inside its type's card.
+    ///
+    /// Name and money on the top line because that pairing is what's being
+    /// compared down the column; the unit sits under the name where it qualifies
+    /// the job rather than competing with the number.
+    private func rateRow(_ item: RateCardItem, isFirst: Bool, isLast: Bool) -> some View {
+        Button {
+            itemToEdit = item
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(item.name)
                         .font(.callout.weight(.medium))
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(1)
                     Spacer(minLength: 8)
-                    Text(item.type.capitalized)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if let price = item.priceText {
-                        // Plain and weighted, not a blue capsule. Every row
-                        // carrying the accent meant the accent said nothing,
-                        // and the price is what the eye is here for.
-                        Text(price)
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
+                    if let unitPrice = item.unitPrice {
+                        Text(AppCurrency.format(unitPrice))
+                            .font(.callout.weight(.semibold).monospacedDigit())
                             .foregroundStyle(Color(.mainText))
                             .lineLimit(1)
                     } else {
-                        Text("No price")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        // The same amber a quote uses for a line it couldn't
+                        // price, saying the same thing: this one needs you.
+                        HStack(spacing: 6) {
+                            Circle().fill(LineItemRow.amber).frame(width: 6, height: 6)
+                            Text("Set price")
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(LineItemRow.amber)
+                        }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                // As tall as a quote row, and for its sake rather than its own:
-                // iOS draws swipe actions as a circular icon above its label
-                // only when the row gives it the room, and drops to a compact
-                // icon-beside-text pill when it doesn't. One line of text put
-                // this row under that height, so the same two actions came out
-                // looking like a different control on each tab. The padding
-                // stays as a floor for when large text needs more than this.
-                .frame(minHeight: 78)
-                .background(Color(.cardSurface),
-                            in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
-            }
-            .buttonStyle(CardPressStyle())
-            .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
-            .contextMenu {
-                Button {
-                    itemToEdit = item
-                } label: {
-                    Label("Edit", systemImage: "pencil")
-                }
-                Button(role: .destructive) {
-                    itemToDelete = item
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                if let unit = item.unit, !unit.isEmpty {
+                    Text("per \(unit)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
-            // Two actions, in the order and tints a quote row uses. Delete on
-            // its own opened as one wide red block, which reads as a warning
-            // where a quote's swipe reads as a choice.
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                // No .destructive role: it would animate the row out on tap,
-                // before the confirmation alert is answered.
-                Button {
-                    itemToDelete = item
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-                .tint(.red)
-
-                Button {
-                    itemToEdit = item
-                } label: {
-                    Label("Edit", systemImage: "pencil")
-                }
-                .tint(Color(.royalBlue300))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .background(alignment: .bottom) {
+                if !isLast { Divider().padding(.leading, 16) }
+            }
+            .background(groupedCardBackground(isFirst: isFirst, isLast: isLast))
+        }
+        .buttonStyle(CardPressStyle())
+        .contentShape(.contextMenuPreview, Self.groupedCardShape(isFirst: isFirst, isLast: isLast))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+        .contextMenu {
+            Button {
+                itemToEdit = item
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                itemToDelete = item
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
         }
+        // Two actions, in the order and tints a quote row uses. Delete on its
+        // own opened as one wide red block, which reads as a warning where a
+        // quote's swipe reads as a choice.
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // No .destructive role: it would animate the row out on tap, before
+            // the confirmation alert is answered.
+            Button {
+                itemToDelete = item
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .tint(.red)
+
+            Button {
+                itemToEdit = item
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .tint(Color(.royalBlue300))
+        }
+    }
+
+    private static func groupedCardShape(isFirst: Bool, isLast: Bool) -> UnevenRoundedRectangle {
+        let radius: CGFloat = 18
+        return UnevenRoundedRectangle(
+            topLeadingRadius: isFirst ? radius : 0,
+            bottomLeadingRadius: isLast ? radius : 0,
+            bottomTrailingRadius: isLast ? radius : 0,
+            topTrailingRadius: isFirst ? radius : 0,
+            style: .continuous)
+    }
+
+    /// A type's rates read as one card, but a List can only paint a row at a
+    /// time. Drawn per row, the border would lay a hairline across every seam
+    /// and double up with the dividers — so its horizontal edges are pushed just
+    /// outside the row and clipped, leaving the sides and one outline.
+    private func groupedCardBackground(isFirst: Bool, isLast: Bool) -> some View {
+        let shape = Self.groupedCardShape(isFirst: isFirst, isLast: isLast)
+        return shape
+            .fill(Color(.cardSurface))
+            .overlay(shape.strokeBorder(Color(.separator), lineWidth: 0.5))
+            .padding(.top, isFirst ? 0 : -1)
+            .padding(.bottom, isLast ? 0 : -1)
+            .clipped()
+    }
+
+    /// Prices already spoken into quotes, waiting to become rates. The blue is
+    /// the app's "this card means something" fill, and it earns it here: it's
+    /// the only thing on the screen asking to be tapped.
+    private var readyToAddCard: some View {
+        Button {
+            showCandidates = true
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(candidates.count) price\(candidates.count == 1 ? "" : "s") ready to add")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color(.blueAccentText))
+                    Text("Spoken into recent quotes, not saved here yet")
+                        .font(.footnote)
+                        .foregroundStyle(Color(.blueAccentText).opacity(0.75))
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color(.blueAccentText))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color(.royalBlue25),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(CardPressStyle())
     }
 
     /// A cousin of the Home empty state, deliberately quieter. This is a
@@ -375,6 +589,13 @@ struct RateCardView: View {
         // shouldn't cost them the rates themselves.
         if let count = try? await QuoteService.rateCardFillCount() {
             fillCount = count
+            // So the next visit to this tab opens on the same number it left on.
+            session.cacheRateCardFillCount(count)
+        }
+        // Compared against the rates that just loaded, so a price saved a moment
+        // ago stops being offered.
+        if let found = try? await QuoteService.rateCandidates(notIn: items) {
+            candidates = found
         }
     }
 
@@ -385,6 +606,173 @@ struct RateCardView: View {
             toast = Toast(style: .success, message: "Rate deleted")
         } catch {
             toast = Toast(style: .error, message: "Couldn't delete rate")
+        }
+    }
+}
+
+// MARK: - Ready to add
+
+/// The prices already spoken into quotes, offered back as rates to keep.
+///
+/// Everything arrives selected. These are prices the user chose once already, so
+/// the question is which to leave out, not which to take — and the sheet is only
+/// worth opening if saying yes to all of it is one tap.
+private struct ReadyToAddSheet: View {
+    let candidates: [RateCandidate]
+    var onAdded: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var skipped: Set<UUID> = []
+    @State private var isSaving = false
+
+    private var chosen: [RateCandidate] {
+        candidates.filter { !skipped.contains($0.id) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Ready to add")
+                    .font(.robotoSlab(22, relativeTo: .title2))
+                    .foregroundStyle(Color(.mainText))
+                Spacer()
+                Button(role: .close) { dismiss() }
+            }
+            .padding(.horizontal, 24)
+
+            Text("You priced these by voice. Save them and the next quote prices itself.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
+                .padding(.horizontal, 24)
+
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(candidates) { candidate in
+                        row(candidate)
+                    }
+                }
+                .padding(.top, 18)
+                .padding(.horizontal, 24)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .padding(.top, 24)
+        .safeAreaInset(edge: .bottom) {
+            Button { save() } label: {
+                Group {
+                    if isSaving {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(chosen.isEmpty
+                             ? "Nothing selected"
+                             : "Save \(chosen.count) rate\(chosen.count == 1 ? "" : "s")")
+                            .font(.headline)
+                    }
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(chosen.isEmpty
+                            ? Color(.royalBlue600).opacity(0.4)
+                            : Color(.royalBlue600),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(chosen.isEmpty || isSaving)
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+            .background(Color(.surface))
+        }
+        .presentationDetents([.height(detentHeight), .large])
+        .presentationCornerRadius(28)
+        .presentationBackground(Color(.surface))
+    }
+
+    /// Sized to the list, like the sheet that offers unpriced lines: three
+    /// candidates shouldn't open onto a void, twelve shouldn't hide the button.
+    private var detentHeight: CGFloat {
+        let visible = CGFloat(min(candidates.count, 6))
+        return min(220 + visible * 62, 660)
+    }
+
+    private func row(_ candidate: RateCandidate) -> some View {
+        let isChosen = !skipped.contains(candidate.id)
+        return Button {
+            UISelectionFeedbackGenerator().selectionChanged()
+            withAnimation(.snappy(duration: 0.18)) {
+                if isChosen { skipped.insert(candidate.id) } else { skipped.remove(candidate.id) }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isChosen ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isChosen ? Color(.royalBlue600) : Color(.separator))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(candidate.name)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1)
+                    Text(Self.label(for: candidate.type))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(AppCurrency.format(candidate.unitPrice))
+                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Color(.mainText))
+                    if let unit = candidate.unit, !unit.isEmpty {
+                        Text("per \(unit)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color(.cardSurface),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+            .opacity(isChosen ? 1 : 0.55)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private static func label(for type: String) -> String {
+        switch type {
+        case "labor": return "Labor"
+        case "material": return "Material"
+        default: return type.capitalized
+        }
+    }
+
+    private func save() {
+        isSaving = true
+        Task {
+            var saved = 0
+            for candidate in chosen {
+                do {
+                    try await QuoteService.addRateCardItem(
+                        name: candidate.name, unit: candidate.unit,
+                        unitPrice: candidate.unitPrice, type: candidate.type)
+                    saved += 1
+                } catch {
+                    // Keep going: one failed write shouldn't cost the others,
+                    // and the count reported is the count that landed.
+                    continue
+                }
+            }
+            isSaving = false
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            onAdded(saved)
+            dismiss()
         }
     }
 }

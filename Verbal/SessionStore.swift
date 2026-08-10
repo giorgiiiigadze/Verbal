@@ -95,6 +95,13 @@ final class SessionStore {
     /// means that question doesn't get asked.
     func cacheRateCard(_ items: [RateCardItem]) { rateCard = items }
 
+    /// How many prices the rate card has filled in, preloaded with the lists so
+    /// its tab can state it on first paint rather than settling into it a moment
+    /// later. Nil only before the first successful fetch of the session.
+    private(set) var rateCardFillCount: Int?
+
+    func cacheRateCardFillCount(_ count: Int) { rateCardFillCount = count }
+
     /// Refetch the rate card after its prices are rewritten elsewhere.
     func refreshRateCard() async {
         if let items = try? await QuoteService.fetchRateCard() { rateCard = items }
@@ -327,9 +334,14 @@ final class SessionStore {
         async let quotesResult = try? await QuoteService.fetchQuotes()
         async let rateResult = try? await QuoteService.fetchRateCard()
         async let bizResult = try? await BusinessService.fetch()
+        // Alongside the rate card rather than after it: the Rate Card tab's
+        // heading is written from both, and fetching it on arrival is what made
+        // that line change under the user a beat after the screen appeared.
+        async let fillResult = try? await QuoteService.rateCardFillCount()
         quotes = await quotesResult ?? quotes
         rateCard = await rateResult ?? rateCard
         businessProfile = await bizResult ?? businessProfile
+        rateCardFillCount = await fillResult ?? rateCardFillCount
         listsLoaded = true
 
         // Off the critical path: the list is already on screen, and this is
@@ -373,6 +385,7 @@ final class SessionStore {
         UserDefaults.standard.removeObject(forKey: Self.avatarURLKey)
         quotes = []
         rateCard = []
+        rateCardFillCount = nil
         lineItemsCache = [:]
         listsLoaded = false
         cachedUserID = nil

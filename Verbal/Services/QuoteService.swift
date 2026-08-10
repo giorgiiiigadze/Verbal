@@ -642,6 +642,54 @@ enum QuoteService {
             .execute()
     }
 
+    /// Priced lines from recent quotes that the rate card doesn't hold yet.
+    ///
+    /// A spoken price that worked once will work again, but only if it's saved —
+    /// otherwise the same job gets priced from memory every time. This is the
+    /// offer `SaveRatesSheet` makes at the end of a recording, made again later
+    /// for the ones that got away.
+    ///
+    /// `price_source` of `spoken` is the point: a line priced from the rate card
+    /// is already saved by definition, and a `missing` one has no price to save.
+    static func rateCandidates(notIn existing: [RateCardItem],
+                               limit: Int = 80) async throws -> [RateCandidate] {
+        struct Row: Decodable {
+            let description: String?
+            let unit: String?
+            let unitPrice: Double?
+            let type: String
+
+            enum CodingKeys: String, CodingKey {
+                case description, unit, type
+                case unitPrice = "unit_price"
+            }
+        }
+
+        let response: PostgrestResponse<[Row]> = try await client
+            .from("quote_line_items")
+            .select("description, unit, unit_price, type")
+            .eq("price_source", value: "spoken")
+            .order("created_at", ascending: false)
+            .limit(limit)
+            .execute()
+
+        var seen = Set<String>()
+        var candidates: [RateCandidate] = []
+        for row in response.value {
+            guard let name = row.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  name.count >= 3,
+                  let price = row.unitPrice, price > 0
+            else { continue }
+            // The same job quoted three times is one thing to offer, and the
+            // newest wording of it is the one the user last chose.
+            guard seen.insert(name.lowercased()).inserted else { continue }
+            guard !existing.contains(where: { $0.looksLike(name) }) else { continue }
+            candidates.append(RateCandidate(name: name, unit: row.unit,
+                                            unitPrice: price, type: row.type))
+        }
+        return candidates
+    }
+
     /// How many line-item prices the rate card has filled in, across every quote
     /// the user has made — the card's own case for existing.
     ///
@@ -919,6 +967,20 @@ func quantityLabel(_ quantity: Double?, _ unit: String?) -> String? {
 }
 
 /// A saved rate-card entry (labor/material/other) used to auto-price quotes.
+/// A price the user has already spoken into a quote, offered back as a rate.
+struct RateCandidate: Identifiable, Sendable {
+    let id = UUID()
+    let name: String
+    let unit: String?
+    let unitPrice: Double
+    let type: String
+
+    var priceText: String {
+        let amount = AppCurrency.format(unitPrice)
+        return [amount, unit].compactMap { $0 }.joined(separator: " / ")
+    }
+}
+
 struct RateCardItem: Identifiable, Decodable, Sendable {
     let id: UUID
     let name: String
