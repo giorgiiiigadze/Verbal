@@ -133,11 +133,11 @@ struct SaveRatesSheet: View {
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 54)
+                .frame(height: 52)
                 .background(priced.isEmpty
                             ? Color(.royalBlue600).opacity(0.4)
                             : Color(.royalBlue600),
-                            in: Capsule())
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(priced.isEmpty || isSaving)
