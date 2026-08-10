@@ -952,6 +952,15 @@ struct HomeView: View {
 
 private struct QuoteRow: View {
     let quote: QuoteSummary
+    @Environment(\.colorScheme) private var scheme
+
+    /// RoyalBlue600 has no dark variant — it is #192868 in both appearances —
+    /// so on a pinned card, which is itself a dark blue in dark mode, the pin
+    /// was navy on navy. White in the dark, the same inversion the sign-in
+    /// waves needed for the same reason.
+    private var pinColor: Color {
+        scheme == .dark ? .white : Color(.royalBlue600)
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -960,7 +969,7 @@ private struct QuoteRow: View {
                     if quote.pinned {
                         Image(systemName: "pin.fill")
                             .font(.caption2)
-                            .foregroundStyle(Color(.royalBlue600))
+                            .foregroundStyle(pinColor)
                             // Springs in from nothing at the corner it will
                             // occupy, so the pin reads as being pressed into
                             // the card rather than fading onto it.
