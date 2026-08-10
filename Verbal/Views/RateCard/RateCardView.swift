@@ -438,55 +438,20 @@ private struct AddRateItemView: View {
                             .strokeBorder(Color(.separator), lineWidth: 0.5)
                     )
 
-                    // Its own line. Squeezed into 168pt beside the price it was
-                    // already truncating "Material" to "Mater…", and a segmented
-                    // control that can't fit its own labels only gets worse at
-                    // larger text sizes.
-                    Picker("Type", selection: $type) {
-                        ForEach(types, id: \.self) { Text($0.capitalized).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
+                    // Type and unit are the same question asked twice — pick one
+                    // of a short list — so they're asked the same way. This was
+                    // a segmented control sitting a line above the unit chips:
+                    // the only stock iOS control in a sheet drawn by hand, and
+                    // a second idiom for a choice the row below already had one
+                    // for. It also truncated "Material" to "Mater…" at larger
+                    // text sizes, which a chip that can scroll never does.
+                    chipRow("Type", options: types,
+                            display: { $0.capitalized }, selection: $type)
 
                     // Tappable rather than a picker with a "Custom…" escape
                     // hatch: the two-step is what let the same unit be typed
                     // two different ways.
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Per")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        // Runs edge to edge, like the chips on a quote. The row
-                        // steps back out of the content inset and puts it back
-                        // on the chips themselves, so they start in line with
-                        // the fields above but keep scrolling to the sheet's
-                        // own edges — the last unit no longer sits against an
-                        // invisible wall with clear space beyond it.
-                        ScrollView(.horizontal) {
-                            HStack(spacing: 8) {
-                                ForEach(unitOptions, id: \.self) { option in
-                                    Button { unit = option } label: {
-                                        Text(option)
-                                            .font(.subheadline.weight(.medium))
-                                            .foregroundStyle(unit == option
-                                                             ? .white : Color(.mainText))
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 9)
-                                            .background(unit == option
-                                                        ? Color(.royalBlue600) : Color(.cardSurface),
-                                                        in: Capsule())
-                                            .overlay(
-                                                Capsule().strokeBorder(
-                                                    unit == option ? .clear : Color(.separator),
-                                                    lineWidth: 0.5)
-                                            )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.horizontal, 24)
-                        }
-                        .scrollIndicators(.hidden)
-                        .padding(.horizontal, -24)
-                    }
+                    chipRow("Per", options: unitOptions, selection: $unit)
                 }
                 .padding(.top, 20)
                 .padding(.horizontal, 24)
@@ -516,7 +481,9 @@ private struct AddRateItemView: View {
             .padding(.bottom, 10)
             .background(Color(.surface))
         }
-        .presentationDetents([.height(530)])
+        // The chip row stands ~28pt taller than the segmented control it
+        // replaced — a caption above it, and a taller target under the thumb.
+        .presentationDetents([.height(560)])
         .presentationCornerRadius(28)
         .presentationBackground(Color(.surface))
         .task {
@@ -530,6 +497,66 @@ private struct AddRateItemView: View {
     /// doesn't lose it just by being opened.
     private var unitOptions: [String] {
         commonUnits.contains(unit) ? commonUnits : [unit] + commonUnits
+    }
+
+    /// A labelled row of chips — the sheet's one way of choosing from a short
+    /// list, so type and unit stop being two controls for the same job.
+    ///
+    /// Always scrollable, even where the options fit today: at accessibility
+    /// text sizes three chips stop fitting on a line, and scrolling past them is
+    /// better than a row that clips or wraps.
+    private func chipRow(_ label: String,
+                         options: [String],
+                         display: @escaping (String) -> String = { $0 },
+                         selection: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            // Runs edge to edge, like the chips on a quote. The row steps back
+            // out of the content inset and puts it back on the chips
+            // themselves, so they start in line with the fields above but keep
+            // scrolling to the sheet's own edges — the last chip no longer sits
+            // against an invisible wall with clear space beyond it.
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(options, id: \.self) { option in
+                        chip(display(option),
+                             isSelected: selection.wrappedValue == option) {
+                            selection.wrappedValue = option
+                        }
+                    }
+                }
+                .padding(.horizontal, 24)
+            }
+            .scrollIndicators(.hidden)
+            .padding(.horizontal, -24)
+        }
+    }
+
+    private func chip(_ title: String,
+                      isSelected: Bool,
+                      select: @escaping () -> Void) -> some View {
+        Button {
+            // A segmented control ticks under the thumb on every change. Losing
+            // that was the one thing the stock picker did better, so it comes
+            // back explicitly — and the fill moves rather than cutting.
+            UISelectionFeedbackGenerator().selectionChanged()
+            withAnimation(.snappy(duration: 0.18)) { select() }
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(isSelected ? .white : Color(.mainText))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(isSelected ? Color(.royalBlue600) : Color(.cardSurface),
+                            in: Capsule())
+                .overlay(
+                    Capsule().strokeBorder(isSelected ? .clear : Color(.separator),
+                                           lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private func duplicateWarning(_ item: RateCardItem) -> some View {
