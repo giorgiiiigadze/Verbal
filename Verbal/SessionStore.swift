@@ -95,13 +95,6 @@ final class SessionStore {
     /// means that question doesn't get asked.
     func cacheRateCard(_ items: [RateCardItem]) { rateCard = items }
 
-    /// How many prices the rate card has filled in, preloaded with the lists so
-    /// its tab can state it on first paint rather than settling into it a moment
-    /// later. Nil only before the first successful fetch of the session.
-    private(set) var rateCardFillCount: Int?
-
-    func cacheRateCardFillCount(_ count: Int) { rateCardFillCount = count }
-
     /// Prices spoken into recent quotes, as fetched — before any of them are
     /// measured against the rate card.
     ///
@@ -376,10 +369,6 @@ final class SessionStore {
         async let quotesResult = try? await QuoteService.fetchQuotes()
         async let rateResult = try? await QuoteService.fetchRateCard()
         async let bizResult = try? await BusinessService.fetch()
-        // Alongside the rate card rather than after it: the Rate Card tab's
-        // heading is written from both, and fetching it on arrival is what made
-        // that line change under the user a beat after the screen appeared.
-        async let fillResult = try? await QuoteService.rateCardFillCount()
         // Fetched beside the rate card, not after it. The offer needs both, but
         // only the comparison does — asking for one and then the other would put
         // a second round trip in front of the tab for no gain.
@@ -391,7 +380,6 @@ final class SessionStore {
         quotes = await quotesResult ?? quotes
         rateCard = await rateResult ?? rateCard
         businessProfile = await bizResult ?? businessProfile
-        rateCardFillCount = await fillResult ?? rateCardFillCount
         spokenPrices = await spokenResult ?? spokenPrices
         quotesUsedToday = await usageResult ?? quotesUsedToday
         listsLoaded = true
@@ -437,7 +425,6 @@ final class SessionStore {
         UserDefaults.standard.removeObject(forKey: Self.avatarURLKey)
         quotes = []
         rateCard = []
-        rateCardFillCount = nil
         spokenPrices = []
         quotesUsedToday = nil
         lineItemsCache = [:]

@@ -22,9 +22,6 @@ struct RateCardView: View {
     /// True when the last fetch failed — separates "no rates saved" from
     /// "couldn't reach the server", which look identical without it.
     @State private var loadFailed = false
-    /// Line-item prices this card has filled in. Nil until it's known, so the
-    /// header says nothing rather than claiming zero.
-    @State private var fillCount: Int?
     @State private var searchText = ""
     /// Nil is "All". Holds a raw type ("labor"), not a label.
     @State private var typeFilter: String?
@@ -87,11 +84,6 @@ struct RateCardView: View {
                 items = session.rateCard
                 hasLoaded = session.listsLoaded
             }
-            // The heading is seeded the same way, and every time this tab is
-            // opened rather than only the first. Held back, it wrote "4 rates
-            // saved" and then rewrote itself once the count landed — a line
-            // changing under the reader for no reason they can see.
-            fillCount = session.rateCardFillCount ?? fillCount
             await load()
         }
         // Bootstrap can finish after this view has already read an empty list —
@@ -116,54 +108,13 @@ struct RateCardView: View {
         .toast($toast)
     }
 
-    /// What the card is, and what it has actually done. The screen used to open
-    /// straight into rows, with nothing at the top saying either — so a page of
-    /// identical cards was all it ever amounted to.
-    private var summaryHeader: some View {
-        Group {
-            if let fillCount, fillCount > 0 {
-                Text(filledInLine(fillCount))
-            } else {
-                Text("\(items.count) rate\(items.count == 1 ? "" : "s") saved")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Two weights on one line, built as an attributed string rather than by
-    /// adding two `Text`s — that operator is deprecated as of iOS 26.
-    ///
-    /// The count of rates leads with nothing: it's four cards, you can see that.
-    /// The prices they've filled in is the number that says whether keeping them
-    /// was worth it, so it goes first and takes the only emphasis on the line.
-    private func filledInLine(_ fillCount: Int) -> AttributedString {
-        var filled = AttributedString(
-            "\(fillCount) price\(fillCount == 1 ? "" : "s") filled in")
-        filled.font = .subheadline.weight(.medium)
-        filled.foregroundColor = Color(.mainText)
-
-        var from = AttributedString(
-            " from your \(items.count) rate\(items.count == 1 ? "" : "s")")
-        from.font = .subheadline
-        from.foregroundColor = .secondary
-
-        return filled + from
-    }
-
     private var list: some View {
         List {
-            summaryHeader
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 12, trailing: 20))
-
             if typeOptions.count > 1 {
                 typeFilterRow
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 14, trailing: 0))
+                    .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 14, trailing: 0))
             }
 
             if !candidates.isEmpty, searchText.isEmpty, typeFilter == nil {
@@ -588,14 +539,6 @@ struct RateCardView: View {
             }
         }
         hasLoaded = true
-        // Best effort, and deliberately last: the header line is the least of
-        // what this screen owes the user, and a count that won't come back
-        // shouldn't cost them the rates themselves.
-        if let count = try? await QuoteService.rateCardFillCount() {
-            fillCount = count
-            // So the next visit to this tab opens on the same number it left on.
-            session.cacheRateCardFillCount(count)
-        }
         if let spoken = try? await QuoteService.recentSpokenPrices() {
             session.cacheSpokenPrices(spoken)
         }
