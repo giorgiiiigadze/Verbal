@@ -1,0 +1,50 @@
+{
+  "name": "bathroom-rate-card-partial",
+  "note": "The real recording that priced itself two ways on 2026-08-10 and 2026-08-11: $450 one run, $513.36 the next, from a byte-identical transcript. Both obeyed the no-splitting rule — the difference was the toilet line. Named 'New toilet' and typed material it matched nothing; named 'Remove old toilet and fit new one' and typed labor it matched the saved 'Toilet Installation' rate and took $63.36. That match is also wrong on its own terms: the rate prices FITTING a toilet, and the job also supplies one, so the priced version quietly under-quoted by the cost of a toilet. Expected behaviour: the toilet line stays unpriced either way. 'New sink with vanity unit' is named identically in the rate card and should match every time.",
+  "transcript": "Right, this one's for Marina Kapanadze, apartment 12 on Chavchavadze Avenue. Bathroom renovation. She wants the old toilet taken out and a new one fitted, plus a new sink with the vanity unit. Two mixer taps — no wait, three, one for the kitchen as well. About eight meters of pipe, the 20 mil stuff. There's also a leaking valve behind the wall I need to replace, I don't know what that costs yet, I have to check with the supplier. Day and a half of work, call it 400 for the labor. Tell her it's good for two weeks and she needs to pay half upfront.",
+  "rate_card": [
+    { "name": "Re tiling", "unit": "m²", "unit_price": 17.6, "type": "labor" },
+    { "name": "Toilet Installation", "unit": "each", "unit_price": 63.36, "type": "labor" },
+    { "name": "Bathroom fan", "unit": "each", "unit_price": 31.68, "type": "material" },
+    { "name": "New sink with vanity unit", "unit": "set", "unit_price": 50, "type": "material" }
+  ],
+  "currency": "USD",
+  "expect": [
+    {
+      "label": "toilet out and new one fitted",
+      "any": ["toilet"],
+      "exclude": [],
+      "price": null
+    },
+    {
+      "label": "sink with vanity unit",
+      "any": ["sink", "vanity"],
+      "exclude": [],
+      "price": 50
+    },
+    {
+      "label": "three mixer taps",
+      "any": ["tap", "mixer"],
+      "exclude": [],
+      "price": null
+    },
+    {
+      "label": "8 m of 20 mm pipe",
+      "any": ["pipe"],
+      "exclude": [],
+      "price": null
+    },
+    {
+      "label": "leaking valve",
+      "any": ["valve"],
+      "exclude": [],
+      "price": null
+    },
+    {
+      "label": "day and a half of labour",
+      "any": ["labor", "labour", "day"],
+      "exclude": ["toilet", "sink", "valve", "pipe", "tap"],
+      "price": 400
+    }
+  ]
+}
