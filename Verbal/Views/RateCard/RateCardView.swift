@@ -58,7 +58,7 @@ struct RateCardView: View {
         .searchable(text: $searchText, prompt: "Search rates")
         .searchToolbarBehavior(.minimize)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarLeading) {
                 Button {
                     showAdd = true
                 } label: {
@@ -624,8 +624,16 @@ private struct ReadyToAddSheet: View {
     var onAdded: (Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var skipped: Set<UUID> = []
     @State private var isSaving = false
+
+    /// `royalBlue600` defines a light appearance only, so in dark mode it stays
+    /// a near-black navy and a filled circle of it disappears into the card it
+    /// sits on. The mic tab makes the same swap for the same reason.
+    private var checkTint: Color {
+        colorScheme == .dark ? .white : Color(.royalBlue600)
+    }
 
     private var chosen: [RateCandidate] {
         candidates.filter { !skipped.contains($0.id) }
@@ -711,7 +719,7 @@ private struct ReadyToAddSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: isChosen ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundStyle(isChosen ? Color(.royalBlue600) : Color(.separator))
+                    .foregroundStyle(isChosen ? checkTint : Color(.separator))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(candidate.name)
                         .font(.callout.weight(.medium))

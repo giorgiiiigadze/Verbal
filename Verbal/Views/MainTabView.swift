@@ -14,6 +14,19 @@ struct MainTabView: View {
     @State private var selection: TabItem = .home
     @State private var showCreate = false
 
+    /// Unselected tabs are drawn in the same ink as the selected one, rather
+    /// than the system's grey. Selection is still legible — iOS marks the
+    /// current tab with a capsule behind it — so the colour was saying a second
+    /// time what the shape already says, and greying three of four made the bar
+    /// read as mostly disabled.
+    ///
+    /// Set on the appearance proxy because SwiftUI's `.tint` reaches only the
+    /// selected item. Only this one property is touched: configuring a whole
+    /// `UITabBarAppearance` would replace the bar's own background as well.
+    init() {
+        UITabBar.appearance().unselectedItemTintColor = UIColor(resource: .mainText)
+    }
+
     /// Intercepts taps on the record "tab" before it ever becomes the selected
     /// tab. Letting it select and then snapping back in onChange briefly puts
     /// the search-role tab through its tab-bar morph, which corrupts the Home
@@ -34,10 +47,20 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: tabSelection) {
-            Tab("Home", systemImage: "house.fill", value: .home) {
+            // Drawn rather than an SF Symbol, and stored as a template image so
+            // it takes the TabView's tint like the symbols beside it — the
+            // artwork's own red would otherwise sit in the bar ignoring both
+            // selection and the colour scheme.
+            Tab(value: TabItem.home) {
                 HomeView(showCreate: $showCreate)
+            } label: {
+                Label {
+                    Text("Home")
+                } icon: {
+                    Image(.homeTab)
+                }
             }
-            Tab("Rate card", systemImage: "list.bullet.rectangle", value: .rateCard) {
+            Tab("Rate card", systemImage: "rectangle.stack.fill", value: .rateCard) {
                 NavigationStack { RateCardView() }
             }
             Tab(value: TabItem.profile) {
