@@ -11,6 +11,7 @@ struct SettingsView: View {
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
     @State private var showDeleteSheet = false
+    @State private var showSignOutConfirmation = false
     @State private var isDeleting = false
     @State private var toast: Toast?
     /// The currency the user picked, held until they say what should happen to
@@ -108,6 +109,17 @@ struct SettingsView: View {
             }
             .listRowBackground(Color(.cardSurface))
 
+            // Leaving the app and losing the account are the same question asked
+            // at two different volumes, and they were on two different screens —
+            // sign-out buried in Profile, under the business address. Settings is
+            // where it gets looked for.
+            Section {
+                Button("Sign out", role: .destructive) {
+                    showSignOutConfirmation = true
+                }
+            }
+            .listRowBackground(Color(.cardSurface))
+
             Section {
                 // Deletion is a round trip to the edge function followed by a
                 // sign-out. Left as a merely disabled button it reads as a tap
@@ -135,6 +147,14 @@ struct SettingsView: View {
         .background(Color(.homeBackground))
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Sign out of Verbal?", isPresented: $showSignOutConfirmation) {
+            Button("Sign out", role: .destructive) {
+                Task { try? await session.signOut() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your quotes stay safe — you'll just need to sign in again.")
+        }
         .sheet(isPresented: $showDeleteSheet) {
             DeleteAccountSheet { reason in
                 showDeleteSheet = false
