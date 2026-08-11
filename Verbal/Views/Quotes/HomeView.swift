@@ -181,7 +181,13 @@ struct HomeView: View {
         // the content inside the stack (which also owns a minimizing
         // .searchable toolbar) corrupts the navigation bar after dismissal —
         // broken title layout and lost push transitions on the next push.
-        .sheet(isPresented: $showCreate, onDismiss: { Task { await load() } }) {
+        .sheet(isPresented: $showCreate, onDismiss: {
+            Task {
+                await load()
+                // A recording that banked a quote just spent an allowance.
+                await session.refreshQuoteUsage()
+            }
+        }) {
             QuoteRecordingView()
                 .environment(session)
         }
@@ -935,6 +941,8 @@ struct HomeView: View {
         do {
             try await QuoteService.duplicateQuote(id: quote.id)
             await load()
+            // A copy is a new quote, and the ledger counts it as one.
+            await session.refreshQuoteUsage()
             // The copy lands wherever the sort puts it, which on a long list is
             // out of sight. Without a word, confirming the alert looked like it
             // had done nothing — and the obvious response to that is to tap it

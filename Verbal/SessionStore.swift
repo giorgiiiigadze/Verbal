@@ -119,6 +119,31 @@ final class SessionStore {
 
     func cacheSpokenPrices(_ prices: [RateCandidate]) { spokenPrices = prices }
 
+    // MARK: - Free allowance
+
+    /// Quotes a day without a subscription.
+    static let freeQuotesPerDay = 2
+
+    /// Quotes made since local midnight, counted on the server. Nil until the
+    /// first count comes back — the difference matters, because zero means the
+    /// full allowance and nil means we don't know yet, and nothing should be
+    /// refused on the strength of not knowing.
+    private(set) var quotesUsedToday: Int?
+
+    var freeQuotesRemaining: Int? {
+        quotesUsedToday.map { max(Self.freeQuotesPerDay - $0, 0) }
+    }
+
+    /// The user's own midnight, not UTC's. A day that rolls over at 4am because
+    /// of where the phone is would be indefensible to explain to someone whose
+    /// allowance vanished mid-afternoon.
+    func refreshQuoteUsage() async {
+        let startOfDay = Calendar.current.startOfDay(for: .now)
+        if let used = try? await QuoteService.quotesUsed(since: startOfDay) {
+            quotesUsedToday = used
+        }
+    }
+
     /// Refetch the rate card after its prices are rewritten elsewhere.
     func refreshRateCard() async {
         if let items = try? await QuoteService.fetchRateCard() { rateCard = items }
@@ -359,11 +384,16 @@ final class SessionStore {
         // only the comparison does — asking for one and then the other would put
         // a second round trip in front of the tab for no gain.
         async let spokenResult = try? await QuoteService.recentSpokenPrices()
+        // Known before the user can reach the mic, so the allowance is never
+        // being counted while they're already talking.
+        async let usageResult = try? await QuoteService.quotesUsed(
+            since: Calendar.current.startOfDay(for: .now))
         quotes = await quotesResult ?? quotes
         rateCard = await rateResult ?? rateCard
         businessProfile = await bizResult ?? businessProfile
         rateCardFillCount = await fillResult ?? rateCardFillCount
         spokenPrices = await spokenResult ?? spokenPrices
+        quotesUsedToday = await usageResult ?? quotesUsedToday
         listsLoaded = true
 
         // Off the critical path: the list is already on screen, and this is
@@ -409,6 +439,7 @@ final class SessionStore {
         rateCard = []
         rateCardFillCount = nil
         spokenPrices = []
+        quotesUsedToday = nil
         lineItemsCache = [:]
         listsLoaded = false
         cachedUserID = nil

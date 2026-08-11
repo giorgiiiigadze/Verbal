@@ -140,6 +140,15 @@ extension Double {
 
 /// Formatters for Postgres `date` values, which arrive as "yyyy-MM-dd".
 enum QuoteDateFormat {
+    /// An instant, for range filters. `dayOnly` can't be used for these: a date
+    /// with no time in them is read as midnight UTC, which is the wrong boundary
+    /// everywhere but one timezone.
+    static let timestamp: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
     static let dayOnly: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -710,6 +719,21 @@ enum QuoteService {
                                             unitPrice: price, type: row.type))
         }
         return candidates
+    }
+
+    /// Quotes made since `date`, for the free tier's daily allowance.
+    ///
+    /// Counted from `quote_usage` rather than `quotes`: the ledger records that
+    /// a quote was made, so deleting one doesn't hand its allowance back. RLS
+    /// scopes the count to the signed-in user, and there is no delete policy on
+    /// that table for anyone.
+    static func quotesUsed(since date: Date) async throws -> Int {
+        let response = try await client
+            .from("quote_usage")
+            .select("id", head: true, count: .exact)
+            .gte("created_at", value: QuoteDateFormat.timestamp.string(from: date))
+            .execute()
+        return response.count ?? 0
     }
 
     /// How many line-item prices the rate card has filled in, across every quote
