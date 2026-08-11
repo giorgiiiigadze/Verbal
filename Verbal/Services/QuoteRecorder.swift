@@ -18,6 +18,11 @@ final class QuoteRecorder {
         case idle
         case preparing
         case recording
+        /// Something took the microphone away — a call, Siri, the app going to
+        /// the background. Distinct from `.idle` because the words already said
+        /// are still here and the user has not finished: nothing may be
+        /// generated from this state until they say so.
+        case interrupted
         case unavailable
     }
 
@@ -68,12 +73,16 @@ final class QuoteRecorder {
     }
 
     var isRecording: Bool { state == .recording }
+    var isPaused: Bool { state == .interrupted }
+    /// Recording or paused — a session the user is in the middle of, either way.
+    var isSessionActive: Bool { isRecording || isPaused }
     var hasContent: Bool { !transcript.isEmpty }
 
     private var analyzer: SpeechAnalyzer?
     private var transcriber: SpeechTranscriber?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
     private var resultsTask: Task<Void, Never>?
+    private var interruptionTask: Task<Void, Never>?
 
     private let audioEngine = AVAudioEngine()
 
@@ -120,7 +129,10 @@ final class QuoteRecorder {
     // MARK: - Start
 
     func start() async {
-        guard state == .idle || state == .unavailable else { return }
+        // `.interrupted` resumes through here: the text already said is still in
+        // `finalizedText`, so the separator below and the running `elapsed` make
+        // it a continuation rather than a second recording.
+        guard state == .idle || state == .interrupted || state == .unavailable else { return }
         state = .preparing
         errorMessage = nil
 
@@ -181,6 +193,7 @@ final class QuoteRecorder {
 
             state = .recording
             startTimer()
+            observeInterruptions()
         } catch {
             fail(error)
         }
@@ -189,8 +202,31 @@ final class QuoteRecorder {
     // MARK: - Stop
 
     func stop() async {
+        await teardown()
+        if state != .unavailable { state = .idle }
+    }
+
+    /// Give up the microphone without ending the session.
+    ///
+    /// Deliberately not `stop()`: the recording view generates a quote whenever
+    /// recording stops with something in it, so routing a phone call through
+    /// that path would extract a half-finished transcript on the user's behalf.
+    /// This keeps the words, gives back the audio session, and waits.
+    func interrupt() async {
+        guard state == .recording || state == .preparing else { return }
+        await teardown()
+        state = .interrupted
+    }
+
+    /// Everything both endings share. Folding the volatile hypothesis into the
+    /// finalized text here is what keeps the half-spoken sentence someone was in
+    /// the middle of when the phone rang.
+    private func teardown() async {
         timerTask?.cancel()
         timerTask = nil
+
+        interruptionTask?.cancel()
+        interruptionTask = nil
 
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
@@ -214,8 +250,30 @@ final class QuoteRecorder {
         }
 
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
 
-        if state != .unavailable { state = .idle }
+    /// Watches for the system taking the microphone — an incoming call, Siri,
+    /// another app claiming it.
+    ///
+    /// `.ended` is ignored on purpose, even when iOS offers `.shouldResume`.
+    /// A call ends with the phone against the user's ear, and starting to listen
+    /// again unannounced would record whatever they said next. Resuming is a tap
+    /// on the mic, which is where they'd look for it anyway.
+    private func observeInterruptions() {
+        interruptionTask?.cancel()
+        interruptionTask = Task { [weak self] in
+            let interruptions = NotificationCenter.default.notifications(
+                named: AVAudioSession.interruptionNotification
+            )
+            for await notification in interruptions {
+                guard !Task.isCancelled else { return }
+                let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+                guard let raw, AVAudioSession.InterruptionType(rawValue: raw) == .began else {
+                    continue
+                }
+                await self?.interrupt()
+            }
+        }
     }
 
     // MARK: - Audio capture

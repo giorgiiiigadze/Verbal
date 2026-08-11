@@ -8,6 +8,7 @@ import SwiftUI
 struct QuoteRecordingView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SessionStore.self) private var session
+    @Environment(\.scenePhase) private var scenePhase
     @State private var recorder = QuoteRecorder()
     @State private var title = ""
     @State private var showHeaderTitle = false
@@ -71,7 +72,10 @@ struct QuoteRecordingView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         Group {
-                            if recorder.isRecording {
+                            // Paused counts as mid-session: a call arriving
+                            // shouldn't turn the title into an editable field
+                            // under the user's thumb.
+                            if recorder.isSessionActive {
                                 Text(displayTitle)
                                     .foregroundStyle(.secondary)
                                     .shimmer(active: recorder.hasContent)
@@ -91,6 +95,11 @@ struct QuoteRecordingView: View {
 
                         if isGenerating {
                             statusBanner
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+
+                        if recorder.isPaused {
+                            pausedNotice
                                 .transition(.opacity.combined(with: .move(edge: .top)))
                         }
 
@@ -163,9 +172,22 @@ struct QuoteRecordingView: View {
                 }
                 .onChange(of: recorder.isRecording) { wasRecording, isRecording in
                     // When a recording finishes with content, generate the quote.
-                    if wasRecording && !isRecording {
+                    // Only when the user ended it: an interruption also stops
+                    // recording, and extracting a quote from a sentence someone
+                    // was halfway through — because their phone rang — would
+                    // hand them a half-priced job they never asked to see.
+                    if wasRecording && !isRecording && !recorder.isPaused {
                         generate()
                     }
+                }
+                // Leaving the app gives the microphone away: iOS suspends the
+                // process and the engine stops. Nothing here was noticing, so
+                // the timer ran on and the screen went on claiming to listen.
+                // `.background`, not `.inactive` — the latter fires for a glance
+                // at the app switcher or a pull-down of notifications.
+                .onChange(of: scenePhase) { _, phase in
+                    guard phase == .background, recorder.isRecording else { return }
+                    Task { await recorder.interrupt() }
                 }
                 .onChange(of: recorder.errorMessage) { _, message in
                     // Surface mic / speech-permission or engine failures — otherwise
@@ -396,6 +418,36 @@ struct QuoteRecordingView: View {
                 try? await QuoteService.deleteQuote(id: id)
             }
         }
+    }
+
+    /// Says the microphone was taken away, and stays until it's picked back up.
+    /// A toast would be gone in three seconds, and not noticing is the whole
+    /// failure this exists to fix.
+    ///
+    /// It carried Resume and Finish buttons at first, which was a panel offering
+    /// what the bottom bar already offers a few points below — the mic resumes,
+    /// Generate finishes. So it points at the mic instead of competing with it,
+    /// and says nothing about the words being kept: they're on screen underneath,
+    /// which makes the claim better than any sentence could.
+    private var pausedNotice: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(LineItemRow.amber)
+                .frame(width: 7, height: 7)
+            Text("Paused — tap the mic to continue.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
     }
 
     /// Start (or resume) recording from whatever is currently on screen.
