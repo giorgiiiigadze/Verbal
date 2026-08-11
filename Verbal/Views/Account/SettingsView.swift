@@ -10,9 +10,7 @@ struct SettingsView: View {
 
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
-    @State private var showDeleteSheet = false
     @State private var showSignOutConfirmation = false
-    @State private var isDeleting = false
     @State private var toast: Toast?
     /// The currency the user picked, held until they say what should happen to
     /// their saved rates.
@@ -70,79 +68,39 @@ struct SettingsView: View {
             }
             .listRowBackground(Color(.cardSurface))
 
+            // Three doors rather than three more sections. Support, legal and
+            // deletion were all laid out here in full, which put "Delete
+            // account" one flick from the currency picker and made a screen with
+            // two real settings on it look like a screen with nine.
             Section {
-                if let mail = AppInfo.supportMailURL {
-                    Link(destination: mail) {
-                        Label("Contact support", systemImage: "envelope")
-                    }
+                NavigationLink {
+                    HelpView()
+                } label: {
+                    Label("Help", systemImage: "questionmark.circle")
                 }
-                // Absent until the app is on the App Store. `requestReview` is
-                // callable at any time but shows nothing before release and is
-                // throttled after it, so as a row the user taps on purpose it
-                // would do nothing on most taps — the worst kind of control.
-                if let review = AppInfo.reviewURL {
-                    Link(destination: review) {
-                        Label("Rate Verbal", systemImage: "star")
-                    }
+                NavigationLink {
+                    AboutView()
+                } label: {
+                    Label("About", systemImage: "info.circle")
                 }
-            } header: {
-                Text("Support")
-            } footer: {
-                Text("Questions, bugs, or ideas — the email arrives with your app version attached.")
+                NavigationLink {
+                    OtherView()
+                } label: {
+                    Label("Other", systemImage: "ellipsis.circle")
+                }
             }
             .listRowBackground(Color(.cardSurface))
 
-            Section {
-                Link(destination: AppInfo.privacyPolicyURL) {
-                    Label("Privacy policy", systemImage: "hand.raised")
-                }
-                // Absent until the terms exist: a row that opens a 404 reads as
-                // a broken app, and reviewers follow these links.
-                if let terms = AppInfo.termsURL {
-                    Link(destination: terms) {
-                        Label("Terms of service", systemImage: "doc.text")
-                    }
-                }
-                LabeledContent("Version", value: AppInfo.versionLabel)
-            } header: {
-                Text("About")
-            }
-            .listRowBackground(Color(.cardSurface))
-
-            // Leaving the app and losing the account are the same question asked
-            // at two different volumes, and they were on two different screens —
-            // sign-out buried in Profile, under the business address. Settings is
-            // where it gets looked for.
+            // Signing out stays in the open: it is routine, reversible, and the
+            // thing people actually come here to do. Deleting the account is
+            // none of those, and lives behind "Other".
             Section {
                 Button("Sign out", role: .destructive) {
                     showSignOutConfirmation = true
                 }
             }
             .listRowBackground(Color(.cardSurface))
-
-            Section {
-                // Deletion is a round trip to the edge function followed by a
-                // sign-out. Left as a merely disabled button it reads as a tap
-                // that did nothing, on the one action nobody should have to
-                // wonder about.
-                if isDeleting {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text("Deleting account…")
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Button("Delete account", role: .destructive) {
-                        showDeleteSheet = true
-                    }
-                }
-            } footer: {
-                Text("Permanently removes your account, quotes, and rate card. This can't be undone.")
-            }
-            .listRowBackground(Color(.cardSurface))
         }
-        // Nothing else is worth touching while the account is being removed.
-        .disabled(isDeleting)
         .scrollContentBackground(.hidden)
         .background(Color(.homeBackground))
         .navigationTitle("Settings")
@@ -154,12 +112,6 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Your quotes stay safe — you'll just need to sign in again.")
-        }
-        .sheet(isPresented: $showDeleteSheet) {
-            DeleteAccountSheet { reason in
-                showDeleteSheet = false
-                deleteAccount(reason: reason)
-            }
         }
         .sheet(item: $pendingCurrency) { target in
             ConvertRateCardSheet(items: pricedRates,
@@ -173,21 +125,5 @@ struct SettingsView: View {
             }
         }
         .toast($toast)
-    }
-
-    /// On success the session signs out, which returns the app to the auth
-    /// screen — so there's no success state to show here.
-    private func deleteAccount(reason: String) {
-        isDeleting = true
-        Task {
-            // Feedback first: once the account is gone the session can't write.
-            await session.recordDeletionFeedback(reason: reason)
-            do {
-                try await session.deleteAccount()
-            } catch {
-                isDeleting = false
-                toast = Toast(style: .error, message: "Couldn't delete account")
-            }
-        }
     }
 }
