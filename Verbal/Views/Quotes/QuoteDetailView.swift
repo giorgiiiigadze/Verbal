@@ -227,7 +227,7 @@ struct QuoteDetailView: View {
                 // tapped or changed, and a reference nobody reads until
                 // they quote it back to you doesn't belong in front of the
                 // things the user actually adjusts.
-                if let numberLabel = quote.numberLabel {
+                if let numberLabel = quote.numberLabel(prefix: session.businessProfile?.quoteNumberPrefix) {
                     QuoteChip(text: numberLabel) {
                         Image(systemName: "number")
                     }
@@ -300,7 +300,7 @@ struct QuoteDetailView: View {
         let tax = (subtotal * quote.taxRate / 100).roundedToCents
         return QuoteDocument(
             title: displayTitle,
-            number: quote.number,
+            number: quote.numberText(prefix: session.businessProfile?.quoteNumberPrefix),
             clientName: clientName.isEmpty ? nil : clientName,
             createdAt: quote.createdAt,
             validityDate: validityDate,

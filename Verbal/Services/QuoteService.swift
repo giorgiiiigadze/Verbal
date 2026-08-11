@@ -89,10 +89,21 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
         return "Untitled quote"
     }
 
-    /// "Quote 0007" — the reference shown to the user and printed on the PDF.
-    var numberLabel: String? {
+    /// "INV-0007" — the allocated number behind the user's own prefix.
+    ///
+    /// The prefix lives on the business profile rather than on the quote, so
+    /// changing it re-labels quotes already issued. That's the deliberate trade:
+    /// the alternative stamps a copy of it onto every row, and a trade that
+    /// fixes a typo in their prefix wants it fixed everywhere, not from here on.
+    func numberText(prefix: String?) -> String? {
         guard let number, !number.isEmpty else { return nil }
-        return "Quote \(number)"
+        let clean = (prefix ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return clean.isEmpty ? number : clean + number
+    }
+
+    /// "Quote INV-0007" — the reference shown to the user and printed on the PDF.
+    func numberLabel(prefix: String?) -> String? {
+        numberText(prefix: prefix).map { "Quote \($0)" }
     }
 
     var validityDate: Date? {

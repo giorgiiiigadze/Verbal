@@ -773,7 +773,7 @@ struct HomeView: View {
     private func pdfDocument(for quote: QuoteSummary) -> QuoteDocument {
         QuoteDocument(
             title: quote.displayTitle,
-            number: quote.number,
+            number: quote.numberText(prefix: session.businessProfile?.quoteNumberPrefix),
             clientName: quote.clientName,
             createdAt: quote.createdAt,
             validityDate: quote.validityDate,

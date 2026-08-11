@@ -26,6 +26,10 @@ struct QuoteDefaultsView: View {
     @State private var taxRate = ""
     @State private var terms = ""
     @State private var notes = ""
+    @State private var numberPrefix = ""
+    /// Typed, so the field can be emptied while it's being retyped. Blank reads
+    /// as 1 rather than refusing to save.
+    @State private var numberStart = ""
 
     /// The full row as loaded, so saving our subset preserves the identity fields.
     @State private var loaded = BusinessProfile.empty
@@ -40,11 +44,31 @@ struct QuoteDefaultsView: View {
         Double(taxRate.replacingOccurrences(of: ",", with: ".")) ?? 0
     }
 
+    /// At least 1: the allocator treats the start as a floor, and a floor of
+    /// zero would ask it for a number it can't issue.
+    private var numberStartValue: Int {
+        max(Int(numberStart.trimmingCharacters(in: .whitespaces)) ?? 1, 1)
+    }
+
+    private var trimmedPrefix: String {
+        numberPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// What the next quote's reference will read as, shown under the fields.
+    /// Numbering is a setting people get wrong in the abstract and right when
+    /// they can see it.
+    private var numberPreview: String {
+        let padded = String(format: "%04d", numberStartValue)
+        return trimmedPrefix.isEmpty ? padded : trimmedPrefix + padded
+    }
+
     private var isDirty: Bool {
         validityDays != loaded.defaultValidityDays
             || taxRateValue != loaded.defaultTaxRate
             || terms != (loaded.defaultTerms ?? "")
             || notes != (loaded.defaultNotes ?? "")
+            || trimmedPrefix != (loaded.quoteNumberPrefix ?? "")
+            || numberStartValue != loaded.quoteNumberStart
     }
 
     var body: some View {
@@ -67,6 +91,30 @@ struct QuoteDefaultsView: View {
             } footer: {
                 Text("The top of every quote you send. Your business name and contact details come from Profile.")
             }
+
+            Section {
+                LabeledContent("Prefix") {
+                    TextField("None", text: $numberPrefix)
+                        .multilineTextAlignment(.trailing)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                }
+                LabeledContent("Start at") {
+                    TextField("1", text: $numberStart)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                        .font(.body.monospacedDigit())
+                }
+                LabeledContent("Next quote", value: numberPreview)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Quote numbers")
+            } footer: {
+                // Both halves of the truth, because both surprise people: the
+                // start can't reach back, and the prefix isn't stored per quote.
+                Text("Start only applies while your numbering is still below it — quotes already issued keep their numbers. Changing the prefix relabels every quote, including ones you've sent.")
+            }
+            .listRowBackground(Color(.cardSurface))
 
             Section {
                 Stepper("Valid for \(validityDays) day\(validityDays == 1 ? "" : "s")",
@@ -320,6 +368,10 @@ struct QuoteDefaultsView: View {
         taxRate = loaded.defaultTaxRate == 0 ? "" : trimmedRate(loaded.defaultTaxRate)
         terms = loaded.defaultTerms ?? ""
         notes = loaded.defaultNotes ?? ""
+        numberPrefix = loaded.quoteNumberPrefix ?? ""
+        // Blank rather than "1", so the placeholder carries the default and the
+        // field doesn't look like something already set.
+        numberStart = loaded.quoteNumberStart <= 1 ? "" : String(loaded.quoteNumberStart)
         isLoading = false
     }
 
@@ -330,6 +382,8 @@ struct QuoteDefaultsView: View {
         profile.defaultTaxRate = taxRateValue
         profile.defaultTerms = trimmedOrNil(terms)
         profile.defaultNotes = trimmedOrNil(notes)
+        profile.quoteNumberPrefix = trimmedOrNil(numberPrefix)
+        profile.quoteNumberStart = numberStartValue
         Task {
             defer { isSaving = false }
             do {
