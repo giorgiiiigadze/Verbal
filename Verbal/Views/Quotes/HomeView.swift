@@ -233,7 +233,7 @@ struct HomeView: View {
 
                 ForEach(section.quotes) { quote in
                     ZStack {
-                        QuoteRow(quote: quote)
+                        QuoteRow(quote: quote, unpricedCount: unpricedCount(for: quote))
                         // Zero-opacity link so the row navigates without the
                         // default trailing chevron.
                         NavigationLink {
@@ -952,6 +952,21 @@ struct HomeView: View {
 
 private struct QuoteRow: View {
     let quote: QuoteSummary
+    /// Lines this quote can't price yet. Passed in because the summary row
+    /// doesn't know what's inside a quote — the list reads it from the prefetch.
+    var unpricedCount: Int = 0
+
+    /// Drafts only, and it takes the status pill's place rather than adding to
+    /// the row.
+    ///
+    /// The list is already grouped under "Drafts · 5", so a pill repeating that
+    /// word is the least informative thing in the row and can be spent on the
+    /// exception instead. Once a quote has gone out the trade is off: the gap
+    /// was sent deliberately as TBC, and what the customer has done with it
+    /// since is the thing worth reading.
+    private var showsUnpriced: Bool {
+        unpricedCount > 0 && quote.effectiveStatus == "draft"
+    }
     @Environment(\.colorScheme) private var scheme
 
     /// RoyalBlue600 has no dark variant — it is #192868 in both appearances —
@@ -1020,13 +1035,25 @@ private struct QuoteRow: View {
 
     /// Small tinted capsule naming the quote's status — pale blue for the
     /// working states, green/red for the settled ones.
+    ///
+    /// "Viewed" is the exception, and deliberately: it's the one state that
+    /// reports something the customer did rather than something the user did,
+    /// and it's the moment worth acting on. Set like "Sent" — both were
+    /// `blueAccentText` on near-identical pale blue — it said the quote had
+    /// gone out, when what it actually says is that somebody is reading it.
     private var statusPill: some View {
-        Text(pillLabel)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(pillForeground)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(pillBackground, in: Capsule())
+        HStack(spacing: 4) {
+            if quote.effectiveStatus == "viewed" {
+                Image(systemName: "eye.fill")
+                    .font(.caption2)
+            }
+            Text(showsUnpriced ? "\(unpricedCount) unpriced" : pillLabel)
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(pillForeground)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(pillBackground, in: Capsule())
     }
 
     private var pillLabel: String {
@@ -1042,9 +1069,10 @@ private struct QuoteRow: View {
     }
 
     private var pillForeground: Color {
+        if showsUnpriced { return LineItemRow.amber }
         switch quote.effectiveStatus {
         case "draft": return .orange
-        case "viewed": return Color(.blueAccentText)
+        case "viewed": return .white
         case "accepted": return .green
         case "declined": return .red
         case "expired": return .secondary
@@ -1053,9 +1081,12 @@ private struct QuoteRow: View {
     }
 
     private var pillBackground: Color {
+        if showsUnpriced { return LineItemRow.amber.opacity(0.14) }
         switch quote.effectiveStatus {
         case "draft": return .orange.opacity(0.14)
-        case "viewed": return Color(.royalBlue50)
+        // Filled, where every other state is a tint. The only pill on the
+        // screen that has to be seen from across the list.
+        case "viewed": return Color(.royalBlue600)
         case "accepted": return .green.opacity(0.14)
         case "declined": return .red.opacity(0.12)
         case "expired": return Color(.separator).opacity(0.5)
