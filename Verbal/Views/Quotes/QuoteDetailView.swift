@@ -627,7 +627,8 @@ struct QuoteDetailView: View {
             Text("The quote will go out with no name on it. Add one from the chip at the top.")
         }
         .sheet(isPresented: $showShare) {
-            ShareQuotePanel(title: displayTitle,
+            ShareQuotePanel(quoteId: quote.id,
+                            title: displayTitle,
                             subtitle: shareSubtitle,
                             shareText: shareText,
                             document: pdfDocument) {

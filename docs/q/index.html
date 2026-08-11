@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Quote</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 64px;
+    background: #F9F9F7; color: #1C1C1E;
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .sheet {
+    max-width: 640px; margin: 0 auto; background: #fff;
+    border: 1px solid rgba(0,0,0,.08); border-radius: 18px;
+    padding: 28px 24px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+  .biz-name { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
+  .biz-detail, .muted { color: #6b6b70; font-size: 13px; margin: 0; }
+  .doc-label { font-size: 20px; font-weight: 600; letter-spacing: .04em; text-align: right; }
+  .doc-number { color: #6b6b70; font-size: 13px; text-align: right; margin-top: 2px; }
+  h1 { font-size: 24px; line-height: 1.25; margin: 28px 0 12px; }
+  .parties { display: flex; flex-wrap: wrap; gap: 24px; margin: 20px 0 4px; }
+  .parties div { min-width: 140px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #8a8a8f; margin: 0 0 2px; }
+  .summary { margin: 20px 0 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #8a8a8f; margin: 28px 0 8px; }
+  ul.scope { margin: 0; padding-left: 18px; }
+  ul.scope li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+       color: #8a8a8f; font-weight: 500; padding: 0 0 8px; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td { padding: 10px 0; border-top: 1px solid rgba(0,0,0,.07); vertical-align: top; }
+  .totals { margin-top: 12px; margin-left: auto; width: 100%; max-width: 280px; }
+  .totals div { display: flex; justify-content: space-between; padding: 6px 0; font-variant-numeric: tabular-nums; }
+  .totals .grand { border-top: 1px solid rgba(0,0,0,.12); margin-top: 4px; padding-top: 10px;
+                   font-size: 18px; font-weight: 600; }
+  .banner { border-radius: 12px; padding: 12px 14px; margin: 0 0 20px; font-size: 14px; }
+  .banner.accepted { background: #E7F6EC; color: #1B5E33; }
+  .banner.declined { background: #FBEAEA; color: #8A2222; }
+  .banner.expired  { background: #F1F1EF; color: #5c5c60; }
+  .actions { display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap; }
+  .actions button {
+    flex: 1 1 160px; min-height: 52px; border-radius: 14px; border: 0;
+    font-size: 16px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .actions button[disabled] { opacity: .5; cursor: default; }
+  .accept { background: #192868; color: #fff; }
+  .decline { background: #fff; color: #8A2222; border: 1px solid rgba(138,34,34,.35); }
+  .terms { white-space: pre-wrap; color: #4a4a4f; font-size: 14px; margin: 0 0 10px; }
+  footer { max-width: 640px; margin: 20px auto 0; text-align: center; color: #9a9a9f; font-size: 12px; }
+  @media print { body { background: #fff; padding: 0; } .sheet { border: 0; box-shadow: none; } .actions { display: none; } }
+</style>
+</head>
+<body>
+<div id="root" class="sheet"><p class="muted">Loading…</p></div>
+<footer>Sent with Verbal</footer>
+
+<script>
+// The quote lives behind a share token; this page is only ever a renderer for
+// it. Nothing is stored here and nothing identifies the reader — the token in
+// the address bar is the whole credential.
+var API = "https://rglpwlmkwukezvexyups.supabase.co/functions/v1/quote/";
+var root = document.getElementById("root");
+
+function token() {
+  var value = new URLSearchParams(location.search).get("t") || "";
+  return /^[0-9a-f]{32}$/.test(value) ? value : null;
+}
+
+function esc(value) {
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function money(amount, currency) {
+  if (amount === null || amount === undefined) return "—";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency", currency: currency, minimumFractionDigits: 2
+    }).format(amount);
+  } catch (e) {
+    // An unfamiliar currency code shouldn't cost the reader the whole page.
+    return Number(amount).toFixed(2) + " " + currency;
+  }
+}
+
+function day(value) {
+  if (!value) return "";
+  var date = new Date(value);
+  if (isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function unavailable(message) {
+  root.innerHTML =
+    '<h1>This link isn\'t available</h1><p class="muted">' + esc(message) + "</p>";
+}
+
+function render(quote) {
+  var currency = quote.currency || "USD";
+  var business = quote.business || {};
+  var name = (business.name || "").trim() || "Quote";
+  var number = quote.number ? (quote.numberPrefix || "") + quote.number : null;
+
+  var contact = [business.phone, business.email, business.address, business.taxNumber]
+    .filter(function (line) { return line && String(line).trim(); })
+    .map(function (line) { return '<p class="biz-detail">' + esc(line) + "</p>"; })
+    .join("");
+
+  var scope = (quote.scope || []).filter(function (s) { return s && s.trim(); });
+  var scopeHTML = scope.length
+    ? "<h2>Scope of work</h2><ul class=\"scope\">" +
+      scope.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ul>"
+    : "";
+
+  var rows = (quote.items || []).map(function (item) {
+    var qty = item.quantity;
+    var priced = item.unit_price !== null && item.unit_price !== undefined;
+    var lineTotal = priced && qty !== null && qty !== undefined
+      ? qty * item.unit_price : (priced ? item.unit_price : null);
+    var qtyLabel = (qty === null || qty === undefined)
+      ? ""
+      : (Number.isInteger(qty) ? qty : Number(qty).toFixed(2)) +
+        (item.unit ? " " + esc(item.unit) : "");
+    return "<tr><td>" + esc(item.description || "Item") +
+      (qtyLabel ? '<br><span class="muted">' + qtyLabel + "</span>" : "") +
+      '</td><td class="num">' +
+      // "TBC" rather than a zero: a price the tradesperson hasn't got yet is
+      // not a price of nothing, and printing 0 would promise it free.
+      (priced ? money(lineTotal, currency) : "TBC") + "</td></tr>";
+  }).join("");
+
+  var banner = "";
+  if (quote.status === "accepted") {
+    banner = '<p class="banner accepted">Accepted' +
+      (quote.decidedAt ? " on " + esc(day(quote.decidedAt)) : "") +
+      ". Thank you — we'll be in touch.</p>";
+  } else if (quote.status === "declined") {
+    banner = '<p class="banner declined">Declined' +
+      (quote.decidedAt ? " on " + esc(day(quote.decidedAt)) : "") + ".</p>";
+  } else if (quote.expired) {
+    banner = '<p class="banner expired">This quote expired on ' +
+      esc(day(quote.validityDate)) + ". Get in touch for an updated price.</p>";
+  }
+
+  var terms = [business.terms, quote.notes, business.footerNote]
+    .filter(function (text) { return text && String(text).trim(); })
+    .map(function (text) { return '<p class="terms">' + esc(text) + "</p>"; })
+    .join("");
+
+  root.innerHTML =
+    "<header><div>" +
+      '<p class="biz-name">' + esc(name) + "</p>" + contact +
+    "</div><div>" +
+      '<div class="doc-label">QUOTE</div>' +
+      (number ? '<div class="doc-number">No. ' + esc(number) + "</div>" : "") +
+    "</div></header>" +
+    "<h1>" + esc(quote.title || "Quote") + "</h1>" +
+    banner +
+    '<div class="parties">' +
+      (quote.clientName
+        ? '<div><p class="label">For</p><p>' + esc(quote.clientName) + "</p></div>" : "") +
+      '<div><p class="label">Date</p><p>' + esc(day(quote.createdAt)) + "</p></div>" +
+      (quote.validityDate
+        ? '<div><p class="label">Valid until</p><p>' + esc(day(quote.validityDate)) + "</p></div>"
+        : "") +
+    "</div>" +
+    (quote.jobSummary ? '<p class="summary">' + esc(quote.jobSummary) + "</p>" : "") +
+    scopeHTML +
+    "<h2>Costs</h2><table><thead><tr><th>Item</th><th class=\"num\">Amount</th></tr></thead>" +
+    "<tbody>" + rows + "</tbody></table>" +
+    '<div class="totals">' +
+      "<div><span>Subtotal</span><span>" + money(quote.subtotal, currency) + "</span></div>" +
+      (quote.taxRate > 0
+        ? "<div><span>Tax (" + esc(quote.taxRate) + "%)</span><span>" +
+          money(quote.taxAmount, currency) + "</span></div>"
+        : "") +
+      '<div class="grand"><span>Total</span><span>' + money(quote.total, currency) +
+      "</span></div>" +
+    "</div>" +
+    (terms ? "<h2>Terms</h2>" + terms : "") +
+    (quote.canDecide
+      ? '<div class="actions">' +
+        '<button class="accept" id="accept">Accept quote</button>' +
+        '<button class="decline" id="decline">Decline</button></div>'
+      : "");
+
+  if (quote.canDecide) {
+    document.getElementById("accept").onclick = function () { decide("accept"); };
+    document.getElementById("decline").onclick = function () { decide("decline"); };
+  }
+}
+
+function decide(action) {
+  var buttons = root.querySelectorAll(".actions button");
+  for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;
+  // Declining is the one that can't be walked back from here, so it asks.
+  if (action === "decline" && !confirm("Decline this quote?")) {
+    for (var j = 0; j < buttons.length; j++) buttons[j].disabled = false;
+    return;
+  }
+  fetch(API + token(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: action })
+  })
+    .then(function (response) { return response.json(); })
+    .then(function (quote) {
+      if (quote && quote.status) { render(quote); window.scrollTo(0, 0); }
+      else { unavailable("That didn't go through. Please try again."); }
+    })
+    .catch(function () {
+      // Reloading is honest here: whether the write landed is unknown, and the
+      // page it comes back with is the truth either way.
+      unavailable("That didn't go through. Check your connection and reload.");
+    });
+}
+
+var current = token();
+if (!current) {
+  unavailable("The address looks incomplete. Ask whoever sent it for a new link.");
+} else {
+  fetch(API + current)
+    .then(function (response) {
+      if (!response.ok) throw new Error("unavailable");
+      return response.json();
+    })
+    .then(render)
+    .catch(function () {
+      unavailable("It may have been withdrawn, or the address may be incomplete.");
+    });
+}
+</script>
+</body>
+</html>

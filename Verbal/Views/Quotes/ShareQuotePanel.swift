@@ -12,6 +12,9 @@ import QuickLook
 
 /// Verbal's custom share panel for a quote — a preview plus Share / Copy actions.
 struct ShareQuotePanel: View {
+    /// The quote a link would point at. Minting is deferred until the user asks
+    /// for one, so a quote that is never shared never gets an address.
+    let quoteId: UUID
     let title: String
     let subtitle: String
     let shareText: String
@@ -30,6 +33,39 @@ struct ShareQuotePanel: View {
     @State private var failedToRender = false
 
     private var hasPDF: Bool { document != nil && !failedToRender }
+
+    @State private var isLinking = false
+    @State private var linkFailed = false
+
+    private var linkTitle: String {
+        if isLinking { return "Getting link…" }
+        if linkFailed { return "Try again" }
+        return copied ? "Link copied" : "Copy link"
+    }
+
+    /// Mints the link if this quote has never had one, then puts it on the
+    /// pasteboard. Counted as a share: a link handed over is a quote sent, the
+    /// same as attaching the PDF.
+    private func copyLink() {
+        guard !isLinking else { return }
+        isLinking = true
+        linkFailed = false
+        Task {
+            defer { isLinking = false }
+            do {
+                let url = try await QuoteService.shareLink(quoteId: quoteId)
+                UIPasteboard.general.string = url.absoluteString
+                withAnimation { copied = true }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                onShared()
+            } catch {
+                // Minting needs the server. Say so on the button rather than
+                // leaving a tap that quietly did nothing.
+                withAnimation { linkFailed = true }
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -88,13 +124,16 @@ struct ShareQuotePanel: View {
                              systemImage: "square.and.arrow.up") {
                     showSystemShare = true
                 }
-                actionButton(title: copied ? "Copied" : "Copy text",
-                             systemImage: copied ? "checkmark" : "doc.on.doc") {
-                    UIPasteboard.general.string = shareText
-                    withAnimation { copied = true }
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    onShared()
+                // A link rather than the quote's text, which this used to copy.
+                // The text was a snapshot that went stale the moment anything
+                // changed and gave the customer nothing to do; the link is
+                // always current, tells you when they've opened it, and lets
+                // them answer.
+                actionButton(title: linkTitle,
+                             systemImage: copied ? "checkmark" : "link") {
+                    copyLink()
                 }
+                .disabled(isLinking)
             }
         }
         .padding(24)

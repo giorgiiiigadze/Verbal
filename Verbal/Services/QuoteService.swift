@@ -496,6 +496,23 @@ enum QuoteService {
     }
 
     /// Update a quote's status (draft / sent / viewed / accepted / declined / expired).
+    /// A link the customer can open, minted on first use and stable after that.
+    ///
+    /// Sharing the same quote twice hands out the same address, so a link
+    /// already sitting in someone's messages keeps working — and the token is
+    /// only ever created for quotes that actually get shared.
+    static func shareLink(quoteId: UUID) async throws -> URL {
+        struct Params: Encodable { let quote_id: UUID }
+        let token: String = try await client
+            .rpc("ensure_share_token", params: Params(quote_id: quoteId))
+            .execute()
+            .value
+        guard let url = AppInfo.shareURL(token: token) else {
+            throw URLError(.badURL)
+        }
+        return url
+    }
+
     static func updateStatus(id: UUID, status: String) async throws {
         try await client
             .from("quotes")

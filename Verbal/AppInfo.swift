@@ -30,6 +30,15 @@ enum AppInfo {
     /// the paywall once subscriptions ship, and App Review checks.
     static let termsURL: URL? = URL(string: "https://giorgiiiigadze.github.io/Verbal/terms/")
 
+    /// Where a shared quote is read. The page is hosted here rather than on the
+    /// Supabase function that feeds it because that gateway stamps every
+    /// response with `content-security-policy: default-src 'none'; sandbox` and
+    /// rewrites the content type to text/plain — sensible on a shared domain,
+    /// but it leaves HTML unstyled and its buttons dead.
+    static func shareURL(token: String) -> URL? {
+        URL(string: "https://giorgiiiigadze.github.io/Verbal/q/?t=\(token)")
+    }
+
     /// Nil until the app is on the App Store and has a numeric id. Until then
     /// there is nothing to review and no page to open.
     static let appStoreID: String? = nil

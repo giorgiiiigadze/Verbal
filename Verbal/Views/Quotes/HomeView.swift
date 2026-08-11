@@ -124,7 +124,8 @@ struct HomeView: View {
                 Text("The quote will go out with no name on it. Open it to add one.")
             }
             .sheet(item: $shareTarget) { quote in
-                ShareQuotePanel(title: quote.displayTitle,
+                ShareQuotePanel(quoteId: quote.id,
+                                title: quote.displayTitle,
                                 subtitle: "Total \(AppCurrency.format(quote.total, code: quote.currency)) · \(quote.effectiveStatus.capitalized)",
                                 shareText: shareText(for: quote),
                                 document: pdfDocument(for: quote)) {
