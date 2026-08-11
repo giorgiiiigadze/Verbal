@@ -74,8 +74,21 @@ struct RateCardView: View {
         }
         .sheet(isPresented: $showCandidates, onDismiss: { Task { await load() } }) {
             ReadyToAddSheet(candidates: candidates) { added in
-                toast = Toast(style: .success,
-                              message: "\(added) rate\(added == 1 ? "" : "s") saved")
+                // Delayed past the sheet's dismissal: set now, the toast starts
+                // its life behind the sheet and has largely expired by the time
+                // this screen is visible. The quote screen learned the same
+                // thing about reporting a delete.
+                //
+                // And zero saved is not a success. Every write failing —
+                // offline, most likely — used to report "0 rates saved" in
+                // green, on a screen still listing every one of them.
+                Task {
+                    try? await Task.sleep(for: .seconds(0.4))
+                    toast = added > 0
+                        ? Toast(style: .success,
+                                message: "\(added) rate\(added == 1 ? "" : "s") saved")
+                        : Toast(style: .error, message: "Couldn't save those rates")
+                }
             }
         }
         .task {

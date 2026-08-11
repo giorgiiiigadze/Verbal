@@ -84,6 +84,13 @@ final class QuoteRecorder {
     private var resultsTask: Task<Void, Never>?
     private var interruptionTask: Task<Void, Never>?
 
+    /// Bumped by anything that ends a session. `start()` carries a copy across
+    /// its awaits and abandons the attempt if it has moved on, because setting
+    /// up a recording takes several suspension points — permission dialogs, a
+    /// model download on first run — and a call arriving in one of them would
+    /// otherwise be undone by the setup finishing on top of it.
+    private var sessionToken = 0
+
     private let audioEngine = AVAudioEngine()
 
     // MARK: - Public control
@@ -135,6 +142,9 @@ final class QuoteRecorder {
         guard state == .idle || state == .interrupted || state == .unavailable else { return }
         state = .preparing
         errorMessage = nil
+
+        sessionToken += 1
+        let token = sessionToken
 
         guard await requestPermissions() else {
             errorMessage = "Microphone and speech permission are required."
@@ -191,6 +201,16 @@ final class QuoteRecorder {
             try await analyzer.start(inputSequence: stream)
             try startAudio(convertingTo: analyzerFormat)
 
+            // Something ended the session while the lines above were awaiting —
+            // a call, or the app going to the background. That teardown already
+            // finished the input stream, so carrying on would set `.recording`
+            // over a microphone feeding nowhere: a running timer, no paused
+            // notice, and not a word captured.
+            guard token == sessionToken else {
+                await teardown()
+                return
+            }
+
             state = .recording
             startTimer()
             observeInterruptions()
@@ -222,6 +242,9 @@ final class QuoteRecorder {
     /// finalized text here is what keeps the half-spoken sentence someone was in
     /// the middle of when the phone rang.
     private func teardown() async {
+        // Anything in flight in `start()` belongs to a session that is over.
+        sessionToken += 1
+
         timerTask?.cancel()
         timerTask = nil
 
@@ -366,7 +389,11 @@ final class QuoteRecorder {
 
     private func fail(_ error: Error) {
         errorMessage = error.localizedDescription
-        state = .idle
+        // Never erase a pause. If the session was interrupted while this attempt
+        // was in flight, `.interrupted` is the truthful state — dropping to
+        // `.idle` would take the paused notice off screen and leave the failure
+        // looking like an ordinary finished transcript.
+        if state != .interrupted { state = .idle }
     }
 
     // MARK: - Model + permissions

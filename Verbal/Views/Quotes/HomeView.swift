@@ -181,13 +181,10 @@ struct HomeView: View {
         // the content inside the stack (which also owns a minimizing
         // .searchable toolbar) corrupts the navigation bar after dismissal —
         // broken title layout and lost push transitions on the next push.
-        .sheet(isPresented: $showCreate, onDismiss: {
-            Task {
-                await load()
-                // A recording that banked a quote just spent an allowance.
-                await session.refreshQuoteUsage()
-            }
-        }) {
+        // The allowance is refreshed by the recording itself, once its insert
+        // has actually landed. Doing it here raced that insert: closing the
+        // sheet does not wait for banking to finish.
+        .sheet(isPresented: $showCreate, onDismiss: { Task { await load() } }) {
             QuoteRecordingView()
                 .environment(session)
         }

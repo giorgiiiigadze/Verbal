@@ -386,10 +386,16 @@ struct QuoteRecordingView: View {
         savedTitle = bankedTitle
         savedClient = bankedClient
         bankTask = Task {
-            try? await QuoteService.save(
+            let id = try? await QuoteService.save(
                 result, transcript: bankedTranscript, title: bankedTitle,
                 currency: bankedCurrency, clientName: bankedClient
             )
+            // Counted here, where the row is known to exist. Home used to
+            // refresh this when the sheet closed, but closing doesn't wait for
+            // the insert — so the count was read before the ledger had the
+            // quote in it, and stayed one short for the rest of the session.
+            if id != nil { await session.refreshQuoteUsage() }
+            return id
         }
     }
 
