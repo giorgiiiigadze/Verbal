@@ -253,6 +253,9 @@ final class SessionStore {
         await preloadLists()
         // Both read the business profile the preload just fetched.
         await adoptPendingTrade()
+        // After the trade, which may be what creates the profile row this then
+        // writes into.
+        await adoptOnboardingDraft()
         await refreshBusinessLogo()
     }
 
@@ -274,6 +277,43 @@ final class SessionStore {
         guard (try? await BusinessService.save(profile)) != nil else { return }
         businessProfile = profile
         UserDefaults.standard.removeObject(forKey: Self.pendingTradeKey)
+    }
+
+    /// The rest of what onboarding collected: business name, tax rate, and the
+    /// prices ticked off the trade's list.
+    ///
+    /// Same terms as the trade above — never overwrite what the account already
+    /// has, since a second device's answer is older than anything typed since,
+    /// and clear the draft either way so an emptied field doesn't come back.
+    private func adoptOnboardingDraft() async {
+        guard let draft = OnboardingDraft.load() else { return }
+        defer { OnboardingDraft.clear() }
+
+        var profile = businessProfile ?? .empty
+        var changed = false
+        if let name = draft.businessName, !name.isEmpty,
+           (profile.businessName ?? "").isEmpty {
+            profile.businessName = name
+            changed = true
+        }
+        if let rate = draft.taxRate, profile.defaultTaxRate == 0 {
+            profile.defaultTaxRate = rate
+            changed = true
+        }
+        if changed, (try? await BusinessService.save(profile)) != nil {
+            businessProfile = profile
+        }
+
+        // Only onto an empty card. A rate card with anything in it belongs to a
+        // user who has already been here, and their prices beat a phone's memory
+        // of what they tapped before signing in.
+        guard !draft.rates.isEmpty, rateCard.isEmpty else { return }
+        for rate in draft.rates {
+            try? await QuoteService.addRateCardItem(
+                name: rate.name, unit: rate.unit,
+                unitPrice: rate.price, type: rate.type)
+        }
+        await refreshRateCard()
     }
 
     private static let pendingTradeKey = "pendingTrade"
