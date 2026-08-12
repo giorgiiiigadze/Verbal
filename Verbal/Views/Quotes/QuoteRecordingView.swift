@@ -10,6 +10,9 @@ struct QuoteRecordingView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.scenePhase) private var scenePhase
     @State private var recorder = QuoteRecorder()
+    /// A short history of microphone levels, newest last, so the meter reads as
+    /// a trace of what was just said rather than one bar twitching.
+    @State private var levels: [Float] = []
     @State private var title = ""
     @State private var showHeaderTitle = false
     @State private var isSaving = false
@@ -88,7 +91,13 @@ struct QuoteRecordingView: View {
                         }
                         .font(.robotoSlab(34, relativeTo: .largeTitle))
 
-                        if generated != nil || notEnough {
+                        // Only over a quote that exists. When the transcript
+                        // wasn't enough there is nothing to name a client on and
+                        // nothing dated "just now", and the panel below already
+                        // says what went wrong in full — so a row of chips
+                        // repeating it in three fragments offers work on a
+                        // document that was never made.
+                        if generated != nil {
                             chips
                                 .transition(.opacity)
                         }
@@ -170,16 +179,14 @@ struct QuoteRecordingView: View {
                 .onChange(of: recorder.transcript) { _, newValue in
                     if recorder.isRecording { transcriptText = newValue }
                 }
-                .onChange(of: recorder.isRecording) { wasRecording, isRecording in
-                    // When a recording finishes with content, generate the quote.
-                    // Only when the user ended it: an interruption also stops
-                    // recording, and extracting a quote from a sentence someone
-                    // was halfway through — because their phone rang — would
-                    // hand them a half-priced job they never asked to see.
-                    if wasRecording && !isRecording && !recorder.isPaused {
-                        generate()
-                    }
-                }
+                // Stopping used to generate on its own. The button says pause,
+                // and pausing meant the quote was extracted then and there — so
+                // catching a breath, checking a measurement or correcting a word
+                // all cost a generation nobody asked for, and the only way to add
+                // a second thought was to let it finish and record again.
+                //
+                // Pausing now only pauses. Generate is a button, and it has been
+                // sitting there the whole time.
                 // Leaving the app gives the microphone away: iOS suspends the
                 // process and the engine stops. Nothing here was noticing, so
                 // the timer ran on and the screen went on claiming to listen.
@@ -188,6 +195,21 @@ struct QuoteRecordingView: View {
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .background, recorder.isRecording else { return }
                     Task { await recorder.interrupt() }
+                }
+                // The recorder has published a level all along and nothing ever
+                // read it. Sampled straight from the audio tap, so it moves with
+                // the voice rather than with the transcription behind it.
+                .onChange(of: recorder.audioLevel) { _, level in
+                    guard recorder.isRecording else { return }
+                    levels.append(level)
+                    if levels.count > LevelTrace.barCount {
+                        levels.removeFirst(levels.count - LevelTrace.barCount)
+                    }
+                }
+                .onChange(of: recorder.isRecording) { _, isRecording in
+                    // Cleared on both edges: a trace left over from the last
+                    // burst would draw someone else's voice on the next one.
+                    if !isRecording { levels.removeAll() }
                 }
                 .onChange(of: recorder.errorMessage) { _, message in
                     // Surface mic / speech-permission or engine failures — otherwise
@@ -524,6 +546,12 @@ struct QuoteRecordingView: View {
                             .font(.callout)
                             .fontWeight(.medium)
                             .foregroundStyle(Color(.blueAccentText))
+                            // Wraps rather than truncating. This is the app
+                            // explaining why it couldn't build a quote, and it
+                            // was cutting itself off mid-sentence — the one
+                            // message on this screen that has to be read whole.
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(14)
                             .background(Color(.royalBlue25),
@@ -555,14 +583,8 @@ struct QuoteRecordingView: View {
                 QuoteChip(text: quoteDateLabel(generatedAt)) {
                     Image(systemName: "calendar")
                 }
-                if notEnough {
-                    QuoteChip(text: "Needs detail") {
-                        Image(systemName: "exclamationmark.circle")
-                    }
-                } else {
-                    QuoteChip(text: "Draft") {
-                        Image(systemName: "pencil")
-                    }
+                QuoteChip(text: "Draft") {
+                    Image(systemName: "pencil")
                 }
             }
         }
@@ -756,12 +778,42 @@ struct QuoteRecordingView: View {
         }
     }
 
+    /// The settled words in full ink, the recogniser's current guess behind
+    /// them in grey.
+    ///
+    /// Both halves were being glued into one string in one colour, so a word the
+    /// model is still unsure of looked exactly like one it had committed to.
+    /// That matters more here than it would elsewhere: "eighty" that is still
+    /// grey may yet become "eight", and a quantity is what this app is for.
+    ///
+    /// It also makes the wait legible. Nothing arrives sooner — the recogniser
+    /// needs its few hundred milliseconds of audio either way — but words now
+    /// appear the moment there is a guess and visibly firm up, rather than the
+    /// screen sitting still until one is certain.
+    /// Built as an attributed string rather than by adding two `Text`s — that
+    /// operator is deprecated as of iOS 26. Only the colour is set on each run,
+    /// so the font applied to the group still reaches both.
+    private var liveTranscript: some View {
+        var settled = AttributedString(recorder.finalizedText)
+        settled.foregroundColor = Color(.mainText)
+
+        var guessing = AttributedString(recorder.volatileText)
+        guessing.foregroundColor = .secondary
+
+        return Text(settled + guessing)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var transcript: some View {
         Group {
             if recorder.isRecording {
                 // Live transcription (read-only while recording).
-                Text(transcriptText.isEmpty ? "Listening…" : transcriptText)
-                    .foregroundStyle(transcriptText.isEmpty ? .secondary : Color(.mainText))
+                if recorder.transcript.isEmpty {
+                    Text("Listening…")
+                        .foregroundStyle(.secondary)
+                } else {
+                    liveTranscript
+                }
             } else if isGenerating {
                 // Frozen, shimmering while the AI summarizes.
                 Text(transcriptText)
@@ -817,9 +869,24 @@ struct QuoteRecordingView: View {
 
             Spacer()
 
-            Text(recorder.elapsedText)
-                .font(.body.monospacedDigit())
-                .foregroundStyle(Color(.mainText))
+            // While recording, the trace is the point and the clock is a
+            // caption under it. Nobody quoting a bathroom cares that it has
+            // taken ninety seconds; they care that the phone can hear them, and
+            // until now the only evidence of that was a number going up while
+            // recognition lagged behind their voice.
+            VStack(spacing: 3) {
+                if recorder.isRecording {
+                    LevelTrace(levels: levels)
+                        .frame(height: 22)
+                        .transition(.opacity)
+                }
+                Text(recorder.elapsedText)
+                    .font(recorder.isRecording
+                          ? .caption.monospacedDigit()
+                          : .body.monospacedDigit())
+                    .foregroundStyle(recorder.isRecording ? .secondary : Color(.mainText))
+            }
+            .animation(.easeInOut(duration: 0.2), value: recorder.isRecording)
 
             Spacer()
 
@@ -851,5 +918,46 @@ struct QuoteRecordingView: View {
             .controlSize(.large)
             .disabled(!hasText || recorder.isRecording || isSaving || isGenerating)
         }
+    }
+}
+
+/// A running trace of microphone level, oldest bar on the left.
+///
+/// A history rather than a single bar: one bar rising and falling says the
+/// microphone is open, a trace says what was just said, which is the thing
+/// somebody speaking a job into a phone actually wants to see.
+///
+/// Silence draws a flat line rather than nothing, because silence is a real
+/// answer — a meter that empties out looks like one that stopped working.
+private struct LevelTrace: View {
+    static let barCount = 26
+    let levels: [Float]
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 2.5) {
+            ForEach(0..<Self.barCount, id: \.self) { index in
+                Capsule()
+                    .fill(Color(.blueAccentText).opacity(opacity(at: index)))
+                    .frame(width: 3, height: height(at: index))
+            }
+        }
+    }
+
+    /// The history is right-aligned, so a trace that has only just started grows
+    /// in from the right rather than sitting oddly on the left.
+    private func level(at index: Int) -> CGFloat {
+        let offset = Self.barCount - levels.count
+        guard index >= offset, index - offset < levels.count else { return 0 }
+        return CGFloat(levels[index - offset])
+    }
+
+    private func height(at index: Int) -> CGFloat {
+        3 + level(at: index) * 19
+    }
+
+    /// Older bars fade, so the newest end reads as the live one.
+    private func opacity(at index: Int) -> Double {
+        let age = Double(Self.barCount - index) / Double(Self.barCount)
+        return 0.25 + (1 - age) * 0.6
     }
 }
