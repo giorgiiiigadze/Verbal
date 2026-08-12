@@ -30,6 +30,9 @@ struct OnboardingView: View {
     /// text so a half-typed number doesn't fight the field.
     @State private var pickedJobs: Set<String> = []
     @State private var prices: [String: String] = [:]
+    /// True once "Something else" is tapped: the chip stays lit while the field
+    /// below it holds the real answer.
+    @State private var isCustomTrade = false
     @State private var businessName = ""
     @State private var taxRate = ""
     @State private var isTaxRegistered = false
@@ -79,11 +82,22 @@ struct OnboardingView: View {
         }
     }
 
+    private static let otherTrade = "Something else"
+
     private static let trades = [
         "Electrician", "Plumber", "Carpenter", "Tiler",
         "Painter", "Plasterer", "Builder", "Roofer",
-        "Landscaper", "Something else"
+        "Landscaper", otherTrade
     ]
+
+    /// The trade is the one answer with no sensible default, and it reaches the
+    /// extraction on every quote — "20 mil" means one thing to a plumber and
+    /// another to an electrician. So it is the one question that is asked
+    /// rather than offered. Everything else here has a default worth keeping.
+    private var canContinue: Bool {
+        guard current == .trade else { return true }
+        return !pendingTrade.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         NavigationStack {
@@ -118,7 +132,9 @@ struct OnboardingView: View {
                         // already, and nobody should be stuck on the way to the
                         // thing they installed the app for. Nothing to skip on
                         // the reveal.
-                        if step > 0, current != .reveal {
+                        // Absent where the answer is required, so Skip never
+                        // offers a way round a disabled Continue.
+                        if step > 0, current != .reveal, current != .trade {
                             Button("Skip") { advance() }
                                 .font(.subheadline)
                                 .foregroundStyle(Color(.mainText))
@@ -204,9 +220,14 @@ struct OnboardingView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
-                .background(Color(.royalBlue600), in: Capsule())
+                .background(canContinue
+                            ? Color(.royalBlue600)
+                            : Color(.royalBlue600).opacity(0.4),
+                            in: Capsule())
         }
         .buttonStyle(.plain)
+        .disabled(!canContinue)
+        .animation(.easeInOut(duration: 0.2), value: canContinue)
     }
 
     /// Softer than going forward. Both are steps, but one is a decision and the
@@ -310,21 +331,32 @@ struct OnboardingView: View {
             // word the app could have offered.
             FlowLayout(spacing: 8) {
                 ForEach(Self.trades, id: \.self) { trade in
+                    let isOther = trade == Self.otherTrade
+                    let picked = isOther ? isCustomTrade : (!isCustomTrade && pendingTrade == trade)
                     Button {
-                        pendingTrade = pendingTrade == trade ? "" : trade
+                        if isOther {
+                            // The stored trade is whatever they type, not the
+                            // word "Something else" — that string was being sent
+                            // to the extraction as trade context, where it says
+                            // less than nothing.
+                            isCustomTrade = !isCustomTrade
+                            pendingTrade = ""
+                        } else {
+                            isCustomTrade = false
+                            pendingTrade = picked ? "" : trade
+                        }
                     } label: {
                         Text(trade)
                             .font(.subheadline.weight(.medium))
-                            .foregroundStyle(pendingTrade == trade
-                                             ? .white : Color(.mainText))
+                            .foregroundStyle(picked ? .white : Color(.mainText))
                             .padding(.horizontal, 16)
                             .padding(.vertical, 11)
-                            .background(pendingTrade == trade
+                            .background(picked
                                         ? Color(.royalBlue600) : Color(.cardSurface),
                                         in: Capsule())
                             .overlay(
                                 Capsule().strokeBorder(
-                                    pendingTrade == trade ? .clear : Color(.separator),
+                                    picked ? .clear : Color(.separator),
                                     lineWidth: 0.5)
                             )
                     }
@@ -332,6 +364,25 @@ struct OnboardingView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.15), value: pendingTrade)
+            .animation(.easeInOut(duration: 0.15), value: isCustomTrade)
+
+            // Typed rather than tapped, because there is no list of every trade
+            // there is. Whatever goes here reaches the extraction as context —
+            // "Locksmith" tells it something, "Something else" tells it nothing.
+            if isCustomTrade {
+                TextField("Locksmith, glazier, welder…", text: $pendingTrade)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(Color(.cardSurface),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
     }
 

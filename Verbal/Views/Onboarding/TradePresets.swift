@@ -30,12 +30,20 @@ enum TradePresets {
     /// are the numbers the user themselves decides.
     static let type = "labor"
 
-    /// Nil where there is nothing honest to offer — "Something else" covers
-    /// every trade not listed, and a generic list that fits none of them is
-    /// worse than skipping the question.
+    /// A trade that isn't on the list still gets asked, just generically: every
+    /// trade sells its time and its turning up, whatever else it sells. Empty
+    /// only when the question was skipped, where there is nothing to go on.
     static func jobs(for trade: String) -> [Job] {
-        table[trade] ?? []
+        let name = trade.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return [] }
+        return table[name] ?? generic
     }
+
+    private static let generic: [Job] = [
+        Job(name: "Call-out fee", unit: "job"),
+        Job(name: "Hourly rate", unit: "hour"),
+        Job(name: "Day rate", unit: "day"),
+    ]
 
     private static let table: [String: [Job]] = [
         "Electrician": [
