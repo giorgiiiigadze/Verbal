@@ -86,15 +86,65 @@ struct OnboardingView: View {
     ]
 
     var body: some View {
+        NavigationStack {
+            content
+                // A real navigation bar, so the back button is the system's own
+                // circular one and the mark sits where a title sits. Drawn by
+                // hand it was a row of shapes imitating a header.
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        if step > 0 {
+                            Button {
+                                withAnimation { step -= 1 }
+                            } label: {
+                                Image(systemName: "chevron.backward")
+                            }
+                        }
+                    }
+                    ToolbarItem(placement: .principal) {
+                        HStack(spacing: 8) {
+                            Image(.brandMark)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20)
+                                .foregroundStyle(Color(.blueAccentText))
+                            Text("Verbal")
+                                .font(.robotoSlab(18, relativeTo: .headline))
+                                .foregroundStyle(Color(.blueAccentText))
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        // Never a wall: every question has a sensible answer
+                        // already, and nobody should be stuck on the way to the
+                        // thing they installed the app for. Nothing to skip on
+                        // the reveal.
+                        if step > 0, current != .reveal {
+                            Button("Skip") { advance() }
+                                .font(.subheadline)
+                                .foregroundStyle(Color(.mainText))
+                        }
+                    }
+                    // Bare text. The glass is the toolbar's, not the button's,
+                    // so a button style can't refuse it — this is the opt-out.
+                    // Two glass capsules either side of the mark read as a pair
+                    // of equal choices, and skipping isn't one of those.
+                    .sharedBackgroundVisibility(.hidden)
+                }
+                .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var content: some View {
         ZStack {
-            // The same drawn ground as the sign-in screen, so these three and
-            // the one they hand over to read as a single entrance rather than
-            // as two apps meeting in the middle.
-            AuthBackground()
+            // Plain ground. These screens ask six questions and show a sample
+            // quote, and drawn waves behind a form is decoration competing with
+            // the thing being read. The illustration stays on sign-in, where
+            // there is nothing to answer and it is the whole of the welcome —
+            // so arriving there now reads as the app opening rather than as
+            // more of the same.
+            Color(.homeBackground).ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 0) {
-                header
-
                 Group {
                     switch current {
                     case .showcase: showcase
@@ -141,81 +191,34 @@ struct OnboardingView: View {
         )
     }
 
-    // MARK: - Chrome
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            Image(.brandMark)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 24)
-                .foregroundStyle(Color(.blueAccentText))
-            Text("Verbal")
-                .font(.robotoSlab(22, relativeTo: .title3))
-                .foregroundStyle(Color(.blueAccentText))
-            Spacer()
-            // Six steps need an end in sight more than three did.
-            HStack(spacing: 5) {
-                ForEach(0..<steps.count, id: \.self) { index in
-                    Capsule()
-                        .fill(index == step
-                              ? Color(.blueAccentText)
-                              : Color(.blueAccentText).opacity(0.22))
-                        .frame(width: index == step ? 16 : 6, height: 6)
-                }
-            }
-            .animation(.spring(duration: 0.3), value: step)
-        }
-        .padding(.bottom, 28)
-    }
-
+    /// One button, and only one. Skip moved into the header, where it stops
+    /// reading as a second opinion about the thing directly above it.
     private var footer: some View {
-        VStack(spacing: 14) {
-            Button {
-                advance()
-            } label: {
-                Text(current == .reveal ? "Get started" : "Continue")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 54)
-                    .background(Color(.royalBlue600), in: Capsule())
-            }
-            .buttonStyle(.plain)
-
-            // Skip alone, centred. Going back is the swipe — see the gesture on
-            // the body. Two text buttons flanking the primary one made the
-            // footer read as a toolbar, and this screen has one thing to do.
-            //
-            // The row keeps its height on the first step, where Skip doesn't
-            // apply, so the button above doesn't shift as the steps change.
-            // Color.clear rather than an empty branch: a `Group` with nothing
-            // in it collapses to an EmptyView, which reserves no height no
-            // matter what frame is put on it — so the button was sitting 36pt
-            // lower on the first step and jumping up on the second.
-            ZStack {
-                Color.clear
-                // Never a wall. Both questions have sensible answers already,
-                // and nobody should be stuck on the way to the thing they
-                // installed the app for.
-                // Not on the reveal: nothing is being asked there, so a Skip
-                // beside "Get started" offers to skip past the payoff.
-                if step > 0, current != .reveal {
-                    Button("Skip") { advance() }
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(height: 22)
+        Button {
+            advance()
+        } label: {
+            Text(current == .reveal ? "Get started" : "Continue")
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background(Color(.royalBlue600), in: Capsule())
         }
+        .buttonStyle(.plain)
     }
 
+    /// Both buttons come through here, so the feedback lives here too rather
+    /// than being attached to each of them separately.
     private func advance() {
         guard current != .reveal else {
+            // The end of the questions, not another step through them — the
+            // heavier notification marks it as arriving somewhere.
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
             saveDraft()
             onContinue()
             return
         }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         step += 1
     }
 
