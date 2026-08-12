@@ -14,6 +14,11 @@ struct MainTabView: View {
     @State private var selection: TabItem = .home
     @State private var showCreate = false
 
+    /// Announcements are shown once and never again. A promo that comes back is
+    /// how people learn to dismiss your sheets without reading them.
+    @AppStorage("seenShareLinkNews") private var seenShareLinkNews = false
+    @State private var showShareLinkNews = false
+
     /// Unselected tabs are drawn in the same ink as the selected one, rather
     /// than the system's grey. Selection is still legible — iOS marks the
     /// current tab with a capsule behind it — so the colour was saying a second
@@ -87,6 +92,24 @@ struct MainTabView: View {
             }
         }
         .tint(Color(.mainText))
+        // Presented from here rather than Home: that view already owns several
+        // sheets, and a further one attached to the same view is silently
+        // ignored — a lesson the recording sheet learned the hard way.
+        //
+        // Only for someone who already has quotes. A first-run user never knew
+        // sharing without a link, and telling them what changed before they've
+        // sent anything is noise about an absence they never felt.
+        .task(id: session.listsLoaded) {
+            guard !seenShareLinkNews, session.listsLoaded, !session.quotes.isEmpty
+            else { return }
+            // After the tabs have settled: a sheet racing the first paint reads
+            // as something that went wrong.
+            try? await Task.sleep(for: .seconds(0.8))
+            showShareLinkNews = true
+        }
+        .sheet(isPresented: $showShareLinkNews, onDismiss: { seenShareLinkNews = true }) {
+            ShareLinkNewsSheet()
+        }
     }
 
     /// The mic tab glyph, force-tinted with always-original rendering so it keeps
