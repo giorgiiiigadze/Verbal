@@ -185,23 +185,29 @@ struct RateCardView: View {
         typeLabels[type] ?? type.capitalized
     }
 
+    /// Laid out, not scrolled. Four short words fit a phone, and a row that
+    /// scrolls hides the filters that don't — `FlowLayout` wraps to a second
+    /// line instead, which is what the trade chips in onboarding already do.
     private var typeFilterRow: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                filterChip("All", isSelected: typeFilter == nil) { typeFilter = nil }
-                ForEach(typeOptions, id: \.self) { type in
-                    filterChip(Self.label(for: type), isSelected: typeFilter == type) {
-                        // Tapping the active one clears it, so the row doesn't
-                        // need "All" to be a target you must aim back at.
-                        typeFilter = typeFilter == type ? nil : type
-                    }
+        FlowLayout(spacing: 8) {
+            filterChip("All", isSelected: typeFilter == nil) { typeFilter = nil }
+            ForEach(typeOptions, id: \.self) { type in
+                filterChip(Self.label(for: type), isSelected: typeFilter == type) {
+                    // Tapping the active one clears it, so the row doesn't need
+                    // "All" to be a target you must aim back at.
+                    typeFilter = typeFilter == type ? nil : type
                 }
             }
-            .padding(.horizontal, 20)
         }
-        .scrollIndicators(.hidden)
+        .padding(.horizontal, 20)
     }
 
+    /// Flat, and drawn here rather than by the system.
+    ///
+    /// The glass button styles were tried and carry a shadow and a plate of
+    /// their own — that is what glass is, and no amount of containing it takes
+    /// them off. These sit on a list, not on a floating bar, so they are the
+    /// same capsule the unit chips and the trade chips already use.
     private func filterChip(_ title: String,
                             isSelected: Bool,
                             select: @escaping () -> Void) -> some View {
