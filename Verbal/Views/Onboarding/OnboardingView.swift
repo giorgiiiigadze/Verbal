@@ -95,7 +95,7 @@ struct OnboardingView: View {
                     ToolbarItem(placement: .topBarLeading) {
                         if step > 0 {
                             Button {
-                                withAnimation { step -= 1 }
+                                goBack()
                             } label: {
                                 Image(systemName: "chevron.backward")
                             }
@@ -186,7 +186,9 @@ struct OnboardingView: View {
                     guard step > 0 else { return }
                     let sideways = drag.translation.width
                     let vertical = abs(drag.translation.height)
-                    if sideways > 60, sideways > vertical * 1.5 { step -= 1 }
+                    // Through the same path as the button, so a swipe back and
+                    // a tap back feel like the one action they are.
+                    if sideways > 60, sideways > vertical * 1.5 { goBack() }
                 }
         )
     }
@@ -205,6 +207,15 @@ struct OnboardingView: View {
                 .background(Color(.royalBlue600), in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+
+    /// Softer than going forward. Both are steps, but one is a decision and the
+    /// other is undoing one, and a back that lands as firmly as a Continue makes
+    /// the two feel interchangeable.
+    private func goBack() {
+        guard step > 0 else { return }
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        withAnimation { step -= 1 }
     }
 
     /// Both buttons come through here, so the feedback lives here too rather
@@ -523,7 +534,7 @@ struct OnboardingView: View {
     /// currency, the prices they just typed — it simply isn't spoken.
     private var revealStep: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text(revealed ? "Your first quote is\nhalf-written already." : "Setting up\nyour rate card…")
+            Text(revealTitle)
                 .font(.robotoSlab(32, relativeTo: .largeTitle))
                 .foregroundStyle(Color(.mainText))
                 .fixedSize(horizontal: false, vertical: true)
@@ -546,7 +557,7 @@ struct OnboardingView: View {
                         ForEach(Array(sampleLines.enumerated()), id: \.offset) { index, line in
                             if index > 0 { Divider() }
                             LineItemRow(description: line.name,
-                                        quantityText: "1 \(line.unit)",
+                                        quantityText: "\(line.quantity) \(line.unit)",
                                         isMissingPrice: line.price == nil,
                                         lineTotal: line.price,
                                         currencyCode: currencyCode)
@@ -556,7 +567,7 @@ struct OnboardingView: View {
                 .transition(.opacity.combined(with: .offset(y: 12)))
 
                 Text(draftRates.isEmpty
-                     ? "Prices you haven't set are flagged, never guessed."
+                     ? "Your rate card is a tab away whenever you want to fill it in."
                      : "Saved to your rate card. Speak a job and these fill themselves in.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -575,23 +586,47 @@ struct OnboardingView: View {
         }
     }
 
+    /// Skipping every question is a legitimate way through this, and the screen
+    /// has to be honest about it: nothing was set up, so nothing claims to have
+    /// been. It still shows what a spoken job turns into, which is the one thing
+    /// worth knowing before signing in.
+    private var revealTitle: String {
+        if !revealed {
+            return draftRates.isEmpty ? "Getting things\nready…" : "Setting up\nyour rate card…"
+        }
+        return draftRates.isEmpty
+            ? "This is what a job\nturns into."
+            : "Your first quote is\nhalf-written already."
+    }
+
     /// Two of their own rates and one they didn't price, so the sample shows
     /// both halves of what the app does — filling prices in, and flagging the
-    /// ones nobody said.
-    private var sampleLines: [(name: String, unit: String, price: Double?)] {
+    /// ones nobody said. With nothing saved it falls back to the same example
+    /// the first screen used, which is an illustration rather than a claim.
+    private var sampleLines: [(name: String, quantity: Int, unit: String, price: Double?)] {
+        guard !draftRates.isEmpty else {
+            // Three, because the sentence above says three. A quantity that
+            // contradicts the line it was supposedly extracted from undermines
+            // the one thing this screen is demonstrating.
+            return [
+                (name: "Remove old toilet and fit new toilet", quantity: 1,
+                 unit: "each", price: 90),
+                (name: "Mixer taps", quantity: 3, unit: "each", price: nil),
+            ]
+        }
         var lines = draftRates.prefix(2).map {
-            (name: $0.name, unit: $0.unit, price: Optional($0.price))
+            (name: $0.name, quantity: 1, unit: $0.unit, price: Optional($0.price))
         }
-        if lines.isEmpty {
-            lines = [(name: "First job on the list", unit: "each", price: nil)]
-        }
-        lines.append((name: "Materials from the supplier", unit: "job", price: nil))
+        lines.append((name: "Materials from the supplier", quantity: 1,
+                      unit: "job", price: nil))
         return lines
     }
 
     private var sampleSpokenLine: String {
-        let named = draftRates.first?.name.lowercased() ?? "the job"
-        return "“\(named), and the materials from the supplier — I'll price those tomorrow.”"
+        guard let first = draftRates.first else {
+            return "“Replace the toilet, ninety. Three mixer taps.”"
+        }
+        return "“\(first.name.lowercased()), and the materials from the supplier — I'll price those tomorrow.”"
     }
 }
 

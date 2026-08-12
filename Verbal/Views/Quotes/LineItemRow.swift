@@ -8,10 +8,15 @@ import SwiftUI
 /// The priced table, in a panel with its own header bar — the quote screen and
 /// the recording review both use it, so the two can't drift apart again.
 ///
-/// Two tones on purpose. A single fill in `surface` sat nine levels darker than
-/// the page and read as a smudge rather than a panel; white rows lift the table
-/// off the page the way every other card in the app does, and the header keeps
-/// the darker tone so it reads as a bar rather than more table.
+/// One fill throughout, and a divider to mark the heading.
+///
+/// It was two tones — a `surface` header over `cardSurface` rows — which is the
+/// only tinted header bar in the app and made the table read as a spreadsheet
+/// where the screen is trying to read as a document. It also barely existed:
+/// those two colours are two levels apart in dark mode, so half the users were
+/// already seeing the single fill this now commits to. `cardSurface`, not
+/// `surface`, so the card lifts off the page like every other card rather than
+/// sinking into it.
 struct LineItemsCard<Rows: View>: View {
     /// Present only where the items can actually be edited — the recording
     /// review is showing a quote that hasn't been saved yet.
@@ -46,8 +51,10 @@ struct LineItemsCard<Rows: View>: View {
             .padding(.trailing, 8)
             .padding(.vertical, onExpand == nil ? 10 : 6)
             .frame(maxWidth: .infinity)
-            .background(Color(.surface))
+            .background(Color(.cardSurface))
 
+            // The only thing separating the heading from the table now, and
+            // enough on its own: the title is already semibold in the main ink.
             Divider()
 
             VStack(spacing: 0) { rows }
