@@ -731,3 +731,20 @@ struct FlowLayout: Layout {
         }
     }
 }
+
+// The whole flow runs before there is an account, so it previews on its own —
+// no session, no network, nothing to sign into.
+//
+// The trade is stored in `UserDefaults`, which the canvas shares with whatever
+// ran last, so each preview sets it explicitly rather than inheriting a chip
+// somebody tapped an hour ago. Setting it also decides which steps exist: a
+// trade with presets is a six-screen run, no trade is four.
+#Preview("From the start") {
+    UserDefaults.standard.removeObject(forKey: "pendingTrade")
+    return OnboardingView(onContinue: {})
+}
+
+#Preview("Trade already picked") {
+    UserDefaults.standard.set("Plumber", forKey: "pendingTrade")
+    return OnboardingView(onContinue: {})
+}
