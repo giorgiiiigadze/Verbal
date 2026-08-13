@@ -49,12 +49,12 @@ struct OnboardingView: View {
     /// skips the jobs question rather than being shown a list that fits nobody,
     /// and pricing is skipped when nothing was ticked to price.
     private var steps: [Step] {
-        var list: [Step] = [.showcase, .trade]
+        var list: [Step] = [.video, .showcase, .trade]
         if !TradePresets.jobs(for: pendingTrade).isEmpty {
             list.append(.jobs)
             if !pickedJobs.isEmpty { list.append(.prices) }
         }
-        list.append(contentsOf: [.business, .reveal, .video])
+        list.append(contentsOf: [.business, .reveal])
         return list
     }
 
@@ -232,11 +232,11 @@ struct OnboardingView: View {
         } label: {
             Text(isLastStep ? "Get Started!" : "Continue")
                 .font(.headline)
-                // Ink on the last screen, blue on the questions. Blue is the
-                // colour of getting through this; the end of it is something
-                // else, and the phone above it is already carrying the blue.
-                // On a `.primary` fill the label has to invert with it, or it
-                // is white text on a white button in the dark.
+                // Ink on the last screen, blue on the way through it. Blue is
+                // the colour of getting from one question to the next; the end
+                // is a different kind of thing and should not look like another
+                // step. On a `.primary` fill the label has to invert with it,
+                // or it is white text on a white button in the dark.
                 .foregroundStyle(isLastStep ? Color(.homeBackground) : .white)
                 .frame(maxWidth: .infinity)
                 // 58, not 54. It is the only thing to do on every one of these
@@ -659,8 +659,12 @@ struct OnboardingView: View {
 
     // MARK: - Step 7 · the app, running
 
-    /// The last thing before signing in: a few seconds of the real app, in a
-    /// phone.
+    /// The first thing anyone sees: a few seconds of the real app, in a phone,
+    /// before a single question is asked.
+    ///
+    /// Opening here rather than closing on it means the six questions that
+    /// follow are answered by someone who has already seen what they are for.
+    /// Asked cold they are a form; asked after this they are setup.
     ///
     /// The frame is here and the film isn't. Drop a looping `VideoPlayer` (or an
     /// `AVPlayerLayer` wrapped in a `UIViewRepresentable`, muted, no controls)
@@ -670,9 +674,9 @@ struct OnboardingView: View {
     /// Keep it short and silent. This plays before anyone has agreed to
     /// anything, so it can't ask for attention it hasn't earned, and a clip that
     /// outlasts its welcome is worse than no clip.
-    /// The phone leads and the words follow it, centred — the one screen here
-    /// that is shown rather than asked, so the writing is a caption to it rather
-    /// than a heading over it.
+    /// The phone leads and the words follow it, centred — nothing is being
+    /// asked yet, so the writing is a caption to the thing above it rather than
+    /// a heading over it.
     private var videoStep: some View {
         VStack(spacing: 20) {
             DevicePreview {
