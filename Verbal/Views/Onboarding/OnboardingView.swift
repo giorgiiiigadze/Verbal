@@ -216,8 +216,11 @@ struct OnboardingView: View {
         )
     }
 
+    /// `.primary` rather than `mainText` on the last screen: the app's ink is a
+    /// warm charcoal, and this button wants to be black. It also inverts to
+    /// white in the dark, which a literal black would not.
     private var barFill: Color {
-        if isLastStep { return Color(.mainText) }
+        if isLastStep { return .primary }
         return canContinue ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4)
     }
 
@@ -232,9 +235,14 @@ struct OnboardingView: View {
                 // Ink on the last screen, blue on the questions. Blue is the
                 // colour of getting through this; the end of it is something
                 // else, and the phone above it is already carrying the blue.
-                .foregroundStyle(isLastStep ? Color(.surface) : .white)
+                // On a `.primary` fill the label has to invert with it, or it
+                // is white text on a white button in the dark.
+                .foregroundStyle(isLastStep ? Color(.homeBackground) : .white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 54)
+                // 58, not 54. It is the only thing to do on every one of these
+                // screens, and a taller button reads as the deliberate end of
+                // the page rather than a control that happens to be down there.
+                .frame(height: 58)
                 .background(barFill, in: Capsule())
         }
         .buttonStyle(.plain)
@@ -673,7 +681,7 @@ struct OnboardingView: View {
                     Color(.cardSurface)
                     VStack(spacing: 10) {
                         Image(systemName: "play.circle.fill")
-                            .font(.system(size: 34))
+                            .font(.system(size: 40))
                             .foregroundStyle(Color(.blueAccentText).opacity(0.35))
                         Text("Preview")
                             .font(.footnote)
@@ -681,17 +689,23 @@ struct OnboardingView: View {
                     }
                 }
             }
+            // Held to a share of the width rather than filling it. At full
+            // width the phone crowded its own caption and reached for the
+            // button, which made a screen with three things on it feel full.
+            .frame(width: 240)
             .frame(maxWidth: .infinity)
 
-            VStack() {
-                Text("A quote before\nyou leave the van.")
-                    .font(.robotoSlab(28, relativeTo: .title))
-                    .foregroundStyle(Color(.mainText))
-            }
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
+            // The flexible gap goes above the line so it settles near the
+            // bottom, and a fixed one below it keeps it off the button. Pinned
+            // straight to the footer the two read as one block.
+            Spacer(minLength: 12)
 
-            Spacer(minLength: 0)
+            Text("A quote before\nyou leave the van.")
+                .font(.robotoSlab(28, relativeTo: .title))
+                .foregroundStyle(Color(.mainText))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 28)
         }
         .frame(maxWidth: .infinity)
     }
