@@ -66,10 +66,16 @@ struct OnboardingView: View {
     }
 
     /// Asked of the list rather than compared against one case, so adding a
-    /// screen to the end doesn't leave "Get started" on the one before it.
+    /// screen to the end doesn't leave the finishing behaviour on the one
+    /// before it. This is what ENDS onboarding — the button's looks are keyed
+    /// to `isFirstStep` instead.
     private var isLastStep: Bool {
         step >= steps.count - 1
     }
+
+    /// The opening screen, which is the clip. It carries the invitation into
+    /// all this; every screen after it is a step through it.
+    private var isFirstStep: Bool { step == 0 }
 
     private var pickedList: [TradePresets.Job] {
         TradePresets.jobs(for: pendingTrade).filter { pickedJobs.contains($0.name) }
@@ -216,11 +222,11 @@ struct OnboardingView: View {
         )
     }
 
-    /// `.primary` rather than `mainText` on the last screen: the app's ink is a
-    /// warm charcoal, and this button wants to be black. It also inverts to
-    /// white in the dark, which a literal black would not.
+    /// `.primary` rather than `mainText` on the opening screen: the app's ink
+    /// is a warm charcoal, and this button wants to be black. It also inverts
+    /// to white in the dark, which a literal black would not.
     private var barFill: Color {
-        if isLastStep { return .primary }
+        if isFirstStep { return .primary }
         return canContinue ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4)
     }
 
@@ -230,14 +236,14 @@ struct OnboardingView: View {
         Button {
             advance()
         } label: {
-            Text(isLastStep ? "Get Started!" : "Continue")
+            Text(isFirstStep ? "Get Started!" : "Continue")
                 .font(.headline)
-                // Ink on the last screen, blue on the way through it. Blue is
-                // the colour of getting from one question to the next; the end
-                // is a different kind of thing and should not look like another
-                // step. On a `.primary` fill the label has to invert with it,
-                // or it is white text on a white button in the dark.
-                .foregroundStyle(isLastStep ? Color(.homeBackground) : .white)
+                // Ink on the way in, blue on the way through. Getting started
+                // is a decision; the screens after it are steps, and a step
+                // should not look like the same weight of choice. On a
+                // `.primary` fill the label has to invert with it, or it is
+                // white text on a white button in the dark.
+                .foregroundStyle(isFirstStep ? Color(.homeBackground) : .white)
                 .frame(maxWidth: .infinity)
                 // 58, not 54. It is the only thing to do on every one of these
                 // screens, and a taller button reads as the deliberate end of
