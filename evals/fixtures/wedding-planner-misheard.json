@@ -1,0 +1,39 @@
+{
+  "name": "wedding-planner-misheard",
+  "note": "The same job as wedding-planner, but this transcript is not written — it is the exact text Apple's on-device SpeechTranscriber produced from a spoken recording on 2026-08-13, mis-hearings and all. 'wedding' came out as 'winning', a comma was inserted into 'Venue liaison and vendor management', 'first' became '1st', and sentence breaks landed where the speaker only drew breath. This is what the model actually receives; wedding-planner is what we wish it received. Guards two things: that a misheard WORD is read for what the job makes obvious, and that a comma the speaker never said is not turned into extra line items — while every number survives untouched, because a corrected number is an invented one.",
+  "transcript": "This one is for James Bond winning on the 20th of September at Lapota Lake Resort. He's expecting a 140 guests, sorry, 150 His cousins confirmed yesterday. Full planning package. That's my standard 3000. Day of coordination with 2 assistants. They're 200 each for the day. Floral design. He wants the big centerpieces on 12 tables, plus the arch. I need to talk to the florist 1st so I can't price that yet. Photographer referral, but he's booking him directly, so nothing from me. Venue, liaison, and vendor management, that's included in the package. Oh, and the tasting session in August, 150 per person for 4 people. Deposit is 30% to hold the date. Quotes good for 10 days.",
+  "rate_card": [],
+  "currency": "USD",
+  "expect": [
+    {
+      "label": "full planning package",
+      "any": ["planning package", "full planning"],
+      "exclude": ["coordinat", "assistant"],
+      "price": 3000
+    },
+    {
+      "label": "day-of coordination, unpriced",
+      "any": ["coordinat"],
+      "exclude": ["assistant"],
+      "price": null
+    },
+    {
+      "label": "two assistants at 200 each",
+      "any": ["assistant"],
+      "exclude": [],
+      "price": 200
+    },
+    {
+      "label": "floral design, unpriced pending florist",
+      "any": ["floral", "centerpiece", "flower"],
+      "exclude": [],
+      "price": null
+    },
+    {
+      "label": "tasting session for four",
+      "any": ["tasting"],
+      "exclude": [],
+      "price": 150
+    }
+  ]
+}

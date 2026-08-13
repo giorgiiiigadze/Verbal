@@ -158,8 +158,14 @@ final class QuoteRecorder {
         }
 
         do {
+            guard let locale = await Self.transcriptionLocale() else {
+                errorMessage = "Speech recognition isn't available in this language yet."
+                state = .unavailable
+                return
+            }
+
             let transcriber = SpeechTranscriber(
-                locale: Locale.current,
+                locale: locale,
                 transcriptionOptions: [],
                 reportingOptions: [.volatileResults],
                 attributeOptions: []
@@ -397,6 +403,47 @@ final class QuoteRecorder {
     }
 
     // MARK: - Model + permissions
+
+    /// The locale to transcribe in — one the model actually exists in.
+    ///
+    /// `Locale.current` used to go straight to `SpeechTranscriber`, which is the
+    /// phone's setting rather than a promise that Apple built a model for it. A
+    /// tradesperson whose phone is set to a language with no speech model got a
+    /// failed recording where the words were fine; the model for them was never
+    /// on the device.
+    ///
+    /// Region matters too, and quietly: en_US and en_GB are different models,
+    /// and asking the American one to hear a British accent is a mis-hearing per
+    /// sentence rather than an outright failure — the worse of the two, because
+    /// nothing on screen says it happened.
+    ///
+    /// So: the exact locale, then the same language spoken elsewhere, then
+    /// English, which is what the app itself is written in and the language its
+    /// prompts read. Nil only when even that is missing, which is a state the
+    /// caller has to tell the user about rather than push a microphone at.
+    private static func transcriptionLocale() async -> Locale? {
+        let supported = await SpeechTranscriber.supportedLocales
+        let device = Locale.current
+
+        func best(_ code: Locale.LanguageCode) -> Locale? {
+            let candidates = supported.filter { $0.language.languageCode == code }
+            guard !candidates.isEmpty else { return nil }
+            // The phone's own region reads its owner's accent best.
+            if let exact = candidates.first(where: { $0.region == device.region }) {
+                return exact
+            }
+            // Falling back across regions is already a compromise; en_US is the
+            // most widely trained of them and a stable choice, rather than
+            // whichever locale Apple happened to list first.
+            if let widest = candidates.first(where: { $0.region == Locale.Region("US") }) {
+                return widest
+            }
+            return candidates.first
+        }
+
+        guard let language = device.language.languageCode else { return best(.english) }
+        return best(language) ?? best(.english)
+    }
 
     private func ensureModel(for transcriber: SpeechTranscriber) async throws {
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
