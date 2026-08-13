@@ -172,13 +172,17 @@ struct QuoteLineItem: Identifiable, Decodable, Sendable {
     let unit: String?
     let unitPrice: Double?
     let priceSource: String?
+    /// How sure the model was of this line's quantity and price ("high"/"low").
+    /// Nil on lines the user typed themselves, and on anything saved before the
+    /// field started being persisted.
+    let confidence: String?
     let position: Int
 
     enum CodingKeys: String, CodingKey {
         case id, description, type, quantity, unit
         case unitPrice = "unit_price"
         case priceSource = "price_source"
-        case position
+        case confidence, position
     }
 
     var isMissingPrice: Bool { priceSource == "missing" || unitPrice == nil }
@@ -198,7 +202,7 @@ enum QuoteService {
     static func fetchLineItems(quoteId: UUID) async throws -> [QuoteLineItem] {
         let response: PostgrestResponse<[QuoteLineItem]> = try await client
             .from("quote_line_items")
-            .select("id, description, type, quantity, unit, unit_price, price_source, position")
+            .select("id, description, type, quantity, unit, unit_price, price_source, confidence, position")
             .eq("quote_id", value: quoteId)
             .order("position", ascending: true)
             .execute()
@@ -608,7 +612,8 @@ enum QuoteService {
                     quantity: $0.quantity,
                     unit: $0.unit,
                     unitPrice: $0.unitPrice,
-                    priceSource: $0.priceSource
+                    priceSource: $0.priceSource,
+                    confidence: $0.confidence
                 )
             },
             clientName: q.customer?.name?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -870,7 +875,7 @@ enum QuoteService {
                 unit: item.unit,
                 unitPrice: item.unitPrice,
                 priceSource: item.priceSource,
-                confidence: nil,
+                confidence: item.confidence,
                 position: item.position
             )
         }
@@ -939,7 +944,7 @@ enum QuoteService {
                 unit: item.unit,
                 unitPrice: item.unitPrice,
                 priceSource: item.priceSource,
-                confidence: nil,
+                confidence: item.confidence,
                 position: index
             )
         }
@@ -979,6 +984,8 @@ struct GeneratedLineItem: Identifiable, Sendable {
     var unit: String?
     var unitPrice: Double?
     var priceSource: String?
+    /// How sure the model was of this line's quantity and price ("high"/"low").
+    var confidence: String?
 
     var isMissingPrice: Bool { priceSource == "missing" || unitPrice == nil }
     var lineTotal: Double? {
