@@ -42,7 +42,7 @@ struct OnboardingView: View {
     @State private var revealed = false
 
     private enum Step: Hashable {
-        case showcase, trade, jobs, prices, business, reveal
+        case showcase, trade, jobs, prices, business, reveal, video
     }
 
     /// The steps this particular user will see. A trade with no preset list
@@ -54,7 +54,7 @@ struct OnboardingView: View {
             list.append(.jobs)
             if !pickedJobs.isEmpty { list.append(.prices) }
         }
-        list.append(contentsOf: [.business, .reveal])
+        list.append(contentsOf: [.business, .reveal, .video])
         return list
     }
 
@@ -63,6 +63,12 @@ struct OnboardingView: View {
     private var current: Step {
         let all = steps
         return all[min(step, all.count - 1)]
+    }
+
+    /// Asked of the list rather than compared against one case, so adding a
+    /// screen to the end doesn't leave "Get started" on the one before it.
+    private var isLastStep: Bool {
+        step >= steps.count - 1
     }
 
     private var pickedList: [TradePresets.Job] {
@@ -134,7 +140,7 @@ struct OnboardingView: View {
                         // the reveal.
                         // Absent where the answer is required, so Skip never
                         // offers a way round a disabled Continue.
-                        if step > 0, current != .reveal, current != .trade {
+                        if step > 0, current != .reveal, current != .video, current != .trade {
                             Button("Skip") { advance() }
                                 .font(.subheadline)
                                 .foregroundStyle(Color(.mainText))
@@ -169,6 +175,7 @@ struct OnboardingView: View {
                     case .prices: pricesStep
                     case .business: businessStep
                     case .reveal: revealStep
+                    case .video: videoStep
                     }
                 }
                 // Each step arrives from the side it was going, so the sequence
@@ -209,21 +216,26 @@ struct OnboardingView: View {
         )
     }
 
+    private var barFill: Color {
+        if isLastStep { return Color(.mainText) }
+        return canContinue ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4)
+    }
+
     /// One button, and only one. Skip moved into the header, where it stops
     /// reading as a second opinion about the thing directly above it.
     private var footer: some View {
         Button {
             advance()
         } label: {
-            Text(current == .reveal ? "Get started" : "Continue")
+            Text(isLastStep ? "Get Started!" : "Continue")
                 .font(.headline)
-                .foregroundStyle(.white)
+                // Ink on the last screen, blue on the questions. Blue is the
+                // colour of getting through this; the end of it is something
+                // else, and the phone above it is already carrying the blue.
+                .foregroundStyle(isLastStep ? Color(.surface) : .white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
-                .background(canContinue
-                            ? Color(.royalBlue600)
-                            : Color(.royalBlue600).opacity(0.4),
-                            in: Capsule())
+                .background(barFill, in: Capsule())
         }
         .buttonStyle(.plain)
         .disabled(!canContinue)
@@ -242,7 +254,7 @@ struct OnboardingView: View {
     /// Both buttons come through here, so the feedback lives here too rather
     /// than being attached to each of them separately.
     private func advance() {
-        guard current != .reveal else {
+        guard !isLastStep else {
             // The end of the questions, not another step through them — the
             // heavier notification marks it as arriving somewhere.
             UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -637,6 +649,53 @@ struct OnboardingView: View {
         }
     }
 
+    // MARK: - Step 7 · the app, running
+
+    /// The last thing before signing in: a few seconds of the real app, in a
+    /// phone.
+    ///
+    /// The frame is here and the film isn't. Drop a looping `VideoPlayer` (or an
+    /// `AVPlayerLayer` wrapped in a `UIViewRepresentable`, muted, no controls)
+    /// into `DevicePreview`'s content and delete the placeholder below — the
+    /// screen is sized and positioned around whatever goes in there.
+    ///
+    /// Keep it short and silent. This plays before anyone has agreed to
+    /// anything, so it can't ask for attention it hasn't earned, and a clip that
+    /// outlasts its welcome is worse than no clip.
+    /// The phone leads and the words follow it, centred — the one screen here
+    /// that is shown rather than asked, so the writing is a caption to it rather
+    /// than a heading over it.
+    private var videoStep: some View {
+        VStack(spacing: 20) {
+            DevicePreview {
+                // Placeholder. Replaced by the clip.
+                ZStack {
+                    Color(.cardSurface)
+                    VStack(spacing: 10) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 34))
+                            .foregroundStyle(Color(.blueAccentText).opacity(0.35))
+                        Text("Preview")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            VStack() {
+                Text("A quote before\nyou leave the van.")
+                    .font(.robotoSlab(28, relativeTo: .title))
+                    .foregroundStyle(Color(.mainText))
+            }
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     /// Skipping every question is a legitimate way through this, and the screen
     /// has to be honest about it: nothing was set up, so nothing claims to have
     /// been. It still shows what a spoken job turns into, which is the one thing
@@ -678,6 +737,55 @@ struct OnboardingView: View {
             return "“Replace the toilet, ninety. Three mixer taps.”"
         }
         return "“\(first.name.lowercased()), and the materials from the supplier — I'll price those tomorrow.”"
+    }
+}
+
+/// Apple's own iPhone artwork, with whatever is given to it showing through the
+/// screen.
+///
+/// The frame was drawn by hand first — a bezel, a rounded rect and an island —
+/// which was content-agnostic but never quite looked like the thing it was
+/// imitating. This is the real geometry, exported with the screen left
+/// transparent, so the content sits underneath and the bezel lies over it.
+///
+/// Every number below was measured off the file rather than guessed. They are
+/// fractions, not points, so the frame can be drawn at any size and the screen
+/// still lands exactly inside the glass.
+struct DevicePreview<Screen: View>: View {
+    @ViewBuilder var screen: Screen
+
+    /// Measured from the 489 × 1000 export: the transparent screen runs from
+    /// x 25–463 and y 22–977.
+    private static var imageAspect: CGFloat { 489.0 / 1000.0 }
+    private static var screenAspect: CGFloat { 438.0 / 955.0 }
+    private static var leadingInset: CGFloat { 25.0 / 489.0 }
+    private static var topInset: CGFloat { 22.0 / 1000.0 }
+    /// The corner radius of the glass itself, as a share of the screen's width.
+    private static var screenRadius: CGFloat { 0.135 }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = width / Self.imageAspect
+            let screenWidth = width * (1 - Self.leadingInset * 2)
+            let screenHeight = screenWidth / Self.screenAspect
+
+            ZStack {
+                screen
+                    .frame(width: screenWidth, height: screenHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: screenWidth * Self.screenRadius,
+                                                style: .continuous))
+                    .position(x: width / 2,
+                              y: height * Self.topInset + screenHeight / 2)
+
+                Image(.deviceFrame)
+                    .resizable()
+                    .frame(width: width, height: height)
+                    .allowsHitTesting(false)
+            }
+            .frame(width: width, height: height)
+        }
+        .aspectRatio(Self.imageAspect, contentMode: .fit)
     }
 }
 
