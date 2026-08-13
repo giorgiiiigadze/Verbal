@@ -702,7 +702,7 @@ struct OnboardingView: View {
             // Held to a share of the width rather than filling it. At full
             // width the phone crowded its own caption and reached for the
             // button, which made a screen with three things on it feel full.
-            .frame(width: 240)
+            .frame(width: 264)
             .frame(maxWidth: .infinity)
 
             // The flexible gap goes above the line so it settles near the
