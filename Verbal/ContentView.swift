@@ -37,6 +37,17 @@ struct ContentView: View {
         return session.state == .ready && !session.listsLoaded && !listWaitElapsed
     }
 
+    /// The banner belongs to the signed-in app. Onboarding runs entirely on a
+    /// local draft and needs no connection, so a banner there interrupts a flow
+    /// that has nothing to fail — and its bottom inset is measured against a tab
+    /// bar that only exists once you're in.
+    private var showsOfflineBanner: Bool {
+        session.state == .ready
+            && !showSplash
+            && !network.isOnline
+            && !offlineBannerDismissed
+    }
+
     var body: some View {
         ZStack {
             content
@@ -48,7 +59,7 @@ struct ContentView: View {
                     .transition(.opacity)
             }
 
-            if !showSplash && !network.isOnline && !offlineBannerDismissed {
+            if showsOfflineBanner {
                 OfflineBanner()
                     // Arrives from below, but doesn't leave the same way — a
                     // banner sliding back down reads as being dropped. Going
