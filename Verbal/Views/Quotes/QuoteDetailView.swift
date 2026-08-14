@@ -253,7 +253,8 @@ struct QuoteDetailView: View {
                         quantityText: item.quantityText,
                         isMissingPrice: item.isMissingPrice,
                         lineTotal: item.lineTotal,
-                        currencyCode: currency
+                        currencyCode: currency,
+                        confidence: item.confidence
                     )
                     if item.id != lineItems.last?.id {
                         Divider()

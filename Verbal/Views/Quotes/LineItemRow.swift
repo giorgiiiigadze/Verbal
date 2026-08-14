@@ -126,8 +126,19 @@ struct LineItemRow: View {
     /// The quote's own currency; nil falls back to the current setting (used
     /// while building a new quote that isn't saved yet).
     var currencyCode: String? = nil
+    /// The model's own read on whether it heard this line right — "high" or
+    /// "low". Nil on lines the user typed, and on anything saved before the
+    /// field was persisted, so absence means "nothing to say" rather than
+    /// "fine".
+    var confidence: String? = nil
 
     static let amber = Color(red: 217 / 255, green: 115 / 255, blue: 13 / 255)
+
+    /// Compared as a string because that is what the column holds. Anything
+    /// other than "low" — "high", nil, a value the model invents later — says
+    /// nothing, which is the safe direction to fail in: a quiet row is the
+    /// normal one.
+    private var isLowConfidence: Bool { confidence == "low" }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -139,6 +150,27 @@ struct LineItemRow: View {
                     Text(quantityText)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+                // Under the quantity rather than opposite the price, because
+                // the trailing slot is already spoken for and this is a remark
+                // about the numbers on the left.
+                //
+                // Silent on a line with no price: "Needs price" is the louder
+                // and more actionable of the two, and a row wearing both amber
+                // marks says one thing twice. A missing price is also the case
+                // the user can already see is wrong — a misheard one isn't.
+                if isLowConfidence, !isMissingPrice {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(Self.amber)
+                            .frame(width: 5, height: 5)
+                        Text("Worth checking")
+                            .font(.caption)
+                            .foregroundStyle(Self.amber)
+                    }
+                    .padding(.top, 1)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Worth checking — the app wasn't sure it heard this line correctly")
                 }
             }
             Spacer()
