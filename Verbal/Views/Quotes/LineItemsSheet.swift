@@ -29,6 +29,11 @@ struct LineItemsSheet: View {
     @State private var items: [EditableLineItem]
     /// Server ids present when editing began, to compute deletions on save.
     private let originalIDs: Set<UUID>
+    /// What each saved line looked like when the sheet opened, and where it sat,
+    /// so a save can tell the lines that were edited from the ones that were
+    /// only looked at.
+    private let originalByID: [UUID: EditableLineItem]
+    private let originalPositionByID: [UUID: Int]
     @State private var isSaving = false
     /// Set when a write failed, so the sheet reports it instead of closing on
     /// edits that were never stored.
@@ -49,6 +54,16 @@ struct LineItemsSheet: View {
         for item in lineItems { built.append(EditableLineItem(item)) }
         _items = State(initialValue: built)
         originalIDs = Set(lineItems.map(\.id))
+
+        var byID: [UUID: EditableLineItem] = [:]
+        var positionByID: [UUID: Int] = [:]
+        for (position, item) in built.enumerated() {
+            guard let serverID = item.serverID else { continue }
+            byID[serverID] = item
+            positionByID[serverID] = position
+        }
+        originalByID = byID
+        originalPositionByID = positionByID
     }
 
     /// Live subtotal from the currently-entered quantities and prices.
@@ -141,6 +156,17 @@ struct LineItemsSheet: View {
                 let description = item.description.trimmingCharacters(in: .whitespacesAndNewlines)
                 let unit = item.unit.trimmingCharacters(in: .whitespacesAndNewlines)
                 if let serverID = item.serverID {
+                    // A line nobody touched is left alone. Rewriting all of them
+                    // spent a round trip per line to change one, and an update
+                    // clears `confidence` — so correcting a single price threw
+                    // away what the model had said about every other line on the
+                    // quote. Position is part of the comparison: a line that
+                    // hasn't been edited still has to be written if a deletion
+                    // above it moved it.
+                    if originalByID[serverID] == item,
+                       originalPositionByID[serverID] == index {
+                        continue
+                    }
                     try await QuoteService.updateLineItem(
                         id: serverID,
                         description: description.isEmpty ? nil : description,
@@ -304,7 +330,19 @@ private struct LineItemEditorView: View {
 // MARK: - Editable model
 
 /// A line item in an editable, text-field-friendly form.
-private struct EditableLineItem: Identifiable {
+private struct EditableLineItem: Identifiable, Equatable {
+    /// Compared on what reaches the database only. `id` is a view-local
+    /// identity, minted fresh every time the sheet is built, so a synthesised
+    /// `==` would report every line as changed and defeat the point.
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.serverID == rhs.serverID
+            && lhs.description == rhs.description
+            && lhs.type == rhs.type
+            && lhs.quantityText == rhs.quantityText
+            && lhs.unit == rhs.unit
+            && lhs.priceText == rhs.priceText
+    }
+
     let id = UUID()
     /// The database id, nil for a newly-added item.
     var serverID: UUID?
