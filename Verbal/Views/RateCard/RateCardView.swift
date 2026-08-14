@@ -32,8 +32,9 @@ struct RateCardView: View {
     /// question is what used to be. A returning user on a new phone is told
     /// about the feature once more, which is the harmless way to be wrong.
     @AppStorage("hasSavedRates") private var hasSavedRates = false
-    /// Nil is "All". Holds a raw type ("labor"), not a label.
     @State private var showCandidates = false
+    /// Drives the footer search field. Empty is the whole card.
+    @State private var searchText = ""
 
     /// Prices spoken into recent quotes that aren't saved here yet. Read from
     /// the session rather than held here: preloaded with the lists so the offer
@@ -75,28 +76,8 @@ struct RateCardView: View {
         // standing places, and leaving the bar under it invites a sideways jump
         // out of a job half-done. The back button is the way out.
         .toolbar(.hidden, for: .tabBar)
-        // No search. It was here when the rate card was a tab someone might
-        // arrive at with a long list already in mind; reached now from Home's
-        // header, it's a short list you came to add to, and the type chips are
-        // enough to find a rate among a page of them. Adding one is the reason
-        // to open the screen, so it takes the trailing slot the search used to.
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                // Only over the list. Every empty and error state carries its
-                // own way to add a rate, so a header button beside it would be
-                // the same offer twice — and on the "no rates" message it would
-                // sit in a bar above a screen that is already asking for exactly
-                // that.
-                if !items.isEmpty {
-                    Button {
-                        showAdd = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Add a rate")
-                }
-            }
-        }
+        // Adding a rate and searching for one both live in the footer now
+        // (see `list`), so the header carries nothing but the title.
         .sheet(isPresented: $showAdd, onDismiss: { Task { await load() } }) {
             AddRateItemView(existing: items)
         }
@@ -157,11 +138,20 @@ struct RateCardView: View {
 
     private var list: some View {
         List {
-            if !candidates.isEmpty {
+            // Only when nothing is being searched: the "ready to add" card is a
+            // prompt about the whole card, not a search result.
+            if !candidates.isEmpty, searchText.isEmpty {
                 readyToAddCard
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 18, trailing: 20))
+            }
+
+            if groups.isEmpty {
+                noMatchesRow
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 24, leading: 20, bottom: 0, trailing: 20))
             }
 
             ForEach(groups, id: \.label) { group in
@@ -183,6 +173,99 @@ struct RateCardView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        // The whole footer: the search field, and the New rate button floating
+        // just above it. Pinned to the bottom, so the list scrolls under it and
+        // the keyboard lifts both when the field is tapped.
+        .safeAreaInset(edge: .bottom) { footer }
+    }
+
+    /// New rate above, search below — the shape a chat app puts a compose bar
+    /// and its field in, because it's the shape a thumb reaches without moving.
+    private var footer: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Spacer(minLength: 0)
+                newRateButton
+            }
+            searchField
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 6)
+        // A blur behind the whole footer, so the rows that scroll under it read
+        // as being behind frosted glass rather than colliding with the buttons.
+        // Faded in from the top rather than a hard bar edge: the material is
+        // masked to nothing where the footer meets the list and to full over
+        // the controls, so the list dissolves into the blur instead of hitting
+        // a line. Extended past the safe area so the frost runs to the very
+        // bottom of the screen, under the home indicator.
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                // Held below full strength: over a near-white page even the
+                // thinnest material frosts to almost solid, and the footer read
+                // as a white slab. At partial opacity the real rows bleed
+                // through, so it's a haze the list shows through rather than a
+                // sheet laid over it.
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black.opacity(0.55), location: 0.5),
+                            .init(color: .black.opacity(0.55), location: 1),
+                        ],
+                        startPoint: .top, endPoint: .bottom)
+                )
+                .ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    /// Prominent glass in the app's blue, the same button a quote's Share is —
+    /// the one filled affordance on the screen, so the eye lands on it.
+    private var newRateButton: some View {
+        Button {
+            showAdd = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                Text("New rate").fontWeight(.semibold)
+            }
+            .foregroundStyle(.white)
+        }
+        .buttonStyle(.glassProminent)
+        .controlSize(.large)
+        .tint(Color(.royalBlue600))
+        .accessibilityLabel("New rate")
+    }
+
+    /// A search field on the same glass, full width. Its own field rather than
+    /// `.searchable` because the system puts that at the top of the screen, and
+    /// the footer is where the thumb already is.
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            TextField("Search rates", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .foregroundStyle(Color(.mainText))
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .font(.callout)
+        .padding(.horizontal, 18)
+        .frame(height: 50)
+        .glassEffect(in: .capsule)
     }
 
     // MARK: - Grouping
@@ -195,10 +278,15 @@ struct RateCardView: View {
         typeLabels[type] ?? type.capitalized
     }
 
-    /// Rates by type, in the order the add form offers them. Anything
-    /// unrecognised sorts last so a rate can't go missing.
+    /// Rates by type, after the footer search, in the order the add form offers
+    /// them. Anything unrecognised sorts last so a rate can't go missing.
     private var groups: [(label: String, items: [RateCardItem])] {
-        let byType = Dictionary(grouping: items, by: \.type)
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let matched = query.isEmpty ? items : items.filter { item in
+            item.name.lowercased().contains(query)
+                || (item.unit?.lowercased().contains(query) ?? false)
+        }
+        let byType = Dictionary(grouping: matched, by: \.type)
         // Counted in the heading, the way Home writes "Drafts · 5".
         let known = Self.typeOrder.compactMap { type in
             byType[type].map { ("\(Self.label(for: type)) · \($0.count)", $0) }
@@ -208,6 +296,16 @@ struct RateCardView: View {
             return ("\(Self.label(for: type)) · \(group.count)", group)
         }
         return known + rest
+    }
+
+    /// Shown when the search matches nothing. Items are non-empty here — the
+    /// truly empty card is caught before `list` — so this only ever means the
+    /// query, never an empty rate card.
+    private var noMatchesRow: some View {
+        Text("No rates match “\(searchText)”.")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     // MARK: - Rows
