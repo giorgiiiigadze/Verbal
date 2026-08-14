@@ -653,7 +653,7 @@ struct OnboardingView: View {
     /// asked yet, so the writing is a caption to the thing above it rather than
     /// a heading over it.
     private var videoStep: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 14) {
             DevicePreview {
                 OnboardingPhoneScreen(currencyCode: currencyCode)
             }
@@ -672,6 +672,11 @@ struct OnboardingView: View {
                 .font(.robotoSlab(28, relativeTo: .title))
                 .foregroundStyle(Color(.mainText))
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            Text("Some text will go in here")
+                .font(.subheadline)
+                .foregroundStyle(Color(.mainText))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 28)
         }

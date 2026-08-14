@@ -80,7 +80,7 @@ struct AnnouncementSheet<Preview: View>: View {
                         // punctuation for the sentences beside them.
                         Image(systemName: point.icon)
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(Color(.blueAccentText))
+                            .foregroundStyle(Color(.mainText))
                             .frame(width: 24)
                         Text(point.text)
                             .font(.subheadline)
