@@ -450,14 +450,21 @@ struct HomeView: View {
     @ViewBuilder
     private var emptyState: some View {
         if hasEverHadQuotes {
-            // Plain and centred, in the same shape the no-match and error
-            // states already use — no panel of its own.
-            placeholder(
+            // The same shape the rate card uses when it has been emptied, and
+            // for the same reason: this user knows what a quote is.
+            //
+            // The action is a quiet pill rather than the blue Record button. The
+            // mic is already in the tab bar an inch below it, so the solid
+            // version was the same offer made twice on a screen whose whole
+            // point is that there is nothing to look at.
+            EmptyStateMessage(
                 icon: "waveform",
                 title: "No quotes right now",
                 message: "Describe the next job out loud and it'll be priced and waiting here."
             ) {
-                recordButton
+                EmptyStatePill(title: "Record a quote", icon: "mic.fill") {
+                    showCreate = true
+                }
             }
         } else {
             firstQuoteCard

@@ -22,6 +22,15 @@ struct RateCardView: View {
     /// True when the last fetch failed — separates "no rates saved" from
     /// "couldn't reach the server", which look identical without it.
     @State private var loadFailed = false
+    /// True once this device has seen a rate card with something in it.
+    ///
+    /// It separates someone who has never had rates from someone who had them
+    /// and cleared them out, which is the difference between a pitch and a
+    /// statement of fact. Held on the device rather than derived from the
+    /// server, because the server can only say what is there now — the whole
+    /// question is what used to be. A returning user on a new phone is told
+    /// about the feature once more, which is the harmless way to be wrong.
+    @AppStorage("hasSavedRates") private var hasSavedRates = false
     @State private var searchText = ""
     /// Nil is "All". Holds a raw type ("labor"), not a label.
     @State private var typeFilter: String?
@@ -42,6 +51,12 @@ struct RateCardView: View {
                 // Don't invite someone to save their usual prices when the app
                 // simply couldn't reach the ones they already have.
                 errorState
+            } else if items.isEmpty, hasSavedRates {
+                // Someone who has kept rates before and cleared them out is told
+                // so plainly. Pitching the feature again to a user who has been
+                // using it for months reads as an app that wasn't paying
+                // attention.
+                noRatesState
             } else if items.isEmpty {
                 emptyState
             } else {
@@ -470,6 +485,29 @@ struct RateCardView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// The card is empty, but it hasn't always been. Nothing is being sold here
+    /// — the user knows what a rate card is, they just emptied theirs, and the
+    /// screen's job is to say so and offer the way back.
+    private var noRatesState: some View {
+        // `rectangle.stack` is the tab's own icon unfilled: the bar is showing
+        // the solid version at the same moment, so the hollow one reads as the
+        // same thing with nothing in it.
+        EmptyStateMessage(
+            icon: "rectangle.stack",
+            title: "No rates saved",
+            message: "Add the prices you quote most and they'll fill themselves in next time."
+        ) {
+            EmptyStatePill(title: "Add a rate", icon: "plus") { showAdd = true }
+            // Only when there is something behind it. A suggestion that opens an
+            // empty list is worse than no suggestion.
+            if !candidates.isEmpty {
+                EmptyStatePill(title: "Add from a recent quote", icon: "text.quote") {
+                    showCandidates = true
+                }
+            }
+        }
+    }
+
     /// The fetch failed and there's nothing cached to fall back on. Matches the
     /// shape Home uses for the same situation.
     private var errorState: some View {
@@ -535,6 +573,9 @@ struct RateCardView: View {
         do {
             let fetched = try await QuoteService.fetchRateCard()
             items = fetched
+            // Only ever set, never cleared: emptying the card is exactly the
+            // thing this is meant to remember.
+            if !fetched.isEmpty { hasSavedRates = true }
             // Settings decides from this cache whether a currency change would
             // redenominate saved prices, so it has to see what was just added
             // here — but only ever a list that was actually fetched.
