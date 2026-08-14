@@ -221,11 +221,14 @@ struct OnboardingView: View {
         )
     }
 
-    /// `.primary` rather than `mainText` on the opening screen: the app's ink
-    /// is a warm charcoal, and this button wants to be black. It also inverts
-    /// to white in the dark, which a literal black would not.
+    /// The app's own ink on the opening screen. It was `.primary`, on the
+    /// reasoning that the button wanted to be black and that a literal black
+    /// would not invert in the dark — true of `Color.black`, but `mainText` is
+    /// an adaptive colour and inverts the same as `.primary` does. What was
+    /// left was a pure black button on a warm off-white page, the one thing in
+    /// the app drawn from outside its own palette.
     private var barFill: Color {
-        if isFirstStep { return .primary }
+        if isFirstStep { return Color(.mainText) }
         return canContinue ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4)
     }
 
@@ -239,9 +242,10 @@ struct OnboardingView: View {
                 .font(.headline)
                 // Ink on the way in, blue on the way through. Getting started
                 // is a decision; the screens after it are steps, and a step
-                // should not look like the same weight of choice. On a
-                // `.primary` fill the label has to invert with it, or it is
-                // white text on a white button in the dark.
+                // should not look like the same weight of choice. The label
+                // takes the page's own background, so it inverts along with the
+                // ink behind it rather than being white text on a light button
+                // in the dark.
                 .foregroundStyle(isFirstStep ? Color(.homeBackground) : .white)
                 .frame(maxWidth: .infinity)
                 // 58, not 54. It is the only thing to do on every one of these
@@ -664,7 +668,7 @@ struct OnboardingView: View {
             // straight to the footer the two read as one block.
             Spacer(minLength: 12)
 
-            Text("A quote before\nyou leave the van.")
+            Text("Speak it.\nSend it.")
                 .font(.robotoSlab(28, relativeTo: .title))
                 .foregroundStyle(Color(.mainText))
                 .multilineTextAlignment(.center)
