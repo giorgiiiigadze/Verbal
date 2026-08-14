@@ -11,6 +11,7 @@ import SwiftUI
 struct RateCardView: View {
     @Environment(SessionStore.self) private var session
     @Environment(NetworkMonitor.self) private var network
+    @Environment(\.colorScheme) private var scheme
     @State private var items: [RateCardItem] = []
     @State private var hasLoaded = false
     @State private var isLoading = false
@@ -32,7 +33,6 @@ struct RateCardView: View {
     /// about the feature once more, which is the harmless way to be wrong.
     @AppStorage("hasSavedRates") private var hasSavedRates = false
     /// Nil is "All". Holds a raw type ("labor"), not a label.
-    @State private var typeFilter: String?
     @State private var showCandidates = false
 
     /// Prices spoken into recent quotes that aren't saved here yet. Read from
@@ -157,25 +157,11 @@ struct RateCardView: View {
 
     private var list: some View {
         List {
-            if typeOptions.count > 1 {
-                typeFilterRow
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 14, trailing: 0))
-            }
-
-            if !candidates.isEmpty, typeFilter == nil {
+            if !candidates.isEmpty {
                 readyToAddCard
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 18, trailing: 20))
-            }
-
-            if groups.isEmpty {
-                noMatchesRow
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 24, leading: 20, bottom: 0, trailing: 20))
             }
 
             ForEach(groups, id: \.label) { group in
@@ -199,15 +185,7 @@ struct RateCardView: View {
         .scrollContentBackground(.hidden)
     }
 
-    // MARK: - Filtering
-
-    /// The types actually present, so the row never offers a filter that would
-    /// empty the screen.
-    private var typeOptions: [String] {
-        let present = Set(items.map(\.type))
-        return Self.typeOrder.filter(present.contains)
-            + present.subtracting(Self.typeOrder).sorted()
-    }
+    // MARK: - Grouping
 
     private static let typeOrder = ["labor", "material", "other"]
     private static let typeLabels = ["labor": "Labor", "material": "Materials",
@@ -217,58 +195,10 @@ struct RateCardView: View {
         typeLabels[type] ?? type.capitalized
     }
 
-    /// Laid out, not scrolled. Four short words fit a phone, and a row that
-    /// scrolls hides the filters that don't — `FlowLayout` wraps to a second
-    /// line instead, which is what the trade chips in onboarding already do.
-    private var typeFilterRow: some View {
-        FlowLayout(spacing: 8) {
-            filterChip("All", isSelected: typeFilter == nil) { typeFilter = nil }
-            ForEach(typeOptions, id: \.self) { type in
-                filterChip(Self.label(for: type), isSelected: typeFilter == type) {
-                    // Tapping the active one clears it, so the row doesn't need
-                    // "All" to be a target you must aim back at.
-                    typeFilter = typeFilter == type ? nil : type
-                }
-            }
-        }
-        .padding(.horizontal, 20)
-    }
-
-    /// Flat, and drawn here rather than by the system.
-    ///
-    /// The glass button styles were tried and carry a shadow and a plate of
-    /// their own — that is what glass is, and no amount of containing it takes
-    /// them off. These sit on a list, not on a floating bar, so they are the
-    /// same capsule the unit chips and the trade chips already use.
-    private func filterChip(_ title: String,
-                            isSelected: Bool,
-                            select: @escaping () -> Void) -> some View {
-        Button {
-            UISelectionFeedbackGenerator().selectionChanged()
-            withAnimation(.snappy(duration: 0.18)) { select() }
-        } label: {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(isSelected ? .white : Color(.mainText))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(isSelected ? Color(.royalBlue600) : Color(.cardSurface),
-                            in: Capsule())
-                .overlay(
-                    Capsule().strokeBorder(isSelected ? .clear : Color(.separator),
-                                           lineWidth: 0.5)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    /// Rates by type, honoring the chip, in the order the add form offers them.
-    /// Anything unrecognised sorts last so a rate can't go missing.
+    /// Rates by type, in the order the add form offers them. Anything
+    /// unrecognised sorts last so a rate can't go missing.
     private var groups: [(label: String, items: [RateCardItem])] {
-        let filtered = typeFilter.map { type in
-            items.filter { $0.type == type }
-        } ?? items
-        let byType = Dictionary(grouping: filtered, by: \.type)
+        let byType = Dictionary(grouping: items, by: \.type)
         // Counted in the heading, the way Home writes "Drafts · 5".
         let known = Self.typeOrder.compactMap { type in
             byType[type].map { ("\(Self.label(for: type)) · \($0.count)", $0) }
@@ -278,15 +208,6 @@ struct RateCardView: View {
             return ("\(Self.label(for: type)) · \(group.count)", group)
         }
         return known + rest
-    }
-
-    /// Only reachable when a type chip is selected and its last rate was just
-    /// deleted — the chip lingers a beat after the rates behind it are gone.
-    private var noMatchesRow: some View {
-        Text("Nothing saved under this type yet.")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     // MARK: - Rows
@@ -340,6 +261,13 @@ struct RateCardView: View {
             .padding(.vertical, 16)
             .background(Color(.cardSurface), in: Self.cardShape)
             .overlay(Self.cardShape.strokeBorder(Color(.separator), lineWidth: 0.5))
+            // A shadow soft enough to lift the card off the page without
+            // announcing itself. Tied to the scheme rather than a fixed black:
+            // in the dark the page is already near-black and a black shadow is
+            // invisible, so it lightens to almost nothing and the border does
+            // the lifting instead.
+            .shadow(color: .black.opacity(scheme == .dark ? 0.22 : 0.06),
+                    radius: 5, x: 0, y: 2)
         }
         .buttonStyle(CardPressStyle())
         .contentShape(.contextMenuPreview, Self.cardShape)
