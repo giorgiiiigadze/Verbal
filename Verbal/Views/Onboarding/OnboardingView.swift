@@ -453,6 +453,11 @@ struct OnboardingView: View {
                 }
             }
             .scrollIndicators(.hidden)
+            // Runs to the edges of the screen rather than stopping at the
+            // page's margin, the same as the quote screen's chips. Clipped to
+            // the margin the row reads as a short list that happens to be cut
+            // off; running out past it, it reads as one that carries on.
+            .scrollClipDisabled()
 
             ScrollView {
                 VStack(spacing: 8) {
