@@ -31,7 +31,6 @@ struct RateCardView: View {
     /// question is what used to be. A returning user on a new phone is told
     /// about the feature once more, which is the harmless way to be wrong.
     @AppStorage("hasSavedRates") private var hasSavedRates = false
-    @State private var searchText = ""
     /// Nil is "All". Holds a raw type ("labor"), not a label.
     @State private var typeFilter: String?
     @State private var showCandidates = false
@@ -66,23 +65,35 @@ struct RateCardView: View {
         .background(Color(.homeBackground))
         .navigationTitle("Rate card")
         // Small and fixed in the bar rather than a large heading that grows and
-        // collapses with the scroll. The screen is a list of prices with a
-        // search field over it, and the name of the tab is a label on it, not a
-        // headline — the large title spent its height announcing something the
-        // tab bar had already said. Fixed also means it is there in every state,
-        // including the two empty ones where a collapsing title has nothing to
-        // collapse against.
+        // collapses with the scroll — the large title spent its height on the
+        // name of a screen the header button already announced. Fixed also
+        // means it is there in every state, including the two empty ones where
+        // a collapsing title has nothing to collapse against.
         .navigationBarTitleDisplayMode(.inline)
-        // The same search Home has, in the same place. A card of eight rates
-        // doesn't need it; the card this screen is trying to encourage does.
-        .searchable(text: $searchText, prompt: "Search rates")
-        .searchToolbarBehavior(.minimize)
+        // Pushed onto Home's stack, so it inherits Home's tab bar. Hidden here:
+        // this is a screen you went into to do one thing, not one of the app's
+        // standing places, and leaving the bar under it invites a sideways jump
+        // out of a job half-done. The back button is the way out.
+        .toolbar(.hidden, for: .tabBar)
+        // No search. It was here when the rate card was a tab someone might
+        // arrive at with a long list already in mind; reached now from Home's
+        // header, it's a short list you came to add to, and the type chips are
+        // enough to find a rate among a page of them. Adding one is the reason
+        // to open the screen, so it takes the trailing slot the search used to.
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    showAdd = true
-                } label: {
-                    Image(systemName: "plus")
+            ToolbarItem(placement: .topBarTrailing) {
+                // Only over the list. Every empty and error state carries its
+                // own way to add a rate, so a header button beside it would be
+                // the same offer twice — and on the "no rates" message it would
+                // sit in a bar above a screen that is already asking for exactly
+                // that.
+                if !items.isEmpty {
+                    Button {
+                        showAdd = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Add a rate")
                 }
             }
         }
@@ -153,7 +164,7 @@ struct RateCardView: View {
                     .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 14, trailing: 0))
             }
 
-            if !candidates.isEmpty, searchText.isEmpty, typeFilter == nil {
+            if !candidates.isEmpty, typeFilter == nil {
                 readyToAddCard
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -179,10 +190,8 @@ struct RateCardView: View {
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 8, trailing: 20))
 
-                ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
-                    rateRow(item,
-                            isFirst: index == 0,
-                            isLast: index == group.items.count - 1)
+                ForEach(group.items) { item in
+                    rateRow(item)
                 }
             }
         }
@@ -253,16 +262,12 @@ struct RateCardView: View {
         .buttonStyle(.plain)
     }
 
-    /// Rates by type, after the search and the chip, in the order the add form
-    /// offers them. Anything unrecognised sorts last so a rate can't go missing.
+    /// Rates by type, honoring the chip, in the order the add form offers them.
+    /// Anything unrecognised sorts last so a rate can't go missing.
     private var groups: [(label: String, items: [RateCardItem])] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let filtered = items.filter { item in
-            guard typeFilter == nil || item.type == typeFilter else { return false }
-            guard !query.isEmpty else { return true }
-            return item.name.lowercased().contains(query)
-                || (item.unit?.lowercased().contains(query) ?? false)
-        }
+        let filtered = typeFilter.map { type in
+            items.filter { $0.type == type }
+        } ?? items
         let byType = Dictionary(grouping: filtered, by: \.type)
         // Counted in the heading, the way Home writes "Drafts · 5".
         let known = Self.typeOrder.compactMap { type in
@@ -275,10 +280,10 @@ struct RateCardView: View {
         return known + rest
     }
 
+    /// Only reachable when a type chip is selected and its last rate was just
+    /// deleted — the chip lingers a beat after the rates behind it are gone.
     private var noMatchesRow: some View {
-        Text(searchText.isEmpty
-             ? "Nothing saved under this type yet."
-             : "No rates match “\(searchText)”.")
+        Text("Nothing saved under this type yet.")
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
@@ -286,12 +291,17 @@ struct RateCardView: View {
 
     // MARK: - Rows
 
-    /// One saved price, inside its type's card.
+    /// One saved price, on its own card.
+    ///
+    /// It used to be a segment of a per-type card, joined to its neighbours by
+    /// dividers; now each rate stands alone, drawn as the same card a quote gets
+    /// on Home — so a price on this screen and a quote on that one read as the
+    /// same kind of object, which they nearly are.
     ///
     /// Name and money on the top line because that pairing is what's being
     /// compared down the column; the unit sits under the name where it qualifies
     /// the job rather than competing with the number.
-    private func rateRow(_ item: RateCardItem, isFirst: Bool, isLast: Bool) -> some View {
+    private func rateRow(_ item: RateCardItem) -> some View {
         Button {
             itemToEdit = item
         } label: {
@@ -327,17 +337,16 @@ struct RateCardView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
-            .padding(.vertical, 13)
-            .background(alignment: .bottom) {
-                if !isLast { Divider().padding(.leading, 16) }
-            }
-            .background(groupedCardBackground(isFirst: isFirst, isLast: isLast))
+            .padding(.vertical, 16)
+            .background(Color(.cardSurface), in: Self.cardShape)
+            .overlay(Self.cardShape.strokeBorder(Color(.separator), lineWidth: 0.5))
         }
         .buttonStyle(CardPressStyle())
-        .contentShape(.contextMenuPreview, Self.groupedCardShape(isFirst: isFirst, isLast: isLast))
+        .contentShape(.contextMenuPreview, Self.cardShape)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+        // The gap between cards, so each reads as its own rather than a strip.
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
         .contextMenu {
             Button {
                 itemToEdit = item
@@ -372,29 +381,8 @@ struct RateCardView: View {
         }
     }
 
-    private static func groupedCardShape(isFirst: Bool, isLast: Bool) -> UnevenRoundedRectangle {
-        let radius: CGFloat = 18
-        return UnevenRoundedRectangle(
-            topLeadingRadius: isFirst ? radius : 0,
-            bottomLeadingRadius: isLast ? radius : 0,
-            bottomTrailingRadius: isLast ? radius : 0,
-            topTrailingRadius: isFirst ? radius : 0,
-            style: .continuous)
-    }
-
-    /// A type's rates read as one card, but a List can only paint a row at a
-    /// time. Drawn per row, the border would lay a hairline across every seam
-    /// and double up with the dividers — so its horizontal edges are pushed just
-    /// outside the row and clipped, leaving the sides and one outline.
-    private func groupedCardBackground(isFirst: Bool, isLast: Bool) -> some View {
-        let shape = Self.groupedCardShape(isFirst: isFirst, isLast: isLast)
-        return shape
-            .fill(Color(.cardSurface))
-            .overlay(shape.strokeBorder(Color(.separator), lineWidth: 0.5))
-            .padding(.top, isFirst ? 0 : -1)
-            .padding(.bottom, isLast ? 0 : -1)
-            .clipped()
-    }
+    /// One radius for every rate card, matching the quote card on Home.
+    private static let cardShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
 
     /// Prices already spoken into quotes, waiting to become rates. The blue is
     /// the app's "this card means something" fill, and it earns it here: it's

@@ -26,6 +26,9 @@ struct HomeView: View {
     @State private var quoteToDelete: QuoteSummary?
     @State private var quoteToDuplicate: QuoteSummary?
     @State private var searchText = ""
+    /// Drives the search field, because the magnifier that opens it is ours —
+    /// see the toolbar group.
+    @State private var isSearching = false
     @State private var toast: Toast?
     /// True when the last fetch failed — distinguishes "no quotes" from
     /// "couldn't reach the server".
@@ -71,8 +74,18 @@ struct HomeView: View {
             // title was giving its height to a name the tab bar is already
             // showing, on the screen with the most to list.
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Search quotes")
-            .searchToolbarBehavior(.minimize)
+            // Attached only while searching, so the screen carries no search
+            // field until one is asked for.
+            //
+            // The minimized behaviour would have kept it out of the way too,
+            // but the button it collapses into sits in a container of its own
+            // and won't join a neighbour — which is what made the corner read
+            // as two circles rather than one pill. Ours opens it instead, and
+            // this stays absent until it does.
+            .modifier(SearchWhenAsked(isActive: isSearching,
+                                      text: $searchText,
+                                      isPresented: $isSearching,
+                                      prompt: "Search quotes"))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
@@ -86,6 +99,36 @@ struct HomeView: View {
                               ? "line.3.horizontal.decrease"
                               : "line.3.horizontal.decrease.circle.fill")
                     }
+                }
+                // The rate card, which used to be a tab of its own. It is setup
+                // rather than a place — filled in once and topped up now and
+                // then, mostly from the prompt after a recording — so it was
+                // spending a permanent slot on a monthly visit.
+                //
+                // One group, so the bar gives the pair a single glass container:
+                // the rate card and search are both "leave this list", and two
+                // separate circles made them look like two unrelated controls.
+                //
+                // Both buttons are ours because the system's search item cannot
+                // be pulled into a group with a custom one — it brings its own
+                // container wherever it is placed. The cost is that the
+                // magnifier drives `isSearching` by hand instead of the system
+                // doing it; the search field itself is still `.searchable`, so
+                // the keyboard, cancel and dismissal behaviour are unchanged.
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    NavigationLink {
+                        RateCardView()
+                    } label: {
+                        Image(systemName: "rectangle.stack.fill")
+                    }
+                    .accessibilityLabel("Rate card")
+
+                    Button {
+                        isSearching = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .accessibilityLabel("Search quotes")
                 }
             }
             .sheet(item: $shareAfterDetails) { quote in
@@ -968,7 +1011,32 @@ struct HomeView: View {
 
 // MARK: - Row
 
-private struct QuoteRow: View {
+/// Adds `.searchable` only once search has been asked for, and takes it away
+/// again when it's dismissed.
+///
+/// `.searchable` with an `isPresented` binding still reserves the field's place
+/// in the navigation bar while it's closed, which is a search bar sitting on a
+/// screen nobody asked to search. Attaching the modifier itself conditionally
+/// is what actually leaves the screen alone until the magnifier is tapped.
+struct SearchWhenAsked: ViewModifier {
+    let isActive: Bool
+    @Binding var text: String
+    @Binding var isPresented: Bool
+    let prompt: String
+
+    func body(content: Content) -> some View {
+        if isActive {
+            content.searchable(text: $text, isPresented: $isPresented, prompt: prompt)
+        } else {
+            content
+        }
+    }
+}
+
+/// Internal rather than private: the clients tab lists a client's quotes and
+/// they have to be the same row, or the app has two ways of drawing a quote and
+/// they drift.
+struct QuoteRow: View {
     let quote: QuoteSummary
     /// Lines this quote can't price yet. Passed in because the summary row
     /// doesn't know what's inside a quote — the list reads it from the prefetch.

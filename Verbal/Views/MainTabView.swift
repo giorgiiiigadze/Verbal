@@ -7,7 +7,10 @@ import SwiftUI
 import UIKit
 
 struct MainTabView: View {
-    private enum TabItem: Hashable { case home, rateCard, profile, record }
+    /// The rate card is deliberately absent: it lives in Home's header now.
+    /// A tab is for somewhere you go back to; the rate card is something you
+    /// set up, and it was holding a quarter of the bar for a monthly visit.
+    private enum TabItem: Hashable { case home, clients, profile, record }
 
     @Environment(SessionStore.self) private var session
     @Environment(\.colorScheme) private var colorScheme
@@ -65,8 +68,8 @@ struct MainTabView: View {
                     Image(.homeTab)
                 }
             }
-            Tab("Rate card", systemImage: "rectangle.stack.fill", value: .rateCard) {
-                NavigationStack { RateCardView() }
+            Tab("Clients", systemImage: "person.2.fill", value: .clients) {
+                NavigationStack { ClientsView() }
             }
             Tab(value: TabItem.profile) {
                 NavigationStack { ProfileView() }
