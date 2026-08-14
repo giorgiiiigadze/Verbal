@@ -71,84 +71,82 @@ struct SaveRatesSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Save these prices?")
-                    .font(.robotoSlab(22, relativeTo: .title2))
-                    .foregroundStyle(Color(.mainText))
-                Spacer()
-                Button(role: .close) { dismiss() }
-            }
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Verbal fills them in automatically next time you quote the same work. Leave any blank to skip it.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 12)
 
-            Text("Verbal fills them in automatically next time you quote the same work. Leave any blank to skip it.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 6)
-
-            // One bordered table with hairline rules, matching how line items
-            // are drawn on the quote itself — rather than a card per row, each
-            // holding another boxed field.
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        row(item)
-                        if index != items.count - 1 {
-                            Divider()
+                // One bordered table with hairline rules, matching how line items
+                // are drawn on the quote itself — rather than a card per row, each
+                // holding another boxed field.
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                            row(item)
+                            if index != items.count - 1 {
+                                Divider()
+                            }
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                    )
                 }
-                .padding(.horizontal, 16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
+                .scrollBounceBehavior(.basedOnSize)
+                .padding(.top, 18)
             }
-            .scrollBounceBehavior(.basedOnSize)
-            .padding(.top, 18)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 24)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { hideKeyboard() }.fontWeight(.semibold)
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            // A single action. The close control in the header is the way out,
-            // so a second "Not now" underneath would only add weight.
-            Button {
-                save()
-            } label: {
-                Group {
-                    if isSaving {
-                        ProgressView().tint(.white)
-                    } else {
-                        Text(priced.isEmpty
-                             ? "Add a price to save"
-                             : "Save \(priced.count) rate\(priced.count == 1 ? "" : "s")")
-                            .font(.headline)
-                    }
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(priced.isEmpty
-                            ? Color(.royalBlue600).opacity(0.4)
-                            : Color(.royalBlue600),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .disabled(priced.isEmpty || isSaving)
             .padding(.horizontal, 24)
-            .padding(.top, 14)
-            .padding(.bottom, 12)
-            .background(Color(.surface))
+            .background(Color(.systemBackground))
+            .navigationTitle("Save these prices?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { hideKeyboard() }.fontWeight(.semibold)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                // A single action. The close control in the header is the way out,
+                // so a second "Not now" underneath would only add weight.
+                Button {
+                    save()
+                } label: {
+                    Group {
+                        if isSaving {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text(priced.isEmpty
+                                 ? "Add a price to save"
+                                 : "Save \(priced.count) rate\(priced.count == 1 ? "" : "s")")
+                                .font(.headline)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(priced.isEmpty
+                                ? Color(.royalBlue600).opacity(0.4)
+                                : Color(.royalBlue600),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(priced.isEmpty || isSaving)
+                .padding(.horizontal, 24)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
+                .background(Color(.systemBackground))
+            }
         }
         .presentationDetents([.height(detentHeight), .large])
-        .presentationCornerRadius(28)
-        .presentationBackground(Color(.surface))
+        .presentationBackground(Color(.systemBackground))
     }
 
     private func row(_ item: UnpricedItem) -> some View {

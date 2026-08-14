@@ -26,84 +26,81 @@ struct ClientSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                Text("Who's it for?")
-                    .font(.robotoSlab(22, relativeTo: .title2))
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                TextField("e.g. Sarah Chen", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.body)
                     .foregroundStyle(Color(.mainText))
-                Spacer()
-                Button(role: .close) { dismiss() }
-            }
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .focused($fieldFocused)
+                    .onSubmit(commit)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color(.royalBlue600).opacity(0.18), lineWidth: 1)
+                    )
 
-            Text("Their name goes at the top of the quote you send.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            TextField("e.g. Sarah Chen", text: $draft)
-                .textFieldStyle(.plain)
-                .font(.body)
-                .foregroundStyle(Color(.mainText))
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled()
-                .submitLabel(.done)
-                .focused($fieldFocused)
-                .onSubmit(commit)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
-
-            if !suggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recent")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 8) {
-                            ForEach(suggestions, id: \.self) { suggestion in
-                                Button {
-                                    draft = suggestion
-                                    commit()
-                                } label: {
-                                    Text(suggestion)
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundStyle(Color(.blueAccentText))
-                                        .lineLimit(1)
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 9)
-                                        .background(Color(.royalBlue25), in: Capsule())
+                if !suggestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Recent")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 8) {
+                                ForEach(suggestions, id: \.self) { suggestion in
+                                    Button {
+                                        draft = suggestion
+                                        commit()
+                                    } label: {
+                                        Text(suggestion)
+                                            .font(.subheadline.weight(.medium))
+                                            .foregroundStyle(Color(.blueAccentText))
+                                            .lineLimit(1)
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 9)
+                                            .background(Color(.royalBlue25), in: Capsule())
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
+                        .scrollIndicators(.hidden)
+                        .scrollClipDisabled()
                     }
-                    .scrollIndicators(.hidden)
-                    .scrollClipDisabled()
+                    .transition(.opacity)
                 }
-                .transition(.opacity)
-            }
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-            Button(action: commit) {
-                Text("Save")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(Color(.royalBlue600), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Button(action: commit) {
+                    Text("Save")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Color(.royalBlue600), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.systemBackground))
+            .navigationTitle("Who's it for?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }
+                }
+            }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: suggestions)
         .presentationDetents([.height(360)])
-        .presentationCornerRadius(28)
-        .presentationBackground(Color(.surface))
+        .presentationBackground(Color(.systemBackground))
         .task {
             draft = name
             recent = (try? await QuoteService.customerNames()) ?? []

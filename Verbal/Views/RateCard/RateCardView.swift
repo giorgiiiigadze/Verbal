@@ -651,65 +651,57 @@ private struct ReadyToAddSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Ready to add")
-                    .font(.robotoSlab(22, relativeTo: .title2))
-                    .foregroundStyle(Color(.mainText))
-                Spacer()
-                Button(role: .close) { dismiss() }
-            }
-            .padding(.horizontal, 24)
-
-            Text("You priced these by voice. Save them and the next quote prices itself.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 6)
-                .padding(.horizontal, 24)
-
+        NavigationStack {
             ScrollView {
                 VStack(spacing: 8) {
                     ForEach(candidates) { candidate in
                         row(candidate)
                     }
                 }
-                .padding(.top, 18)
+                .padding(.top, 12)
                 .padding(.horizontal, 24)
+                .padding(.bottom, 12)
             }
-            .scrollBounceBehavior(.basedOnSize)
-        }
-        .padding(.top, 24)
-        .safeAreaInset(edge: .bottom) {
-            Button { save() } label: {
-                Group {
-                    if isSaving {
-                        ProgressView().tint(.white)
-                    } else {
-                        Text(chosen.isEmpty
-                             ? "Nothing selected"
-                             : "Save \(chosen.count) rate\(chosen.count == 1 ? "" : "s")")
-                            .font(.headline)
-                    }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .scrollBounceBehavior(.always)
+            .navigationTitle("Ready to add")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(chosen.isEmpty
-                            ? Color(.royalBlue600).opacity(0.4)
-                            : Color(.royalBlue600),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .buttonStyle(.plain)
-            .disabled(chosen.isEmpty || isSaving)
-            .padding(.horizontal, 24)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
-            .background(Color(.surface))
+            .safeAreaInset(edge: .bottom) {
+                Button { save() } label: {
+                    Group {
+                        if isSaving {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text(chosen.isEmpty
+                                 ? "Nothing selected"
+                                 : "Save \(chosen.count) rate\(chosen.count == 1 ? "" : "s")")
+                                .font(.headline)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(chosen.isEmpty
+                                ? Color(.royalBlue600).opacity(0.4)
+                                : Color(.royalBlue600),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(chosen.isEmpty || isSaving)
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+                .background(Color(.systemBackground))
+            }
         }
+        .background(Color(.systemBackground))
         .presentationDetents([.height(detentHeight), .large])
-        .presentationCornerRadius(28)
-        .presentationBackground(Color(.surface))
+        .presentationBackground(Color(.systemBackground))
     }
 
     /// Sized to the list, like the sheet that offers unpriced lines: three
@@ -869,23 +861,7 @@ private struct AddRateItemView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(target == nil ? "New rate" : "Edit rate")
-                    .font(.robotoSlab(22, relativeTo: .title2))
-                    .foregroundStyle(Color(.mainText))
-                Spacer()
-                Button(role: .close) { dismiss() }
-            }
-            .padding(.horizontal, 24)
-
-            Text("Verbal fills this in automatically next time you quote the same work.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 6)
-                .padding(.horizontal, 24)
-
+        NavigationStack {
             // The inset moved off the sheet and onto each piece inside it, so
             // this scroll view spans the full width. It is what clips the unit
             // chips, and inset by 24 it cut them off short of the edge.
@@ -928,39 +904,45 @@ private struct AddRateItemView: View {
                     // two different ways.
                     chipRow("Per", options: unitOptions, selection: $unit)
                 }
-                .padding(.top, 20)
+                .padding(.top, 16)
                 .padding(.horizontal, 24)
             }
             .scrollBounceBehavior(.basedOnSize)
-        }
-        .padding(.top, 24)
-        .safeAreaInset(edge: .bottom) {
-            Button { save() } label: {
-                Group {
-                    if isSaving {
-                        ProgressView().tint(.white)
-                    } else {
-                        Text(target == nil ? "Save rate" : "Update rate").font(.headline)
-                    }
+            .background(Color(.systemBackground))
+            .navigationTitle(target == nil ? "New rate" : "Edit rate")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(canSave ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .buttonStyle(.plain)
-            .disabled(!canSave || isSaving)
-            .padding(.horizontal, 24)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
-            .background(Color(.surface))
+            .safeAreaInset(edge: .bottom) {
+                Button { save() } label: {
+                    Group {
+                        if isSaving {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text(target == nil ? "Save rate" : "Update rate").font(.headline)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(canSave ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSave || isSaving)
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+                .background(Color(.systemBackground))
+            }
         }
         // The chip row stands ~28pt taller than the segmented control it
         // replaced — a caption above it, and a taller target under the thumb.
         .presentationDetents([.height(560)])
-        .presentationCornerRadius(28)
-        .presentationBackground(Color(.surface))
+        .presentationBackground(Color(.systemBackground))
         .task {
             if let editing { adopt(editing) }
             try? await Task.sleep(for: .seconds(0.35))

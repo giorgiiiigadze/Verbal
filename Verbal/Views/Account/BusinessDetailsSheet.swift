@@ -50,75 +50,79 @@ struct BusinessDetailsSheet: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                Image(systemName: "storefront")
-                    .font(.system(size: 38, weight: .medium))
-                    .foregroundStyle(Color(.blueAccentText))
-                    .frame(height: 46)
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 0) {
+                    Image(systemName: "storefront")
+                        .font(.system(size: 34, weight: .medium))
+                        .foregroundStyle(Color(.blueAccentText))
+                        .frame(height: 42)
 
-                Text("Put your name on it")
-                    .font(.robotoSlab(24, relativeTo: .title2))
-                    .foregroundStyle(Color(.mainText))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 18)
+                    Text("These print at the top of every quote you send, and tell the client how to say yes.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 12)
 
-                Text("These print at the top of every quote you send, and tell the client how to say yes.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 8)
-
-                VStack(spacing: 10) {
-                    field("Business name", text: $businessName)
-                        .focused($nameFocused)
-                        .textInputAutocapitalization(.words)
-                    field("Phone", text: $phone)
-                        .keyboardType(.phonePad)
-                }
-                .padding(.top, 24)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-        }
-        .scrollBounceBehavior(.basedOnSize)
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 6) {
-                Button {
-                    save()
-                } label: {
-                    Group {
-                        if isSaving {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text("Save and continue").font(.headline)
-                        }
+                    VStack(spacing: 10) {
+                        field("Business name", text: $businessName)
+                            .focused($nameFocused)
+                            .textInputAutocapitalization(.words)
+                        field("Phone", text: $phone)
+                            .keyboardType(.phonePad)
                     }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(canSave ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
-                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .padding(.top, 24)
                 }
-                .buttonStyle(.plain)
-                .disabled(!canSave || isSaving)
-
-                Button("Not now") { finish() }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .disabled(isSaving)
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-            .background(Color(.surface))
+            .scrollBounceBehavior(.basedOnSize)
+            .background(Color(.systemBackground))
+            .navigationTitle("Business details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { finish() }
+                        .disabled(isSaving)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 6) {
+                    Button {
+                        save()
+                    } label: {
+                        Group {
+                            if isSaving {
+                                ProgressView().tint(.white)
+                            } else {
+                                Text("Save and continue").font(.headline)
+                            }
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(canSave ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
+                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canSave || isSaving)
+
+                    Button("Not now") { finish() }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .disabled(isSaving)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .background(Color(.systemBackground))
+            }
         }
         .presentationDetents([.height(520)])
-        .presentationCornerRadius(28)
-        .presentationBackground(Color(.surface))
+        .presentationBackground(Color(.systemBackground))
         .task {
             // Prefill anything already saved, so this is never a retype.
             businessName = session.businessProfile?.businessName ?? ""

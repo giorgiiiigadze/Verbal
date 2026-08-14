@@ -68,78 +68,78 @@ struct ShareQuotePanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack {
-                Text("Share quote")
-                    .font(.robotoSlab(22, relativeTo: .title2))
-                    .foregroundStyle(Color(.mainText))
-                Spacer()
-                Button(role: .close) { dismiss() }
-            }
-
-            // Quote preview — the real first page when we have one, so the user
-            // sees exactly what the client will get before it goes out.
-            HStack(spacing: 14) {
-                Group {
-                    if let preview {
-                        Image(uiImage: preview)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } else {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color(.royalBlue25))
-                            .overlay(
-                                Image(systemName: "doc.text")
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundStyle(Color(.blueAccentText))
-                            )
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                // Quote preview — the real first page when we have one, so the user
+                // sees exactly what the client will get before it goes out.
+                HStack(spacing: 14) {
+                    Group {
+                        if let preview {
+                            Image(uiImage: preview)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } else {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color(.royalBlue25))
+                                .overlay(
+                                    Image(systemName: "doc.text")
+                                        .font(.system(size: 20, weight: .semibold))
+                                        .foregroundStyle(Color(.blueAccentText))
+                                )
+                        }
                     }
-                }
-                .frame(width: 46, height: 60)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
-                .onTapGesture { if pdfURL != nil { isPreviewing = true } }
+                    .frame(width: 46, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                    )
+                    .onTapGesture { if pdfURL != nil { isPreviewing = true } }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundStyle(Color(.mainText))
-                        .lineLimit(1)
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title)
+                            .font(.headline)
+                            .foregroundStyle(Color(.mainText))
+                            .lineLimit(1)
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+                .padding(14)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+
+                // Actions.
+                HStack(spacing: 12) {
+                    actionButton(title: hasPDF ? "Send quote" : "Share via…",
+                                 systemImage: "square.and.arrow.up") {
+                        showSystemShare = true
+                    }
+                    // A link rather than the quote's text, which this used to copy.
+                    // The text was a snapshot that went stale the moment anything
+                    // changed and gave the customer nothing to do; the link is
+                    // always current, tells you when they've opened it, and lets
+                    // them answer.
+                    actionButton(title: linkTitle,
+                                 systemImage: copied ? "checkmark" : "link") {
+                        copyLink()
+                    }
+                    .disabled(isLinking)
+                }
             }
-            .padding(14)
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-
-            // Actions.
-            HStack(spacing: 12) {
-                actionButton(title: hasPDF ? "Send quote" : "Share via…",
-                             systemImage: "square.and.arrow.up") {
-                    showSystemShare = true
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .navigationTitle("Share quote")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }
                 }
-                // A link rather than the quote's text, which this used to copy.
-                // The text was a snapshot that went stale the moment anything
-                // changed and gave the customer nothing to do; the link is
-                // always current, tells you when they've opened it, and lets
-                // them answer.
-                actionButton(title: linkTitle,
-                             systemImage: copied ? "checkmark" : "link") {
-                    copyLink()
-                }
-                .disabled(isLinking)
             }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .presentationDetents([.height(300)])
-        .presentationDragIndicator(.hidden)
         .presentationBackground(.ultraThinMaterial)
         .task {
             guard let document else { return }

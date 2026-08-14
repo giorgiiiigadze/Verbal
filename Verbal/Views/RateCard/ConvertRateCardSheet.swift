@@ -121,15 +121,17 @@ struct ConvertRateCardSheet: View {
                 .padding(.horizontal, 4)
             }
             .padding(24)
-            .background(Color(.homeBackground))
+            .background(Color(.systemBackground))
+            .navigationTitle("Convert rates")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(role: .cancel) { dismiss() }.disabled(isSaving)
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }.disabled(isSaving)
                 }
             }
         }
         .presentationDetents([.medium])
+        .presentationBackground(Color(.systemBackground))
         .task {
             do {
                 rate = try await FXService.rate(from: fromCode, to: toCode)
