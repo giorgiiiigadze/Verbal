@@ -2,13 +2,13 @@
 //  OnboardingView.swift
 //  Verbal
 //
-//  Three screens between installing the app and signing in.
+//  The screens between installing the app and signing in.
 //
 //  Deliberately not a carousel of promises. The first screen shows the app
 //  doing its one trick, because a voice-to-quote app is easier to prove than to
-//  describe; the other two ask the only questions worth asking before there is
-//  an account — and both of their answers do real work rather than being
-//  collected for their own sake.
+//  describe; the rest ask the only questions worth asking before there is an
+//  account — and every one of those answers does real work rather than being
+//  collected for its own sake.
 //
 //  They run before auth, so there is no user to save anything to. Both answers
 //  are held on the device and written to the profile on the first sign-in.
@@ -42,14 +42,14 @@ struct OnboardingView: View {
     @State private var revealed = false
 
     private enum Step: Hashable {
-        case showcase, trade, jobs, prices, business, reveal, video
+        case trade, jobs, prices, business, reveal, video
     }
 
     /// The steps this particular user will see. A trade with no preset list
     /// skips the jobs question rather than being shown a list that fits nobody,
     /// and pricing is skipped when nothing was ticked to price.
     private var steps: [Step] {
-        var list: [Step] = [.video, .showcase, .trade]
+        var list: [Step] = [.video, .trade]
         if !TradePresets.jobs(for: pendingTrade).isEmpty {
             list.append(.jobs)
             if !pickedJobs.isEmpty { list.append(.prices) }
@@ -164,7 +164,7 @@ struct OnboardingView: View {
 
     private var content: some View {
         ZStack {
-            // Plain ground. These screens ask six questions and show a sample
+            // Plain ground. These screens ask five questions and show a sample
             // quote, and drawn waves behind a form is decoration competing with
             // the thing being read. The illustration stays on sign-in, where
             // there is nothing to answer and it is the whole of the welcome —
@@ -175,7 +175,6 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Group {
                     switch current {
-                    case .showcase: showcase
                     case .trade: tradeStep
                     case .jobs: jobsStep
                     case .prices: pricesStep
@@ -236,7 +235,7 @@ struct OnboardingView: View {
         Button {
             advance()
         } label: {
-            Text(isFirstStep ? "Get Started!" : "Continue")
+            Text(isFirstStep ? "Get Started" : "Continue")
                 .font(.headline)
                 // Ink on the way in, blue on the way through. Getting started
                 // is a decision; the screens after it are steps, and a step
@@ -293,50 +292,6 @@ struct OnboardingView: View {
         }
         draft.rates = draftRates
         if draft.isEmpty { OnboardingDraft.clear() } else { draft.save() }
-    }
-
-    // MARK: - Step 1 · what it does
-
-    /// Shown, not described. The transformation is the product, and a sentence
-    /// claiming it happens is weaker than eight lines demonstrating it.
-    private var showcase: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            Text("Say the job.\nGet the quote.")
-                .font(.robotoSlab(34, relativeTo: .largeTitle))
-                .foregroundStyle(Color(.mainText))
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("“Remove the old toilet and fit the new one, ninety. Three mixer taps. Eight metres of the 20 mil pipe.”")
-                    .font(.callout)
-                    .italic()
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(.blueAccentText).opacity(0.5))
-                    .frame(maxWidth: .infinity)
-
-                LineItemsCard {
-                    LineItemRow(description: "Remove old toilet and fit new toilet",
-                                quantityText: "1 each", isMissingPrice: false,
-                                lineTotal: 90, currencyCode: currencyCode)
-                    Divider()
-                    LineItemRow(description: "Mixer taps", quantityText: "3 each",
-                                isMissingPrice: true, lineTotal: nil,
-                                currencyCode: currencyCode)
-                    Divider()
-                    LineItemRow(description: "20 mil pipe", quantityText: "8 m",
-                                isMissingPrice: true, lineTotal: nil,
-                                currencyCode: currencyCode)
-                }
-            }
-
-            Text("Prices you didn't say are flagged, never guessed.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
     }
 
     // MARK: - Step 2 · trade
@@ -663,18 +618,23 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Step 7 · the app, running
+    // MARK: - Step 1 · the app, running
 
-    /// The first thing anyone sees: a few seconds of the real app, in a phone,
-    /// before a single question is asked.
+    /// The first thing anyone sees: the real app, in a phone, before a single
+    /// question is asked.
     ///
-    /// Opening here rather than closing on it means the six questions that
+    /// Opening here rather than closing on it means the five questions that
     /// follow are answered by someone who has already seen what they are for.
     /// Asked cold they are a form; asked after this they are setup.
     ///
-    /// The frame is here and the film isn't. Drop a looping `VideoPlayer` (or an
+    /// The frame is here and the film isn't. Until it is, the glass holds a
+    /// quote rather than a play button: a still of the thing itself says more
+    /// than an icon promising one, and it is the real `LineItemsCard`, so it
+    /// can't quietly stop resembling the app.
+    ///
+    /// The clip goes in the same seam. Drop a looping `VideoPlayer` (or an
     /// `AVPlayerLayer` wrapped in a `UIViewRepresentable`, muted, no controls)
-    /// into `DevicePreview`'s content and delete the placeholder below — the
+    /// into `DevicePreview`'s content in place of `OnboardingPhoneScreen` — the
     /// screen is sized and positioned around whatever goes in there.
     ///
     /// Keep it short and silent. This plays before anyone has agreed to
@@ -686,18 +646,7 @@ struct OnboardingView: View {
     private var videoStep: some View {
         VStack(spacing: 20) {
             DevicePreview {
-                // Placeholder. Replaced by the clip.
-                ZStack {
-                    Color(.cardSurface)
-                    VStack(spacing: 10) {
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 40))
-                            .foregroundStyle(Color(.blueAccentText).opacity(0.35))
-                        Text("Preview")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                OnboardingPhoneScreen(currencyCode: currencyCode)
             }
             // Held to a share of the width rather than filling it. At full
             // width the phone crowded its own caption and reached for the
