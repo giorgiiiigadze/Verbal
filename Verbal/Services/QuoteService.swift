@@ -1210,7 +1210,33 @@ private struct LineItemFields: Encodable {
         case description, type, quantity, unit
         case unitPrice = "unit_price"
         case priceSource = "price_source"
-        case position
+        case position, confidence
+    }
+
+    /// Written by hand so every column is sent, nil included.
+    ///
+    /// A synthesised encoder leaves a nil optional out of the JSON entirely,
+    /// and an absent column in a PATCH tells PostgREST to leave that column
+    /// as it is. So clearing a price sent `price_source: "missing"` and kept
+    /// the old `unit_price` beside it — the row disagreed with itself, and the
+    /// price the user had just deleted was still there the next time they
+    /// opened the editor.
+    ///
+    /// `confidence` is always null. It is the model's read on a line it heard
+    /// spoken, and once the user has typed over that line there is nothing
+    /// left for the read to be about — a price someone has just corrected by
+    /// hand should not still be telling them it is worth checking. The same
+    /// applies to a line inserted here, which the model never saw at all.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(description, forKey: .description)
+        try container.encode(type, forKey: .type)
+        try container.encode(quantity, forKey: .quantity)
+        try container.encode(unit, forKey: .unit)
+        try container.encode(unitPrice, forKey: .unitPrice)
+        try container.encode(priceSource, forKey: .priceSource)
+        try container.encode(position, forKey: .position)
+        try container.encodeNil(forKey: .confidence)
     }
 }
 
