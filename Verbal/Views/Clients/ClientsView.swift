@@ -22,7 +22,7 @@ struct ClientsView: View {
     ///
     /// Grouped case-insensitively for the same reason `customerID(named:)`
     /// matches that way: "Marina Kapanadze" and "marina kapanadze" are one
-    /// person, and a list that says otherwise is a list of typos.
+    /// person, and a list that says     rotherwise is a list of typos.
     private var clients: [Client] {
         var byKey: [String: [QuoteSummary]] = [:]
         for quote in session.quotes {
@@ -30,9 +30,16 @@ struct ClientsView: View {
             guard !name.isEmpty else { continue }
             byKey[name.lowercased(), default: []].append(quote)
         }
-        return byKey.values
-            .compactMap(Client.init)
-            .sorted { ($0.lastQuoted ?? .distantPast) > ($1.lastQuoted ?? .distantPast) }
+        // Built with an explicit loop, not `.compactMap(Client.init)`: the
+        // initializer is main-actor isolated and a map closure is not, so the
+        // reference can't be handed to it. The loop runs here on the main actor.
+        var built: [Client] = []
+        for quotes in byKey.values {
+            if let client = Client(quotes) { built.append(client) }
+        }
+        return built.sorted {
+            ($0.lastQuoted ?? .distantPast) > ($1.lastQuoted ?? .distantPast)
+        }
     }
 
     private var filtered: [Client] {
