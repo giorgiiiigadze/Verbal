@@ -6,194 +6,14 @@
 //  (AI structured extraction), computes totals in code, and persists the quote,
 //  its line items, and the transcript to Supabase.
 //
+//  The domain types this service reads and writes live in Models/ —
+//  QuoteSummary, QuoteLineItem, GeneratedQuote, RateCardItem and friends. What
+//  stays here is the network surface: the service itself and the private
+//  request/insert payloads that only it ever encodes.
+//
 
 import Foundation
 import Supabase
-
-/// Lightweight quote row for the Home list.
-struct QuoteSummary: Identifiable, Decodable, Sendable {
-    let id: UUID
-    /// Mutable so Home can reflect a rename made on the detail screen.
-    var title: String?
-    let jobSummary: String?
-    let total: Double
-    /// Mutable so Home can optimistically reflect a status change from the menu.
-    var status: String
-    let createdAt: Date
-    /// ISO 4217 code this quote was priced in. Nil on legacy rows; formatting
-    /// falls back to the user's current setting in that case.
-    let currency: String?
-    /// Pinned quotes sort into a dedicated section at the top of the Home list.
-    /// Mutable so Home can optimistically reflect a pin toggle.
-    var pinned: Bool
-    /// Client-facing "what we'll do" bullet list (may be empty on legacy rows).
-    var scope: [String]
-
-    /// Sequential per-user reference, e.g. "0007". Assigned by a database
-    /// trigger on insert, so it's always present on new rows.
-    let number: String?
-    /// Date the quote stops being valid, as stored ("yyyy-MM-dd"). Kept as text
-    /// because Postgres `date` columns aren't ISO-8601 timestamps.
-    let validityDateText: String?
-    /// Name of the customer this quote is for, via the linked customer row.
-    let clientName: String?
-    /// Sum of the line items, before tax.
-    let subtotal: Double
-    /// Tax percentage (20 = 20%) and the resulting amount. Both are computed
-    /// by the database from `subtotal`, so they always agree with `total`.
-    let taxRate: Double
-    let taxAmount: Double
-
-    enum CodingKeys: String, CodingKey {
-        case id, title
-        case jobSummary = "job_summary"
-        case total, status
-        case createdAt = "created_at"
-        case currency, pinned, scope, number, subtotal
-        case taxRate = "tax_rate"
-        case taxAmount = "tax_amount"
-        case validityDate = "validity_date"
-        case customers
-    }
-
-    /// Shape of the embedded `customers(name)` relation.
-    private struct CustomerRef: Decodable { let name: String? }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(UUID.self, forKey: .id)
-        title = try c.decodeIfPresent(String.self, forKey: .title)
-        jobSummary = try c.decodeIfPresent(String.self, forKey: .jobSummary)
-        total = try c.decode(Double.self, forKey: .total)
-        status = try c.decode(String.self, forKey: .status)
-        createdAt = try c.decode(Date.self, forKey: .createdAt)
-        currency = try c.decodeIfPresent(String.self, forKey: .currency)
-        pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
-        scope = try c.decodeIfPresent([String].self, forKey: .scope) ?? []
-        number = try c.decodeIfPresent(String.self, forKey: .number)
-        validityDateText = try c.decodeIfPresent(String.self, forKey: .validityDate)
-        clientName = try c.decodeIfPresent(CustomerRef.self, forKey: .customers)?.name
-        // Legacy rows predate the tax columns being selected; fall back to a
-        // tax-free quote rather than failing to decode the whole list.
-        subtotal = try c.decodeIfPresent(Double.self, forKey: .subtotal) ?? total
-        taxRate = try c.decodeIfPresent(Double.self, forKey: .taxRate) ?? 0
-        taxAmount = try c.decodeIfPresent(Double.self, forKey: .taxAmount) ?? 0
-    }
-
-    /// True when a tax line should appear on the quote and its PDF.
-    var hasTax: Bool { taxRate > 0 && taxAmount > 0 }
-
-    var displayTitle: String {
-        if let title, !title.isEmpty { return title }
-        if let jobSummary, !jobSummary.isEmpty { return jobSummary }
-        return "Untitled quote"
-    }
-
-    /// "INV-0007" — the allocated number behind the user's own prefix.
-    ///
-    /// The prefix lives on the business profile rather than on the quote, so
-    /// changing it re-labels quotes already issued. That's the deliberate trade:
-    /// the alternative stamps a copy of it onto every row, and a trade that
-    /// fixes a typo in their prefix wants it fixed everywhere, not from here on.
-    func numberText(prefix: String?) -> String? {
-        guard let number, !number.isEmpty else { return nil }
-        let clean = (prefix ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return clean.isEmpty ? number : clean + number
-    }
-
-    /// "Quote INV-0007" — the reference shown to the user and printed on the PDF.
-    func numberLabel(prefix: String?) -> String? {
-        numberText(prefix: prefix).map { "Quote \($0)" }
-    }
-
-    var validityDate: Date? {
-        guard let validityDateText else { return nil }
-        return QuoteDateFormat.dayOnly.date(from: validityDateText)
-    }
-
-    /// True once the validity date has passed (status is left alone; this is
-    /// purely how the date reads to the user).
-    var isPastValidity: Bool {
-        guard let validityDate else { return false }
-        return validityDate < Calendar.current.startOfDay(for: Date())
-    }
-
-    /// How the status reads today. Nothing ever wrote "expired" to the column —
-    /// it was only ever selectable by hand — so a quote whose validity date had
-    /// passed went on counting as money in play for as long as the account
-    /// existed, quietly inflating the Home total.
-    ///
-    /// Only an outstanding offer can lapse. Accepted and declined are outcomes
-    /// and a date can't undo them; a draft was never sent, so nothing about it
-    /// has expired. That leaves sent and viewed — exactly the set the
-    /// outstanding figure is built from.
-    var effectiveStatus: String {
-        guard isPastValidity, status == "sent" || status == "viewed" else { return status }
-        return "expired"
-    }
-}
-
-extension Double {
-    /// Money rounded to two decimals, matching the database's `round(x, 2)`.
-    var roundedToCents: Double { (self * 100).rounded() / 100 }
-}
-
-/// Formatters for Postgres `date` values, which arrive as "yyyy-MM-dd".
-enum QuoteDateFormat {
-    /// An instant, for range filters. `dayOnly` can't be used for these: a date
-    /// with no time in them is read as midnight UTC, which is the wrong boundary
-    /// everywhere but one timezone.
-    static let timestamp: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
-    static let dayOnly: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-
-    /// Medium, localized rendering for display — e.g. "14 Aug 2026".
-    static func display(_ date: Date) -> String {
-        date.formatted(.dateTime.day().month(.abbreviated).year())
-    }
-}
-
-/// A line item shown on the quote detail table.
-struct QuoteLineItem: Identifiable, Decodable, Sendable {
-    let id: UUID
-    let description: String?
-    let type: String
-    let quantity: Double?
-    let unit: String?
-    let unitPrice: Double?
-    let priceSource: String?
-    /// How sure the model was of this line's quantity and price ("high"/"low").
-    /// Nil on lines the user typed themselves, and on anything saved before the
-    /// field started being persisted.
-    let confidence: String?
-    let position: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id, description, type, quantity, unit
-        case unitPrice = "unit_price"
-        case priceSource = "price_source"
-        case confidence, position
-    }
-
-    var isMissingPrice: Bool { priceSource == "missing" || unitPrice == nil }
-
-    var lineTotal: Double? {
-        guard let quantity, let unitPrice else { return nil }
-        return quantity * unitPrice
-    }
-
-    var quantityText: String? { quantityLabel(quantity, unit) }
-}
 
 enum QuoteService {
     private static var client: SupabaseClient { SupabaseManager.client }
@@ -961,139 +781,6 @@ enum QuoteService {
     }
 }
 
-/// A structured quote produced by the AI, before it's persisted — used in the review UI.
-struct GeneratedQuote: Sendable {
-    var title: String
-    var jobSummary: String
-    var scope: [String]
-    var notes: String?
-    var lineItems: [GeneratedLineItem]
-    /// The client the speaker named, if they named one. A suggestion only —
-    /// the user's own typing always wins.
-    var clientName: String?
-    /// What the model wants looked at before this goes to a customer: prices it
-    /// couldn't find, quantities it wasn't sure it heard right.
-    var flags: [String]
-}
-
-struct GeneratedLineItem: Identifiable, Sendable {
-    let id = UUID()
-    var description: String
-    var type: String
-    var quantity: Double?
-    var unit: String?
-    var unitPrice: Double?
-    var priceSource: String?
-    /// How sure the model was of this line's quantity and price ("high"/"low").
-    var confidence: String?
-
-    var isMissingPrice: Bool { priceSource == "missing" || unitPrice == nil }
-    var lineTotal: Double? {
-        guard let quantity, let unitPrice else { return nil }
-        return quantity * unitPrice
-    }
-    var quantityText: String? { quantityLabel(quantity, unit) }
-}
-
-/// Formats a quote's timestamp as a compact date + time indicator, e.g.
-/// "Just now", "4 minutes ago", "Today, 7:45 PM", "Yesterday, 7:45 PM", or "Jul 27".
-func quoteDateLabel(_ date: Date, now: Date = Date()) -> String {
-    let calendar = Calendar.current
-    let seconds = now.timeIntervalSince(date)
-
-    if seconds < 60 { return "Just now" }
-    if seconds < 3600 {
-        let minutes = Int(seconds / 60)
-        return "\(minutes) minute\(minutes == 1 ? "" : "s") ago"
-    }
-
-    let time = date.formatted(.dateTime.hour().minute())
-    if calendar.isDateInToday(date) { return "Today, \(time)" }
-    if calendar.isDateInYesterday(date) { return "Yesterday, \(time)" }
-    return date.formatted(.dateTime.month(.abbreviated).day())
-}
-
-/// Formats a quantity + unit like "8 each" or "20 meters".
-func quantityLabel(_ quantity: Double?, _ unit: String?) -> String? {
-    guard let quantity else { return nil }
-    let q = quantity.truncatingRemainder(dividingBy: 1) == 0
-        ? String(Int(quantity))
-        : String(format: "%.2f", quantity)
-    return [q, unit].compactMap { $0 }.joined(separator: " ")
-}
-
-/// A saved rate-card entry (labor/material/other) used to auto-price quotes.
-/// A price the user has already spoken into a quote, offered back as a rate.
-struct RateCandidate: Identifiable, Sendable {
-    let id = UUID()
-    let name: String
-    let unit: String?
-    let unitPrice: Double
-    let type: String
-
-    var priceText: String {
-        let amount = AppCurrency.format(unitPrice)
-        return [amount, unit].compactMap { $0 }.joined(separator: " / ")
-    }
-}
-
-struct RateCardItem: Identifiable, Decodable, Sendable {
-    let id: UUID
-    let name: String
-    let unit: String?
-    let unitPrice: Double?
-    let type: String
-    let active: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, unit
-        case unitPrice = "unit_price"
-        case type, active
-    }
-
-    var priceText: String? {
-        guard let unitPrice else { return nil }
-        let amount = AppCurrency.format(unitPrice)
-        return [amount, unit].compactMap { $0 }.joined(separator: " / ")
-    }
-
-    /// Whether this rate is plausibly the same job as `name`.
-    ///
-    /// Compared as normalised words rather than raw text. The extraction words
-    /// the same job differently on different runs, so matching exactly lets
-    /// "Re-tiling" past "Re tiling" — which is how one card came to hold three
-    /// prices for tiling and leave the model to choose between them.
-    ///
-    /// Deliberately loose, and used only to raise the question: a duplicate
-    /// that slips through becomes a wrong price in a customer's hands, while a
-    /// false match is something the user can see and decline.
-    func looksLike(_ name: String) -> Bool {
-        let mine = Self.nameWords(self.name)
-        let theirs = Self.nameWords(name)
-        guard !mine.isEmpty, !theirs.isEmpty else { return false }
-        let a = mine.joined(), b = theirs.joined()
-        if a == b || a.contains(b) || b.contains(a) { return true }
-        // A shared significant word: "Replace toilet" against "Toilet Installation".
-        return mine.contains { $0.count >= 5 && theirs.contains($0) }
-    }
-
-    /// Lowercased alphanumeric words, so spacing and punctuation stop mattering.
-    private static func nameWords(_ text: String) -> [String] {
-        text.lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-    }
-}
-
-private struct RateCardInsert: Encodable {
-    let user_id: UUID
-    let name: String
-    let unit: String?
-    let unit_price: Double?
-    let type: String
-    let active: Bool
-}
-
 enum QuoteError: LocalizedError {
     case notSignedIn
     var errorDescription: String? {
@@ -1169,6 +856,15 @@ private struct ExtractedLineItem: Decodable {
 }
 
 // MARK: - Insert payloads
+
+private struct RateCardInsert: Encodable {
+    let user_id: UUID
+    let name: String
+    let unit: String?
+    let unit_price: Double?
+    let type: String
+    let active: Bool
+}
 
 private struct QuoteInsert: Encodable {
     let userId: UUID

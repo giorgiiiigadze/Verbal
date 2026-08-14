@@ -8,7 +8,6 @@
 
 import SwiftUI
 import UIKit
-import QuickLook
 
 /// Verbal's custom share panel for a quote — a preview plus Share / Copy actions.
 struct ShareQuotePanel: View {
@@ -180,74 +179,5 @@ struct ShareQuotePanel: View {
             .glassEffect(.regular.interactive(), in: Capsule())
         }
         .buttonStyle(.plain)
-    }
-}
-
-/// Full-screen PDF preview, so the user can read the document before sending.
-struct QuickLookPreview: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> QLPreviewController {
-        let controller = QLPreviewController()
-        controller.dataSource = context.coordinator
-        return controller
-    }
-
-    func updateUIViewController(_ controller: QLPreviewController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator(url: url) }
-
-    final class Coordinator: NSObject, QLPreviewControllerDataSource {
-        let url: URL
-        init(url: URL) { self.url = url }
-
-        func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
-
-        func previewController(_ controller: QLPreviewController,
-                               previewItemAt index: Int) -> QLPreviewItem {
-            url as NSURL
-        }
-    }
-}
-
-/// UIActivityViewController wrapper that reports whether the share completed,
-/// so callers can react (e.g. marking a quote as Sent).
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-    var onComplete: (Bool) -> Void
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        controller.completionWithItemsHandler = { _, completed, _, _ in
-            onComplete(completed)
-        }
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-/// Small native rounded-rectangle chip with a leading icon/avatar and text.
-struct QuoteChip<Leading: View>: View {
-    let text: String
-    /// Draws the chip in brand blue — used for an action still to be done,
-    /// so it reads as inviting rather than as another piece of metadata.
-    var tinted: Bool = false
-    @ViewBuilder let leading: Leading
-
-    var body: some View {
-        HStack(spacing: 8) {
-            leading
-                .font(.body)
-                .foregroundStyle(tinted ? Color(.blueAccentText) : .secondary)
-            Text(text)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(tinted ? Color(.blueAccentText) : Color(.mainText))
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(tinted ? Color(.royalBlue25) : Color(.surface), in: .capsule)
     }
 }
