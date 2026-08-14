@@ -66,6 +66,11 @@ struct HomeView: View {
             }
             .background(Color(.homeBackground))
             .navigationTitle("Your quotes")
+            // Fixed in the bar, matching the rate card. Two tabs that behave
+            // differently under the same thumb read as two apps — and the large
+            // title was giving its height to a name the tab bar is already
+            // showing, on the screen with the most to list.
+            .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Search quotes")
             .searchToolbarBehavior(.minimize)
             .toolbar {

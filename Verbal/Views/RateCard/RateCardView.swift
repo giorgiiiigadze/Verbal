@@ -65,6 +65,14 @@ struct RateCardView: View {
         }
         .background(Color(.homeBackground))
         .navigationTitle("Rate card")
+        // Small and fixed in the bar rather than a large heading that grows and
+        // collapses with the scroll. The screen is a list of prices with a
+        // search field over it, and the name of the tab is a label on it, not a
+        // headline — the large title spent its height announcing something the
+        // tab bar had already said. Fixed also means it is there in every state,
+        // including the two empty ones where a collapsing title has nothing to
+        // collapse against.
+        .navigationBarTitleDisplayMode(.inline)
         // The same search Home has, in the same place. A card of eight rates
         // doesn't need it; the card this screen is trying to encourage does.
         .searchable(text: $searchText, prompt: "Search rates")
