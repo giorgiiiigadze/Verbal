@@ -42,6 +42,10 @@ struct HomeView: View {
     /// True when at least one quote needed converting, so the figure is
     /// a daily-rate approximation rather than an exact sum.
     @State private var outstandingIsApproximate = false
+    /// The figure the band actually shows. Trails `outstandingTotal` so it can
+    /// roll up to it — from zero on first load, and between values when the
+    /// currency changes — rather than snapping.
+    @State private var animatedOutstanding: Double = 0
     /// Observed so the summary re-converts when the user changes currency.
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
     /// Set the first time a quote appears in this list, and never unset.
@@ -247,8 +251,7 @@ struct HomeView: View {
             // for. Hidden while searching or filtering, when it'd be misleading.
             // Stays up under the waiting filter, where it describes exactly the
             // set on screen — and is the way back out of it.
-            if outstandingTotal != nil, outstandingCount > 0, searchQuery.isEmpty,
-               filter == .all || filter == .waiting {
+            if showsOutstandingBand {
                 Button {
                     // The band names a specific set of quotes, so touching it
                     // shows them. Same filter the toolbar menu offers, put where
@@ -367,10 +370,25 @@ struct HomeView: View {
         quotes.filter { $0.effectiveStatus == "sent" || $0.effectiveStatus == "viewed" }
     }
 
+    /// The rolling figure, formatted — reads off `animatedOutstanding` so the
+    /// digits count up rather than the final number appearing at once.
     private var outstandingLabel: String {
-        guard let outstandingTotal else { return "—" }
-        let formatted = AppCurrency.format(outstandingTotal, code: currencyCode)
+        let formatted = AppCurrency.format(animatedOutstanding, code: currencyCode)
         return outstandingIsApproximate ? "≈ \(formatted)" : formatted
+    }
+
+    /// Whether the money-in-play band is on screen. Shown the moment there's a
+    /// pipeline to report — before the conversion finishes — so the total can
+    /// shimmer and count up in place rather than popping in fully formed.
+    private var showsOutstandingBand: Bool {
+        guard searchQuery.isEmpty, filter == .all || filter == .waiting else { return false }
+        return outstandingTotal == nil ? !outstanding.isEmpty : outstandingCount > 0
+    }
+
+    /// Until the conversion lands the exact count isn't known, so fall back to
+    /// the number of outstanding quotes rather than flashing "0 quotes".
+    private var displayedOutstandingCount: Int {
+        outstandingTotal == nil ? outstanding.count : outstandingCount
     }
 
     /// Convert each outstanding quote into the user's currency and total them.
@@ -424,9 +442,15 @@ struct HomeView: View {
                     .foregroundStyle(Color(.blueAccentText))
                 // Always in the user's own currency, converting quotes priced
                 // in another one — a raw sum across currencies is meaningless.
+                //
+                // It shimmers while the conversion runs, then rolls up to the
+                // figure — the app's "working on it" motion, the same touch the
+                // generator has, on the number worth opening the app for.
                 Text(outstandingLabel)
                     .font(.title3.weight(.semibold).monospacedDigit())
                     .foregroundStyle(Color(.mainText))
+                    .contentTransition(.numericText(value: animatedOutstanding))
+                    .shimmer(active: outstandingTotal == nil)
                 // The total on its own is a fact. The age is the part that says
                 // whether anything needs chasing.
                 if let oldestLabel {
@@ -437,7 +461,7 @@ struct HomeView: View {
             }
             Spacer(minLength: 8)
             HStack(spacing: 4) {
-                Text("\(outstandingCount) quote\(outstandingCount == 1 ? "" : "s")")
+                Text("\(displayedOutstandingCount) quote\(displayedOutstandingCount == 1 ? "" : "s")")
                 Image(systemName: filter == .waiting ? "chevron.left" : "chevron.right")
                     .font(.caption2.weight(.semibold))
             }
@@ -447,6 +471,11 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // The band is mostly empty space, and all of it should be the target.
         .contentShape(.rect)
+        // Roll the figure up whenever the conversion produces a new one — from
+        // zero on first load, and between values when the currency changes.
+        .onChange(of: outstandingTotal, initial: true) { _, total in
+            withAnimation(.snappy(duration: 0.55)) { animatedOutstanding = total ?? 0 }
+        }
     }
 
     /// Long-press context menu for a quote card.
