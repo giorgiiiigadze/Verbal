@@ -649,6 +649,9 @@ struct QuoteDetailView: View {
                     total = newTotal
                     // Reload line items to show the converted unit prices.
                     Task { lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? lineItems }
+                    toast = Toast(style: .success, message: "Converted to \(newCurrency)")
+                } else {
+                    toast = Toast(style: .success, message: "Currency set to \(newCurrency)")
                 }
             }
         }

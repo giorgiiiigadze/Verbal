@@ -35,6 +35,7 @@ struct SettingsView: View {
                 // first. With nothing priced there is nothing to reinterpret.
                 if pricedRates.isEmpty {
                     currencyCode = picked.rawValue
+                    toast = Toast(style: .success, message: "Main currency set to \(picked.rawValue)")
                 } else {
                     pendingCurrency = CurrencyTarget(id: picked.rawValue)
                 }
@@ -121,6 +122,8 @@ struct SettingsView: View {
                 if converted {
                     Task { await session.refreshRateCard() }
                     toast = Toast(style: .success, message: "Rates converted to \(target.id)")
+                } else {
+                    toast = Toast(style: .success, message: "Main currency set to \(target.id)")
                 }
             }
         }
