@@ -123,7 +123,7 @@ struct HomeView: View {
                     NavigationLink {
                         RateCardView()
                     } label: {
-                        Image(systemName: "rectangle.stack")
+                        Image(systemName: "tag.fill")
                     }
                     .accessibilityLabel("Rate card")
 
