@@ -177,6 +177,20 @@ final class SessionStore {
         self.quotes = quotes
     }
 
+    /// Re-read the quote list and publish it, for screens that own no copy of
+    /// their own. The Clients tab is drawn entirely from `quotes`, so rather
+    /// than trusting whichever screen ran last to have refreshed it, that tab
+    /// asks for itself every time it appears.
+    ///
+    /// A failed read leaves the list alone: what is on screen came from the
+    /// server too, and blanking a tab because one fetch missed is worse than
+    /// showing a list that is a minute old.
+    func refreshQuotes() async {
+        if let fresh = try? await QuoteService.fetchQuotes() {
+            quotes = fresh
+        }
+    }
+
     /// Fetch and cache a quote's line items unless already cached. Called as list
     /// rows appear so the detail page has them ready before the user taps.
     func prefetchLineItems(for quoteID: UUID) async {

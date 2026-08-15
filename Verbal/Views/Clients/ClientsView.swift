@@ -89,6 +89,13 @@ struct ClientsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search clients")
         .searchToolbarBehavior(.minimize)
+        // Asked for on every appearance, so arriving here after recording or
+        // deleting a quote shows that, rather than whatever the list happened to
+        // hold when the app started. This screen keeps no copy of its own —
+        // `clients` is derived from the session — so the refresh is the whole
+        // update: the new client appears, and one whose last quote went is gone.
+        .task { await session.refreshQuotes() }
+        .refreshable { await session.refreshQuotes() }
     }
 
     // MARK: - Feed
