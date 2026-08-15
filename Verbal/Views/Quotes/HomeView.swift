@@ -29,6 +29,13 @@ struct HomeView: View {
     /// Drives the search field, because the magnifier that opens it is ours —
     /// see the toolbar group.
     @State private var isSearching = false
+    /// The rate card push, driven by hand so the intro sheet can sit in front
+    /// of the first one.
+    @State private var showRateCard = false
+    @State private var showRateCardIntro = false
+    /// True once the intro has been shown. Held on the device: it is about what
+    /// this person has been told, not about what is on their rate card.
+    @AppStorage("seenRateCardIntro") private var seenRateCardIntro = false
     @State private var toast: Toast?
     /// True when the last fetch failed — distinguishes "no quotes" from
     /// "couldn't reach the server".
@@ -120,8 +127,14 @@ struct HomeView: View {
                 // doing it; the search field itself is still `.searchable`, so
                 // the keyboard, cancel and dismissal behaviour are unchanged.
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    NavigationLink {
-                        RateCardView()
+                    // Not a NavigationLink: the first tap has to be able to
+                    // stop at the intro sheet instead of pushing.
+                    Button {
+                        if seenRateCardIntro {
+                            showRateCard = true
+                        } else {
+                            showRateCardIntro = true
+                        }
                     } label: {
                         Image(systemName: "tag.fill")
                     }
@@ -133,6 +146,20 @@ struct HomeView: View {
                         Image(systemName: "magnifyingglass")
                     }
                     .accessibilityLabel("Search quotes")
+                }
+            }
+            .navigationDestination(isPresented: $showRateCard) {
+                RateCardView()
+            }
+            // Continue pushes once the sheet is gone, rather than sliding a
+            // screen in underneath it.
+            .sheet(isPresented: $showRateCardIntro) {
+                RateCardIntroSheet {
+                    seenRateCardIntro = true
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.35))
+                        showRateCard = true
+                    }
                 }
             }
             .sheet(item: $shareAfterDetails) { quote in
