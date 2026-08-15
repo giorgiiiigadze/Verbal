@@ -76,8 +76,18 @@ struct RateCardView: View {
         // standing places, and leaving the bar under it invites a sideways jump
         // out of a job half-done. The back button is the way out.
         .toolbar(.hidden, for: .tabBar)
-        // Adding a rate and searching for one both live in the footer now
-        // (see `list`), so the header carries nothing but the title.
+        // The one thing this screen is for, as a native bar button. Searching
+        // for a rate stays in the footer (see `list`), where the thumb is.
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showAdd = true
+                } label: {
+                    Label("New rate", systemImage: "plus")
+                }
+                .labelStyle(.titleAndIcon)
+            }
+        }
         .sheet(isPresented: $showAdd, onDismiss: { Task { await load() } }) {
             AddRateItemView(existing: items)
         }
@@ -173,22 +183,16 @@ struct RateCardView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        // The whole footer: the search field, and the New rate button floating
-        // just above it. Pinned to the bottom, so the list scrolls under it and
-        // the keyboard lifts both when the field is tapped.
+        // The search field, pinned to the bottom so the list scrolls under it
+        // and the keyboard lifts it when tapped. Adding a rate is the bar
+        // button up in the header now.
         .safeAreaInset(edge: .bottom) { footer }
     }
 
-    /// New rate above, search below — the shape a chat app puts a compose bar
-    /// and its field in, because it's the shape a thumb reaches without moving.
+    /// The search field, low on the screen where the thumb reaches it without
+    /// moving. Adding a rate is the native bar button in the header.
     private var footer: some View {
-        VStack(spacing: 10) {
-            HStack {
-                Spacer(minLength: 0)
-                newRateButton
-            }
-            searchField
-        }
+        searchField
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .padding(.bottom, 6)
@@ -218,24 +222,6 @@ struct RateCardView: View {
                 )
                 .ignoresSafeArea(edges: .bottom)
         }
-    }
-
-    /// Prominent glass in the app's blue, the same button a quote's Share is —
-    /// the one filled affordance on the screen, so the eye lands on it.
-    private var newRateButton: some View {
-        Button {
-            showAdd = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                Text("New rate").fontWeight(.semibold)
-            }
-            .foregroundStyle(.white)
-        }
-        .buttonStyle(.glassProminent)
-        .controlSize(.large)
-        .tint(Color(.royalBlue600))
-        .accessibilityLabel("New rate")
     }
 
     /// A search field on the same glass, full width. Its own field rather than
