@@ -4,12 +4,17 @@
 //
 //  The people you've quoted for, and what you quoted them.
 //
+//  A threaded feed rather than a list of links: each client is a container with
+//  their quotes hanging off it, the way a comment sits above its replies. The
+//  quotes are right there — no tap-through — expanded by default and collapsible
+//  per client.
+//
 //  Built from the quotes already in the session rather than from a fetch of its
 //  own: the list is preloaded at launch and kept current by Home, so this tab
 //  paints instantly, works with no signal, and can't disagree with the quote
-//  list about who exists. The `customers` table holds the contact fields, and
-//  this screen will need it when they become editable — but a name and a
-//  history are what the tab is for, and both are already here.
+//  list about who exists. The `customers` table holds the contact fields, and a
+//  full client profile will want them — but a name and a history are what the
+//  tab is for, and both are already here.
 //
 
 import SwiftUI
@@ -17,12 +22,15 @@ import SwiftUI
 struct ClientsView: View {
     @Environment(SessionStore.self) private var session
     @State private var searchText = ""
+    /// Clients whose quotes are hidden. Empty by default, so every thread opens
+    /// expanded — the quotes are the point of the screen, not a reveal.
+    @State private var collapsed: Set<Client.ID> = []
 
     /// Everyone with a name on at least one quote, most recently quoted first.
     ///
     /// Grouped case-insensitively for the same reason `customerID(named:)`
     /// matches that way: "Marina Kapanadze" and "marina kapanadze" are one
-    /// person, and a list that says     rotherwise is a list of typos.
+    /// person, and a list that says otherwise is a list of typos.
     private var clients: [Client] {
         var byKey: [String: [QuoteSummary]] = [:]
         for quote in session.quotes {
@@ -48,6 +56,24 @@ struct ClientsView: View {
         return clients.filter { $0.name.localizedCaseInsensitiveContains(query) }
     }
 
+    /// While a search is running, matches are shown open regardless of the
+    /// collapse set — hiding the quotes someone is searching for would be odd.
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func isExpanded(_ client: Client) -> Bool {
+        isSearching || !collapsed.contains(client.id)
+    }
+
+    private func toggleCollapse(_ client: Client) {
+        if collapsed.contains(client.id) {
+            collapsed.remove(client.id)
+        } else {
+            collapsed.insert(client.id)
+        }
+    }
+
     var body: some View {
         Group {
             if clients.isEmpty {
@@ -55,7 +81,7 @@ struct ClientsView: View {
             } else if filtered.isEmpty {
                 noMatches
             } else {
-                list
+                feed
             }
         }
         .background(Color(.homeBackground))
@@ -65,16 +91,13 @@ struct ClientsView: View {
         .searchToolbarBehavior(.minimize)
     }
 
-    private var list: some View {
+    // MARK: - Feed
+
+    private var feed: some View {
         ScrollView {
-            LazyVStack(spacing: 10) {
+            LazyVStack(spacing: 14) {
                 ForEach(filtered) { client in
-                    NavigationLink {
-                        ClientDetailView(client: client)
-                    } label: {
-                        row(client)
-                    }
-                    .buttonStyle(.plain)
+                    clientThread(client)
                 }
             }
             .padding(.horizontal, 20)
@@ -83,41 +106,118 @@ struct ClientsView: View {
         }
     }
 
-    private func row(_ client: Client) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(client.name)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(Color(.mainText))
-                    .lineLimit(1)
-                Text(client.subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+    private func clientThread(_ client: Client) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            clientHeader(client)
+
+            if isExpanded(client) {
+                quotesThread(client)
+                    .padding(.top, 8)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            Spacer(minLength: 8)
-            // Only when every one of their quotes is priced in the same
-            // currency. Adding two currencies into one figure would be a number
-            // that is true of nothing.
-            if let total = client.singleCurrencyTotal {
-                Text(total)
-                    .font(.footnote.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.cardSurface),
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        )
     }
+
+    /// The container: the client, and the shape you tap to fold their quotes
+    /// away. A card so it reads as the parent the thread hangs from, with the
+    /// chevron carrying the open/closed state the way a comment's collapse does.
+    private func clientHeader(_ client: Client) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.22)) { toggleCollapse(client) }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isExpanded(client) ? "chevron.down" : "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 12)
+                    // No animation on the glyph swap itself — the thread opening
+                    // is the motion; a spinning chevron on top is noise.
+                    .animation(nil, value: isExpanded(client))
+
+                InitialsAvatar(name: client.name, size: 40)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(client.name)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1)
+                    Text(client.subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                // Only when every one of their quotes is priced in the same
+                // currency. Adding two currencies into one figure would be a
+                // number that is true of nothing.
+                if let total = client.singleCurrencyTotal {
+                    Text(total)
+                        .font(.footnote.weight(.medium).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.cardSurface),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The replies: a vertical rail with the client's quotes indented off it,
+    /// each opening its own detail. The rail sits roughly under the avatar so
+    /// the eye reads the quotes as belonging to the name above them.
+    private func quotesThread(_ client: Client) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Rectangle()
+                .fill(Color(.separator))
+                .frame(width: 2)
+                .padding(.leading, 26)
+
+            VStack(spacing: 10) {
+                ForEach(client.quotes) { quote in
+                    quoteReply(quote)
+                }
+            }
+        }
+        .padding(.trailing, 2)
+    }
+
+    private func quoteReply(_ quote: QuoteSummary) -> some View {
+        ZStack {
+            QuoteRow(quote: quote, unpricedCount: unpricedCount(for: quote))
+            // Zero-opacity link, the same trick Home uses to navigate a row
+            // without the default chevron landing on the row's own layout.
+            NavigationLink {
+                QuoteDetailView(
+                    quote: quote,
+                    initialLineItems: session.lineItems(for: quote.id) ?? [],
+                    onDeleted: {}
+                )
+            } label: { EmptyView() }
+            .opacity(0)
+        }
+        // Warm the cache so tapping opens the detail with line items already on
+        // screen, and so the unpriced badge has something to count.
+        .onAppear {
+            Task { await session.prefetchLineItems(for: quote.id) }
+        }
+    }
+
+    /// Read from the prefetched line items, the same as Home does — the summary
+    /// row can't see inside a quote on its own.
+    private func unpricedCount(for quote: QuoteSummary) -> Int {
+        (session.lineItems(for: quote.id) ?? []).filter(\.isMissingPrice).count
+    }
+
+    // MARK: - Placeholder states
 
     /// Nobody has been named on a quote yet. Not a pitch — clients aren't a
     /// feature to adopt, they're a by-product of quoting with a name filled in,
