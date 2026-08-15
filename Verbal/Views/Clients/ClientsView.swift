@@ -188,19 +188,20 @@ struct ClientsView: View {
     }
 
     private func quoteReply(_ quote: QuoteSummary, isLast: Bool) -> some View {
-        ZStack {
+        // The card itself is the link's label, so the whole row is the tap
+        // target. Home gets away with a zero-opacity link because it's a List,
+        // where a row is tappable on its own; here in a ScrollView an empty
+        // label would have no area to tap.
+        NavigationLink {
+            QuoteDetailView(
+                quote: quote,
+                initialLineItems: session.lineItems(for: quote.id) ?? [],
+                onDeleted: {}
+            )
+        } label: {
             QuoteRow(quote: quote, unpricedCount: unpricedCount(for: quote))
-            // Zero-opacity link, the same trick Home uses to navigate a row
-            // without the default chevron landing on the row's own layout.
-            NavigationLink {
-                QuoteDetailView(
-                    quote: quote,
-                    initialLineItems: session.lineItems(for: quote.id) ?? [],
-                    onDeleted: {}
-                )
-            } label: { EmptyView() }
-            .opacity(0)
         }
+        .buttonStyle(.plain)
         // The vertical padding is inside the connector's drawing area, so the
         // rail carries straight through the gaps between cards rather than
         // breaking at each one.
