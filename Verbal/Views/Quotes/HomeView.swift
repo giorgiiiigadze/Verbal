@@ -890,6 +890,10 @@ struct HomeView: View {
         do {
             quotes = try await fetchAllowingOneRetry()
             loadFailed = false
+            // Push the authoritative list into the session so the Clients tab —
+            // drawn from it — shows a just-made quote (and its client) without
+            // waiting for the next launch.
+            session.setQuotes(quotes)
         } catch {
             // A load that was cancelled did not fail. `.task` is cancelled the
             // moment this view goes away — tapping a quote, switching tab,
@@ -935,6 +939,9 @@ struct HomeView: View {
     private func delete(_ quote: QuoteSummary) async {
         do {
             try await QuoteService.deleteQuote(id: quote.id)
+            // Also drop it from the shared list, so the Clients tab (drawn from
+            // it) loses the quote too, not just this screen's own copy.
+            session.removeQuote(id: quote.id)
             // Every other mutation here animates; a row that simply blinks out
             // makes the list look like it lost its place rather than obeyed.
             withAnimation(Self.rowRemoval) { quotes.removeAll { $0.id == quote.id } }

@@ -158,6 +158,25 @@ final class SessionStore {
         lineItemsCache[quoteID] = items
     }
 
+    /// Drop a deleted quote from the shared list and its cached line items.
+    ///
+    /// The Clients tab is drawn straight off `quotes`, so a delete that only
+    /// updated the screen it happened on left the quote — and any client it was
+    /// the last of — standing there. Removing it here is what makes it leave.
+    func removeQuote(id: UUID) {
+        quotes.removeAll { $0.id == id }
+        lineItemsCache[id] = nil
+    }
+
+    /// Replace the shared list with a freshly fetched one. `quotes` is otherwise
+    /// only set at launch, so a quote made afterwards never reached the Clients
+    /// tab until the next cold start. Home fetches the authoritative list on
+    /// every load — including right after a recording — so it hands the result
+    /// here to keep the tab drawn from it current.
+    func setQuotes(_ quotes: [QuoteSummary]) {
+        self.quotes = quotes
+    }
+
     /// Fetch and cache a quote's line items unless already cached. Called as list
     /// rows appear so the detail page has them ready before the user taps.
     func prefetchLineItems(for quoteID: UUID) async {

@@ -755,6 +755,10 @@ struct QuoteDetailView: View {
             Button("Delete", role: .destructive) {
                 Task {
                     try? await QuoteService.deleteQuote(id: quote.id)
+                    // Drop it from the shared list too, so the Clients tab — which
+                    // is drawn from it — loses the quote and the client if it was
+                    // their last. `onDeleted` only tells the screen we came from.
+                    session.removeQuote(id: quote.id)
                     onDeleted()
                     dismiss()
                 }
