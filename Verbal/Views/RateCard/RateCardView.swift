@@ -310,35 +310,54 @@ struct RateCardView: View {
         Button {
             itemToEdit = item
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(item.name)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(Color(.mainText))
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    if let unitPrice = item.unitPrice {
-                        Text(AppCurrency.format(unitPrice))
-                            .font(.callout.weight(.semibold).monospacedDigit())
+            HStack(spacing: 12) {
+                // A small tinted plate at the head of the card, so each rate
+                // reads as a labelled thing rather than a bare line. Surface
+                // tone with a hairline — a step off the cardSurface behind it.
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(.surface))
+                    .frame(width: 40, height: 40)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                    )
+                    .overlay(
+                        Image(systemName: "tag.fill")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color(.mainText))
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(item.name)
+                            .font(.callout.weight(.medium))
                             .foregroundStyle(Color(.mainText))
                             .lineLimit(1)
-                    } else {
-                        // The same amber a quote uses for a line it couldn't
-                        // price, saying the same thing: this one needs you.
-                        HStack(spacing: 6) {
-                            Circle().fill(LineItemRow.amber).frame(width: 6, height: 6)
-                            Text("Set price")
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(LineItemRow.amber)
+                        Spacer(minLength: 8)
+                        if let unitPrice = item.unitPrice {
+                            Text(AppCurrency.format(unitPrice))
+                                .font(.callout.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(Color(.mainText))
+                                .lineLimit(1)
+                        } else {
+                            // The same amber a quote uses for a line it couldn't
+                            // price, saying the same thing: this one needs you.
+                            HStack(spacing: 6) {
+                                Circle().fill(LineItemRow.amber).frame(width: 6, height: 6)
+                                Text("Set price")
+                                    .font(.footnote.weight(.medium))
+                                    .foregroundStyle(LineItemRow.amber)
+                            }
                         }
                     }
+                    if let unit = item.unit, !unit.isEmpty {
+                        Text("per \(unit)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
-                if let unit = item.unit, !unit.isEmpty {
-                    Text("per \(unit)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
@@ -350,8 +369,8 @@ struct RateCardView: View {
             // in the dark the page is already near-black and a black shadow is
             // invisible, so it lightens to almost nothing and the border does
             // the lifting instead.
-            .shadow(color: .black.opacity(scheme == .dark ? 0.22 : 0.06),
-                    radius: 5, x: 0, y: 2)
+            .shadow(color: .black.opacity(scheme == .dark ? 0.26 : 0.10),
+                    radius: 8, x: 0, y: 3)
         }
         .buttonStyle(CardPressStyle())
         .contentShape(.contextMenuPreview, Self.cardShape)
