@@ -76,16 +76,19 @@ struct RateCardView: View {
         // standing places, and leaving the bar under it invites a sideways jump
         // out of a job half-done. The back button is the way out.
         .toolbar(.hidden, for: .tabBar)
-        // The one thing this screen is for, as a native bar button. Searching
-        // for a rate stays in the footer (see `list`), where the thumb is.
+        // The one thing this screen is for, as a native bar button — but only
+        // once there are rates for it to sit above. The empty states carry their
+        // own "Add a rate", so a second one in the bar is the same offer twice.
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showAdd = true
-                } label: {
-                    Label("New rate", systemImage: "plus")
+            if !items.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showAdd = true
+                    } label: {
+                        Label("New rate", systemImage: "plus")
+                    }
+                    .labelStyle(.titleAndIcon)
                 }
-                .labelStyle(.titleAndIcon)
             }
         }
         .sheet(isPresented: $showAdd, onDismiss: { Task { await load() } }) {
