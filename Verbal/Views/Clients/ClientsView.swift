@@ -113,7 +113,10 @@ struct ClientsView: View {
             if isExpanded(client) {
                 quotesThread(client)
                     .padding(.top, 8)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    // A plain cross-fade, no slide. The quotes moving up out of
+                    // the header read as the list glitching; fading them in
+                    // place while the cards below close the gap reads as calm.
+                    .transition(.opacity)
             }
         }
     }
@@ -123,7 +126,7 @@ struct ClientsView: View {
     /// chevron carrying the open/closed state the way a comment's collapse does.
     private func clientHeader(_ client: Client) -> some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.22)) { toggleCollapse(client) }
+            withAnimation(.easeOut(duration: 0.2)) { toggleCollapse(client) }
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: isExpanded(client) ? "chevron.down" : "chevron.right")
@@ -171,26 +174,20 @@ struct ClientsView: View {
         .buttonStyle(.plain)
     }
 
-    /// The replies: a vertical rail with the client's quotes indented off it,
-    /// each opening its own detail. The rail sits roughly under the avatar so
-    /// the eye reads the quotes as belonging to the name above them.
+    /// The replies: a continuous rail down the left with each quote branching
+    /// off it on a rounded elbow that meets the card at its mid-height — the
+    /// way a comment thread curves into each reply. The rail runs straight
+    /// through the siblings above the last one and closes into the final elbow.
     private func quotesThread(_ client: Client) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Rectangle()
-                .fill(Color(.separator))
-                .frame(width: 2)
-                .padding(.leading, 26)
-
-            VStack(spacing: 10) {
-                ForEach(client.quotes) { quote in
-                    quoteReply(quote)
-                }
+        VStack(spacing: 0) {
+            ForEach(Array(client.quotes.enumerated()), id: \.element.id) { index, quote in
+                quoteReply(quote, isLast: index == client.quotes.count - 1)
             }
         }
-        .padding(.trailing, 2)
+        .padding(.leading, 20)
     }
 
-    private func quoteReply(_ quote: QuoteSummary) -> some View {
+    private func quoteReply(_ quote: QuoteSummary, isLast: Bool) -> some View {
         ZStack {
             QuoteRow(quote: quote, unpricedCount: unpricedCount(for: quote))
             // Zero-opacity link, the same trick Home uses to navigate a row
@@ -203,6 +200,17 @@ struct ClientsView: View {
                 )
             } label: { EmptyView() }
             .opacity(0)
+        }
+        // The vertical padding is inside the connector's drawing area, so the
+        // rail carries straight through the gaps between cards rather than
+        // breaking at each one.
+        .padding(.vertical, 5)
+        .padding(.leading, ThreadConnector.gutter)
+        .background(alignment: .leading) {
+            ThreadConnector(isLast: isLast)
+                .stroke(Color(.separator),
+                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                .frame(width: ThreadConnector.gutter)
         }
         // Warm the cache so tapping opens the detail with line items already on
         // screen, and so the unpriced badge has something to count.
@@ -279,4 +287,46 @@ struct Client: Identifiable, Hashable {
 
     static func == (lhs: Client, rhs: Client) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}
+
+/// The thread line beside one quote: a vertical rail with a rounded elbow that
+/// branches into the card at its mid-height.
+///
+/// The rail is drawn to the full height it's given (the card plus its vertical
+/// padding), so stacking these leaves the rail unbroken between siblings. The
+/// last quote gets no continuation below its elbow — the thread ends where it
+/// turns in, the way the final reply closes a comment chain.
+private struct ThreadConnector: Shape {
+    var isLast: Bool
+
+    /// Width of the connector column, and so where the elbow meets the card.
+    static let gutter: CGFloat = 24
+
+    private let railX: CGFloat = 7
+    private let corner: CGFloat = 9
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let midY = rect.midY
+        let rightX = rect.maxX
+
+        if isLast {
+            // Rail comes down and turns once into the card — nothing below it.
+            path.move(to: CGPoint(x: railX, y: rect.minY))
+            path.addLine(to: CGPoint(x: railX, y: midY - corner))
+            path.addQuadCurve(to: CGPoint(x: railX + corner, y: midY),
+                              control: CGPoint(x: railX, y: midY))
+            path.addLine(to: CGPoint(x: rightX, y: midY))
+        } else {
+            // Rail runs the whole height for the siblings still to come…
+            path.move(to: CGPoint(x: railX, y: rect.minY))
+            path.addLine(to: CGPoint(x: railX, y: rect.maxY))
+            // …and a rounded branch peels off it into this card.
+            path.move(to: CGPoint(x: railX, y: midY - corner))
+            path.addQuadCurve(to: CGPoint(x: railX + corner, y: midY),
+                              control: CGPoint(x: railX, y: midY))
+            path.addLine(to: CGPoint(x: rightX, y: midY))
+        }
+        return path
+    }
 }
