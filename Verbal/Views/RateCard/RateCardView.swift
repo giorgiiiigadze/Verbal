@@ -426,11 +426,17 @@ struct RateCardView: View {
             showCandidates = true
         } label: {
             HStack(spacing: 12) {
+                // The tag, the same mark the header button on Home wears. It
+                // says at a glance that this card is about the rate card rather
+                // than about the quote that produced the prices.
+                Image(systemName: "tag")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(.blueAccentText))
                 VStack(alignment: .leading, spacing: 3) {
                     Text("\(candidates.count) price\(candidates.count == 1 ? "" : "s") ready to add")
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(Color(.blueAccentText))
-                    Text("Spoken into recent quotes, not saved here yet")
+                    Text("Spoken into your quotes, not saved here yet")
                         .font(.footnote)
                         .foregroundStyle(Color(.blueAccentText).opacity(0.75))
                         .lineLimit(2)
