@@ -280,7 +280,10 @@ struct QuoteDetailView: View {
                 .foregroundStyle(Color(.mainText))
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text(total, format: AppCurrency.format(code: currency))
+                // Counts to its new value when a price is edited or the
+                // quote is converted — see `RollingAmount`. Monospaced digits
+                // so the figure doesn't shuffle sideways while it moves.
+                RollingAmount(value: total, code: currency)
                     .font(.title3.weight(.semibold).monospacedDigit())
                     .foregroundStyle(Color(.mainText))
                 if missingCount > 0 {

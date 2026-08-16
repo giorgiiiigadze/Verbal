@@ -36,6 +36,11 @@ struct HomeView: View {
     /// True once the intro has been shown. Held on the device: it is about what
     /// this person has been told, not about what is on their rate card.
     @AppStorage("seenRateCardIntro") private var seenRateCardIntro = false
+    /// Bumped whenever a quote arrives, to send the list back to the top.
+    ///
+    /// A counter rather than a flag: two arrivals in a row both have to fire,
+    /// and setting a `true` that is already `true` changes nothing.
+    @State private var scrollToTopToken = 0
     @State private var toast: Toast?
     /// True when the last fetch failed — distinguishes "no quotes" from
     /// "couldn't reach the server".
@@ -291,142 +296,153 @@ struct HomeView: View {
         Text("Your quotes")
             .font(.robotoSlab(34, relativeTo: .largeTitle))
             .foregroundStyle(Color(.mainText))
+            .id(Self.topAnchor)
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 10, trailing: 20))
     }
 
     private var quotesList: some View {
-        List {
-            pageTitle
+        ScrollViewReader { proxy in
+            List {
+                pageTitle
 
-            // Money in play, above the list — the number worth opening the app
-            // for. Hidden while searching or filtering, when it'd be misleading.
-            // Stays up under the waiting filter, where it describes exactly the
-            // set on screen — and is the way back out of it.
-            if showsOutstandingBand {
-                Button {
-                    // The band names a specific set of quotes, so touching it
-                    // shows them. Same filter the toolbar menu offers, put where
-                    // the eye already is.
-                    withAnimation { filter = filter == .waiting ? .all : .waiting }
-                } label: {
-                    outstandingSummary
+                // Money in play, above the list — the number worth opening the app
+                // for. Hidden while searching or filtering, when it'd be misleading.
+                // Stays up under the waiting filter, where it describes exactly the
+                // set on screen — and is the way back out of it.
+                if showsOutstandingBand {
+                    Button {
+                        // The band names a specific set of quotes, so touching it
+                        // shows them. Same filter the toolbar menu offers, put where
+                        // the eye already is.
+                        withAnimation { filter = filter == .waiting ? .all : .waiting }
+                    } label: {
+                        outstandingSummary
+                    }
+                        .buttonStyle(BandPressStyle())
+                        // Full-bleed, and on the page's own colour. The tint was
+                        // royalBlue25, which this app uses for things asking to be
+                        // tapped — and with the pinned rows no longer filled it was
+                        // the only saturated block on Home, louder than the number
+                        // it reports needs to be. The hairline still separates the
+                        // header zone from the list; the figure carries itself on
+                        // size.
+                        .listRowBackground(
+                            Color(.homeBackground)
+                                .overlay(alignment: .bottom) {
+                                    // Hairline where the band meets the page.
+                                    Rectangle()
+                                        .fill(Color(.separator))
+                                        .frame(height: 0.5)
+                                }
+                        )
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 18, leading: 20, bottom: 20, trailing: 20))
                 }
-                    .buttonStyle(BandPressStyle())
-                    // Full-bleed, and on the page's own colour. The tint was
-                    // royalBlue25, which this app uses for things asking to be
-                    // tapped — and with the pinned rows no longer filled it was
-                    // the only saturated block on Home, louder than the number
-                    // it reports needs to be. The hairline still separates the
-                    // header zone from the list; the figure carries itself on
-                    // size.
-                    .listRowBackground(
-                        Color(.homeBackground)
-                            .overlay(alignment: .bottom) {
-                                // Hairline where the band meets the page.
-                                Rectangle()
-                                    .fill(Color(.separator))
-                                    .frame(height: 0.5)
+
+                ForEach(sections, id: \.title) { section in
+                    // Header as a normal row (not a Section header) so it scrolls
+                    // away with the content instead of pinning to the top.
+                    Text(section.title)
+                        // A shade heavier than the body around it. Not darker as
+                        // well: a date carries less than a status heading did, and
+                        // it only has to mark where one day ends and the next
+                        // begins.
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 2, trailing: 20))
+
+                    ForEach(section.quotes) { quote in
+                        ZStack {
+                            QuoteRow(quote: quote,
+                                     unpricedCount: unpricedCount(for: quote),
+                                     dayIsKnown: section.dated)
+                            // Zero-opacity link so the row navigates without the
+                            // default trailing chevron.
+                            NavigationLink {
+                                QuoteDetailView(
+                                    quote: quote,
+                                    initialLineItems: session.lineItems(for: quote.id) ?? [],
+                                    onDeleted: {
+                                        withAnimation(Self.rowRemoval) {
+                                            quotes.removeAll { $0.id == quote.id }
+                                        }
+                                        // Delay so the toast animates in on the
+                                        // now-visible Home, after the detail view's
+                                        // pop finishes (setting it mid-dismiss shows
+                                        // it off-screen and it's effectively missed).
+                                        Task {
+                                            try? await Task.sleep(for: .seconds(0.4))
+                                            toast = Toast(style: .success, message: "Quote deleted")
+                                        }
+                                    },
+                                    onRenamed: { newTitle in
+                                        // This list holds its own copy of the rows
+                                        // and only refetches on its own schedule,
+                                        // so the row keeps the old name until told.
+                                        guard let index = quotes.firstIndex(where: { $0.id == quote.id })
+                                        else { return }
+                                        quotes[index].title = newTitle
+                                    },
+                                    onPinChanged: { isPinned in
+                                        guard let index = quotes.firstIndex(where: { $0.id == quote.id })
+                                        else { return }
+                                        // The same spring the row's own pin uses, so
+                                        // popping back finds the card already where
+                                        // it belongs rather than watching it jump.
+                                        withAnimation(Self.pinSpring) {
+                                            quotes[index].pinned = isPinned
+                                        }
+                                    },
+                                    onNeedsRefresh: { Task { await load() } }
+                                )
+                                .environment(session)
+                            } label: { EmptyView() }
+                            .opacity(0)
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+                        .onAppear {
+                            // Warm the cache so tapping opens the detail with line
+                            // items already on screen.
+                            Task { await session.prefetchLineItems(for: quote.id) }
+                        }
+                        .contextMenu { quoteMenu(for: quote) }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            // No .destructive role: it would animate the row out
+                            // on tap, before the confirmation alert is answered.
+                            Button {
+                                quoteToDelete = quote
+                            } label: {
+                                Label("Delete", systemImage: "trash")
                             }
-                    )
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 18, leading: 20, bottom: 20, trailing: 20))
+                            .tint(.red)
+
+                            Button {
+                                share(quote)
+                            } label: {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                            .tint(Color(.royalBlue300))
+                        }
+                    }
+                }
             }
-
-            ForEach(sections, id: \.title) { section in
-                // Header as a normal row (not a Section header) so it scrolls
-                // away with the content instead of pinning to the top.
-                Text(section.title)
-                    // A shade heavier than the body around it. Not darker as
-                    // well: a date carries less than a status heading did, and
-                    // it only has to mark where one day ends and the next
-                    // begins.
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 2, trailing: 20))
-
-                ForEach(section.quotes) { quote in
-                    ZStack {
-                        QuoteRow(quote: quote,
-                                 unpricedCount: unpricedCount(for: quote),
-                                 dayIsKnown: section.dated)
-                        // Zero-opacity link so the row navigates without the
-                        // default trailing chevron.
-                        NavigationLink {
-                            QuoteDetailView(
-                                quote: quote,
-                                initialLineItems: session.lineItems(for: quote.id) ?? [],
-                                onDeleted: {
-                                    withAnimation(Self.rowRemoval) {
-                                        quotes.removeAll { $0.id == quote.id }
-                                    }
-                                    // Delay so the toast animates in on the
-                                    // now-visible Home, after the detail view's
-                                    // pop finishes (setting it mid-dismiss shows
-                                    // it off-screen and it's effectively missed).
-                                    Task {
-                                        try? await Task.sleep(for: .seconds(0.4))
-                                        toast = Toast(style: .success, message: "Quote deleted")
-                                    }
-                                },
-                                onRenamed: { newTitle in
-                                    // This list holds its own copy of the rows
-                                    // and only refetches on its own schedule,
-                                    // so the row keeps the old name until told.
-                                    guard let index = quotes.firstIndex(where: { $0.id == quote.id })
-                                    else { return }
-                                    quotes[index].title = newTitle
-                                },
-                                onPinChanged: { isPinned in
-                                    guard let index = quotes.firstIndex(where: { $0.id == quote.id })
-                                    else { return }
-                                    // The same spring the row's own pin uses, so
-                                    // popping back finds the card already where
-                                    // it belongs rather than watching it jump.
-                                    withAnimation(Self.pinSpring) {
-                                        quotes[index].pinned = isPinned
-                                    }
-                                },
-                                onNeedsRefresh: { Task { await load() } }
-                            )
-                            .environment(session)
-                        } label: { EmptyView() }
-                        .opacity(0)
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
-                    .onAppear {
-                        // Warm the cache so tapping opens the detail with line
-                        // items already on screen.
-                        Task { await session.prefetchLineItems(for: quote.id) }
-                    }
-                    .contextMenu { quoteMenu(for: quote) }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        // No .destructive role: it would animate the row out
-                        // on tap, before the confirmation alert is answered.
-                        Button {
-                            quoteToDelete = quote
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                        .tint(.red)
-
-                        Button {
-                            share(quote)
-                        } label: {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                        }
-                        .tint(Color(.royalBlue300))
-                    }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            // Back to the top when a quote arrives — see `load()`. The token is
+            // what carries the news down here, since `load()` has no way to
+            // reach the proxy.
+            .onChange(of: scrollToTopToken) { _, _ in
+                withAnimation(Self.rowInsert) {
+                    proxy.scrollTo(Self.topAnchor, anchor: .top)
                 }
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
     }
 
     /// Quotes with a client and no decision yet — the pipeline.
@@ -776,6 +792,13 @@ struct HomeView: View {
     /// spring — the quote is gone and the motion shouldn't be cheerful about it.
     static let rowRemoval = Animation.easeInOut(duration: 0.28)
 
+    /// Arriving does get a little. A quote that has just been spoken into
+    /// existence is the one thing on this screen worth a spring.
+    private static let rowInsert = Animation.snappy(duration: 0.35)
+
+    /// The row the list scrolls back to when a quote arrives.
+    private static let topAnchor = "top"
+
     /// Quotes exist but the active search or filter matched none of them.
     private var noMatchesState: some View {
         placeholder(
@@ -963,7 +986,23 @@ struct HomeView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            quotes = try await fetchAllowingOneRetry()
+            let fresh = try await fetchAllowingOneRetry()
+            // Only when something turned up that wasn't here before. A refresh
+            // that changes nothing must look like nothing, and `hasLoaded`
+            // keeps the first paint still — animating that would slide the
+            // whole list in on every cold start, which is a different feature
+            // and a worse one.
+            let arrived = hasLoaded && fresh.contains { new in
+                !quotes.contains { $0.id == new.id }
+            }
+            if arrived {
+                withAnimation(Self.rowInsert) { quotes = fresh }
+                // Nothing to see if it landed above the viewport — and worse
+                // than nothing, since the recording then looks like it failed.
+                scrollToTopToken += 1
+            } else {
+                quotes = fresh
+            }
             loadFailed = false
             // Push the authoritative list into the session so the Clients tab —
             // drawn from it — shows a just-made quote (and its client) without

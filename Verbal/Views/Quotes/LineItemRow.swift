@@ -77,7 +77,7 @@ struct LineItemRow: View {
                         .foregroundStyle(Self.amber)
                 }
             } else if let lineTotal {
-                Text(lineTotal, format: AppCurrency.format(code: currencyCode))
+                RollingAmount(value: lineTotal, code: currencyCode)
                     .font(.callout.weight(.semibold).monospacedDigit())
                     .foregroundStyle(Color(.mainText))
             }
