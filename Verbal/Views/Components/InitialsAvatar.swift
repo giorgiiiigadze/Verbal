@@ -46,8 +46,14 @@ struct InitialsAvatar: View {
                         .font(.system(size: size * 0.42, weight: .medium))
                         .foregroundStyle(Color(hue: hue, saturation: 0.55, brightness: 0.42))
                 } else {
+                    // Slab, matching the name beside it. Initials are a
+                    // shorthand for that name, and set in the system face they
+                    // read as a label stuck on the circle instead.
+                    //
+                    // Fixed, not Dynamic Type: the circle is a fixed diameter,
+                    // so letters that grow would run past its edge.
                     Text(initials)
-                        .font(.system(size: size * 0.4, weight: .semibold))
+                        .font(.robotoSlabFixed(size * 0.4).weight(.semibold))
                         .foregroundStyle(Color(hue: hue, saturation: 0.60, brightness: 0.38))
                 }
             }

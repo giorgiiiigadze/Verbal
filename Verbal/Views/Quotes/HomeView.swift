@@ -314,10 +314,15 @@ struct HomeView: View {
                     outstandingSummary
                 }
                     .buttonStyle(BandPressStyle())
-                    // Full-bleed tinted band rather than a floating card, so the
-                    // top of the screen reads as its own header zone.
+                    // Full-bleed, and on the page's own colour. The tint was
+                    // royalBlue25, which this app uses for things asking to be
+                    // tapped — and with the pinned rows no longer filled it was
+                    // the only saturated block on Home, louder than the number
+                    // it reports needs to be. The hairline still separates the
+                    // header zone from the list; the figure carries itself on
+                    // size.
                     .listRowBackground(
-                        Color(.royalBlue25)
+                        Color(.homeBackground)
                             .overlay(alignment: .bottom) {
                                 // Hairline where the band meets the page.
                                 Rectangle()
@@ -496,9 +501,12 @@ struct HomeView: View {
     private var outstandingSummary: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 3) {
+                // Secondary now the ground behind it is the page. Blue ink on
+                // a blue tint was one idea; blue ink on the bare page is the
+                // app's accent spent on a label.
                 Text("Waiting on clients")
                     .font(.caption)
-                    .foregroundStyle(Color(.blueAccentText))
+                    .foregroundStyle(.secondary)
                 // Always in the user's own currency, converting quotes priced
                 // in another one — a raw sum across currencies is meaningless.
                 //

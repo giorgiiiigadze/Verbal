@@ -24,6 +24,13 @@ struct QuoteRow: View {
     /// of which has a date heading — a bare "4:26 PM" there could be any day of
     /// the year. Those get the day and the time together instead.
     var dayIsKnown: Bool = false
+    /// True when the row already sits under the client it belongs to.
+    ///
+    /// The clients thread hangs every one of a person's quotes off a header
+    /// carrying their name, so repeating it on each row said the same thing
+    /// five times down one column. The timestamp stays — it is the only thing
+    /// telling the quotes in a thread apart.
+    var clientIsKnown: Bool = false
 
     /// Drafts only, and it takes the status pill's place rather than adding to
     /// the row.
@@ -94,8 +101,10 @@ struct QuoteRow: View {
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    /// Client name when known, otherwise when the quote was made. The client is
-    /// the more useful identifier — several quotes share the same job title.
+    /// Client name and when the quote was made — or just the timestamp, when
+    /// the list around the row has already said whose it is. The client leads
+    /// where it appears: several quotes share the same job title, and names
+    /// don't.
     private var subtitle: String {
         // Without a heading to lean on, the day comes along with the time —
         // "Yesterday, 7:45 PM", "Jul 27". `.relative` gave "2 days ago", which
@@ -104,7 +113,8 @@ struct QuoteRow: View {
         let when = dayIsKnown
             ? quote.createdAt.formatted(.dateTime.hour().minute())
             : quoteDateLabel(quote.createdAt)
-        guard let client = quote.clientName, !client.isEmpty else { return when }
+        guard !clientIsKnown,
+              let client = quote.clientName, !client.isEmpty else { return when }
         return "\(client) · \(when)"
     }
 

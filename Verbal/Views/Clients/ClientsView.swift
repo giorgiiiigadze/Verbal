@@ -136,19 +136,20 @@ struct ClientsView: View {
             withAnimation(.easeOut(duration: 0.2)) { toggleCollapse(client) }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: isExpanded(client) ? "chevron.down" : "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 12)
-                    // No animation on the glyph swap itself — the thread opening
-                    // is the motion; a spinning chevron on top is noise.
-                    .animation(nil, value: isExpanded(client))
-
-                InitialsAvatar(name: client.name, size: 40)
+                // 44, against the ~40 of the two lines beside it. Big enough to
+                // be the thing you find the row by, and no bigger — past that
+                // the header outgrows the quote cards hanging off it, which is
+                // the hierarchy the wrong way up.
+                InitialsAvatar(name: client.name, size: 44)
 
                 VStack(alignment: .leading, spacing: 2) {
+                    // Slab, like the headings on Home and a quote's own title.
+                    // A client is a name the app is filed under rather than a
+                    // field on a row, and the serif is what the app uses to say
+                    // so — the quotes hanging beneath keep the system face, so
+                    // the parent and its thread stay told apart.
                     Text(client.name)
-                        .font(.callout.weight(.semibold))
+                        .font(.robotoSlab(17, relativeTo: .headline))
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(1)
                     Text(client.subtitle)
@@ -167,6 +168,17 @@ struct ClientsView: View {
                         .font(.footnote.weight(.medium).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
+
+                // Trailing, where a disclosure belongs — and it leaves the
+                // leading edge to the avatar, which now lines up with the rail
+                // running down to the quotes below.
+                Image(systemName: isExpanded(client) ? "chevron.down" : "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 12)
+                    // No animation on the glyph swap itself — the thread opening
+                    // is the motion; a spinning chevron on top is noise.
+                    .animation(nil, value: isExpanded(client))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -206,7 +218,11 @@ struct ClientsView: View {
                 onDeleted: {}
             )
         } label: {
-            QuoteRow(quote: quote, unpricedCount: unpricedCount(for: quote))
+            // The header above this thread already names the client, so the
+            // row drops it and keeps the timestamp.
+            QuoteRow(quote: quote,
+                     unpricedCount: unpricedCount(for: quote),
+                     clientIsKnown: true)
         }
         .buttonStyle(.plain)
         // The vertical padding is inside the connector's drawing area, so the
