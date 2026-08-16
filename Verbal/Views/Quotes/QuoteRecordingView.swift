@@ -89,7 +89,7 @@ struct QuoteRecordingView: View {
                                     .lineLimit(2)
                             }
                         }
-                        .font(.robotoSlab(34, relativeTo: .largeTitle))
+                        .font(.robotoSlab(29, relativeTo: .title))
 
                         // Only over a quote that exists. When the transcript
                         // wasn't enough there is nothing to name a client on and
@@ -542,9 +542,9 @@ struct QuoteRecordingView: View {
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     if notEnough, !notEnoughNote.isEmpty {
-                        Text(notEnoughNote)
-                            .font(.callout)
-                            .fontWeight(.medium)
+                        // The same string as the summary above, under
+                        // another name, so it is set the same way.
+                        Text(emphasizedSummary(notEnoughNote))
                             .foregroundStyle(Color(.blueAccentText))
                             // Wraps rather than truncating. This is the app
                             // explaining why it couldn't build a quote, and it
@@ -665,9 +665,7 @@ struct QuoteRecordingView: View {
         // 20 and 4, exactly as the quote screen — the same document, so the
         // two were not allowed to drift apart by four points.
         VStack(alignment: .leading, spacing: 20) {
-            Text(quote.jobSummary)
-                .font(.callout)
-                .fontWeight(.medium)
+            Text(emphasizedSummary(quote.jobSummary))
                 .foregroundStyle(Color(.mainText))
                 .frame(maxWidth: .infinity, alignment: .leading)
 

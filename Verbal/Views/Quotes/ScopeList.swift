@@ -16,9 +16,13 @@ struct ScopeList: View {
             // a heading, not below: it should read as attached to what follows
             // rather than floating between two blocks.
             VStack(alignment: .leading, spacing: 8) {
+                // Stepped back from the content it names. The facts in the
+                // summary above are bold now, and a heading in full ink at the
+                // same size read as another one of them — the darkest thing on
+                // the page should be what the page says, not its labels.
                 Text("Scope of work")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(Color(.mainText))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                         HStack(alignment: .top, spacing: 10) {
@@ -27,13 +31,14 @@ struct ScopeList: View {
                                 .frame(width: 7, height: 7)
                                 // Centred on the first line's cap height rather
                                 // than its box, so the dot sits with the text.
-                                .padding(.top, 7)
-                            // The same weight as the summary above it. These are
-                            // two halves of one description of the job and were
-                            // set as though one mattered more.
+                                .padding(.top, 6)
+                            // Regular, not the medium this and the summary once
+                            // shared. They are two halves of one description of
+                            // the job, but the summary now carries bold facts
+                            // inside it, and five near-bold bullets under that
+                            // outweighed the prose they belong to.
                             Text(item)
-                                .font(.callout)
-                                .fontWeight(.medium)
+                                .font(.subheadline)
                                 .foregroundStyle(Color(.mainText))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }

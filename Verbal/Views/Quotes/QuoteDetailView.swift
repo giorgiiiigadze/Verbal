@@ -2,7 +2,7 @@
 //  QuoteDetailView.swift
 //  Verbal
 //
-//  The quote review screen: header, chips (creator / date / currency / status),
+//  The quote review screen: header, chips (client / date / status / currency),
 //  job summary, and the line-item table with a computed total.
 //
 
@@ -169,23 +169,13 @@ struct QuoteDetailView: View {
                 QuoteChip(text: dateLabel) {
                     Image(systemName: "calendar")
                 }
-                // 3. Currency — tap to change this quote's currency.
-                Menu {
-                    Picker("Currency", selection: Binding(
-                        get: { currency },
-                        set: { pendingCurrency = ($0 == currency) ? nil : CurrencyTarget(id: $0) }
-                    )) {
-                        ForEach(AppCurrency.allCases) { option in
-                            Text(option.label).tag(option.rawValue)
-                        }
-                    }
-                } label: {
-                    QuoteChip(text: currencyLabel) {
-                        Image(systemName: "coloncurrencysign.circle")
-                    }
-                }
-                .buttonStyle(.plain)
-                // 4. Status — tap to change it.
+                // 3. Status — tap to change it. Ahead of the currency
+                // because it is the one chip that changes over a quote's life,
+                // and the only one worth checking on the way past.
+                //
+                // Coloured, unlike its neighbours: it carries the same pair the
+                // list row's pill wears, so a quote accepted in the list is the
+                // same green on its own page.
                 Menu {
                     Picker("Status", selection: Binding(
                         get: { status },
@@ -198,8 +188,26 @@ struct QuoteDetailView: View {
                         }
                     }
                 } label: {
-                    QuoteChip(text: statusLabel) {
+                    QuoteChip(text: statusLabel,
+                              palette: (QuoteStatusStyle.text(status),
+                                        QuoteStatusStyle.fill(status))) {
                         Image(systemName: statusIcon)
+                    }
+                }
+                .buttonStyle(.plain)
+                // 4. Currency — tap to change this quote's currency.
+                Menu {
+                    Picker("Currency", selection: Binding(
+                        get: { currency },
+                        set: { pendingCurrency = ($0 == currency) ? nil : CurrencyTarget(id: $0) }
+                    )) {
+                        ForEach(AppCurrency.allCases) { option in
+                            Text(option.label).tag(option.rawValue)
+                        }
+                    }
+                } label: {
+                    QuoteChip(text: currencyLabel) {
+                        Image(systemName: "coloncurrencysign.circle")
                     }
                 }
                 .buttonStyle(.plain)
@@ -481,23 +489,21 @@ struct QuoteDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text(displayTitle)
-                    .font(.robotoSlab(34, relativeTo: .largeTitle))
+                    .font(.robotoSlab(29, relativeTo: .title))
                     .foregroundStyle(Color(.mainText))
                     .fixedSize(horizontal: false, vertical: true)
 
                 chips
 
+                // No "Summary" heading over it. The paragraph under the title
+                // is the summary and could not be anything else, so the word
+                // was a label announcing one paragraph — and it pushed the
+                // thing it named further down the page. The review screen after
+                // a recording never had one; this is the two agreeing.
                 if !jobSummary.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Summary")
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(Color(.mainText))
-                        Text(jobSummary)
-                            .font(.callout)
-                            .fontWeight(.medium)
-                            .foregroundStyle(Color(.mainText))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    Text(emphasizedSummary(jobSummary))
+                        .foregroundStyle(Color(.mainText))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 // 4 on top of the stack's own 20. A section still starts a step

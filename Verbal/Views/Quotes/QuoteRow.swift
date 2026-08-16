@@ -152,32 +152,12 @@ struct QuoteRow: View {
 
     private var pillForeground: Color {
         if showsUnpriced { return Color(.statusWarningText) }
-        switch quote.effectiveStatus {
-        // Gray, where this used to be orange. Draft is the state every quote
-        // starts in — it isn't a warning, and spending the app's one warm
-        // colour on it left nothing to say when something actually is wrong.
-        case "draft": return Color(.statusMutedText)
-        case "viewed": return .white
-        case "accepted": return Color(.statusAcceptedText)
-        case "declined": return Color(.statusDeclinedText)
-        case "expired": return Color(.statusMutedText)
-        default: return Color(.statusSentText)
-        }
+        return QuoteStatusStyle.text(quote.effectiveStatus)
     }
 
     private var pillBackground: Color {
         if showsUnpriced { return Color(.statusWarningFill) }
-        switch quote.effectiveStatus {
-        case "draft": return Color(.statusMutedFill)
-        // Filled, where every other state is a tint. The only pill on the
-        // screen that has to be seen from across the list — and the app's own
-        // accent doing it, rather than a colour borrowed from the palette.
-        case "viewed": return Color(.royalBlue600)
-        case "accepted": return Color(.statusAcceptedFill)
-        case "declined": return Color(.statusDeclinedFill)
-        case "expired": return Color(.statusMutedFill)
-        default: return Color(.statusSentFill)
-        }
+        return QuoteStatusStyle.fill(quote.effectiveStatus)
     }
 }
 
