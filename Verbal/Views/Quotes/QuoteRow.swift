@@ -36,24 +36,19 @@ struct QuoteRow: View {
     private var showsUnpriced: Bool {
         unpricedCount > 0 && quote.effectiveStatus == "draft"
     }
-    @Environment(\.colorScheme) private var scheme
-
-    /// RoyalBlue600 has no dark variant — it is #192868 in both appearances —
-    /// so on a pinned card, which is itself a dark blue in dark mode, the pin
-    /// was navy on navy. White in the dark, the same inversion the sign-in
-    /// waves needed for the same reason.
-    private var pinColor: Color {
-        scheme == .dark ? .white : Color(.royalBlue600)
-    }
 
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     if quote.pinned {
+                        // Secondary, not the brand blue it was. The card is
+                        // no longer tinted, so the glyph is the whole signal —
+                        // and a signal that has the section heading above it
+                        // and the pin's own shape does not need a colour too.
                         Image(systemName: "pin.fill")
                             .font(.caption2)
-                            .foregroundStyle(pinColor)
+                            .foregroundStyle(.secondary)
                             // Springs in from nothing at the corner it will
                             // occupy, so the pin reads as being pressed into
                             // the card rather than fading onto it.
@@ -85,7 +80,12 @@ struct QuoteRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 18)
-        .background(quote.pinned ? Color(.royalBlue25) : Color(.cardSurface),
+        // One fill for every row, pinned or not. A pinned quote already sits
+        // under its own heading at the top of the list, which says where it is
+        // better than a colour can — and royalBlue25 is the tint the app uses
+        // for things asking to be tapped (the outstanding band, the ready-to-add
+        // card), so a pin read as more urgent than the money above it.
+        .background(Color(.cardSurface),
                     in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)

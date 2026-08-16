@@ -79,11 +79,11 @@ struct HomeView: View {
                 }
             }
             .background(Color(.homeBackground))
-            .navigationTitle("Your quotes")
-            // Fixed in the bar, matching the rate card. Two tabs that behave
-            // differently under the same thumb read as two apps — and the large
-            // title was giving its height to a name the tab bar is already
-            // showing, on the screen with the most to list.
+            // Empty on purpose — the name of the screen is `pageTitle`, in the
+            // list itself. Left as a large title it would fold into the bar on
+            // scroll; left inline it would sit there permanently. Both put the
+            // heading in two places at once.
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             // Attached only while searching, so the screen carries no search
             // field until one is asked for.
@@ -98,7 +98,36 @@ struct HomeView: View {
                                       isPresented: $isSearching,
                                       prompt: "Search quotes"))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                // Search on its own, on the right. It is the one control that
+                // changes what the list contains rather than where you are
+                // going, and the field it opens drops from this side.
+                //
+                // Ours rather than the system's search item: that one brings
+                // its own container wherever it is placed and cannot be pulled
+                // into a group. The cost is that the magnifier drives
+                // `isSearching` by hand; the field itself is still
+                // `.searchable`, so the keyboard, cancel and dismissal
+                // behaviour are unchanged.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isSearching = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .accessibilityLabel("Search quotes")
+                }
+                // The filter and the rate card, in one glass container on the
+                // left, where the thumb reaching across for them is not also
+                // covering the list. Both
+                // are about the shape of the list rather than about a quote in
+                // it — one narrows what is shown, the other holds the prices
+                // that fill them — and two separate circles made them look
+                // like two unrelated controls.
+                //
+                // The rate card used to be a tab of its own. It is setup rather
+                // than a place, filled in once and topped up now and then, so
+                // it was spending a permanent slot on a monthly visit.
+                ToolbarItemGroup(placement: .topBarLeading) {
                     Menu {
                         Picker("Filter", selection: $filter) {
                             ForEach(QuoteFilter.allCases) { option in
@@ -110,23 +139,8 @@ struct HomeView: View {
                               ? "line.3.horizontal.decrease"
                               : "line.3.horizontal.decrease.circle.fill")
                     }
-                }
-                // The rate card, which used to be a tab of its own. It is setup
-                // rather than a place — filled in once and topped up now and
-                // then, mostly from the prompt after a recording — so it was
-                // spending a permanent slot on a monthly visit.
-                //
-                // One group, so the bar gives the pair a single glass container:
-                // the rate card and search are both "leave this list", and two
-                // separate circles made them look like two unrelated controls.
-                //
-                // Both buttons are ours because the system's search item cannot
-                // be pulled into a group with a custom one — it brings its own
-                // container wherever it is placed. The cost is that the
-                // magnifier drives `isSearching` by hand instead of the system
-                // doing it; the search field itself is still `.searchable`, so
-                // the keyboard, cancel and dismissal behaviour are unchanged.
-                ToolbarItemGroup(placement: .topBarTrailing) {
+                    .accessibilityLabel("Filter quotes")
+
                     // Not a NavigationLink: the first tap has to be able to
                     // stop at the intro sheet instead of pushing.
                     Button {
@@ -139,13 +153,6 @@ struct HomeView: View {
                         Image(systemName: "tag.fill")
                     }
                     .accessibilityLabel("Rate card")
-
-                    Button {
-                        isSearching = true
-                    } label: {
-                        Image(systemName: "magnifyingglass")
-                    }
-                    .accessibilityLabel("Search quotes")
                 }
             }
             .navigationDestination(isPresented: $showRateCard) {
@@ -272,8 +279,27 @@ struct HomeView: View {
 
     // MARK: - List
 
+    /// The screen's name, set as the page's own heading rather than as a
+    /// navigation title.
+    ///
+    /// It scrolls away with the list and never reappears in the bar. A large
+    /// title would collapse into the bar on the way up, which puts the name of
+    /// the screen you are already on back in front of you — and the bar has
+    /// the filter, the rate card and search in it, which are the things worth
+    /// reaching for once the list is moving.
+    private var pageTitle: some View {
+        Text("Your quotes")
+            .font(.robotoSlab(34, relativeTo: .largeTitle))
+            .foregroundStyle(Color(.mainText))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 10, trailing: 20))
+    }
+
     private var quotesList: some View {
         List {
+            pageTitle
+
             // Money in play, above the list — the number worth opening the app
             // for. Hidden while searching or filtering, when it'd be misleading.
             // Stays up under the waiting filter, where it describes exactly the
