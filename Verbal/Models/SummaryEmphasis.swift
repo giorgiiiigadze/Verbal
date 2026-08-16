@@ -74,9 +74,7 @@ func emphasizedScopeItem(_ text: String, font: Font = .subheadline) -> Attribute
 /// emphasised rather than from how hard.
 private func countRange(in text: String) -> NSRange? {
     let full = NSRange(text.startIndex..<text.endIndex, in: text)
-    guard let regex = try? NSRegularExpression(pattern: scopeCountPattern,
-                                               options: [.caseInsensitive]),
-          let match = regex.firstMatch(in: text, range: full) else { return nil }
+    guard let match = scopeCountRegex?.firstMatch(in: text, range: full) else { return nil }
     // Never the whole bullet. "Two assistants" as a complete item would be set
     // entirely in bold, which says nothing about which part matters.
     guard match.range.length < text.utf16.count else { return nil }
@@ -95,8 +93,7 @@ private func emphasisRanges(in text: String) -> [NSRange]? {
 
     let full = NSRange(text.startIndex..<text.endIndex, in: text)
     var found: [NSRange] = []
-    for pattern in emphasisPatterns {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
+    for regex in emphasisRegexes {
         found += regex.matches(in: text, range: full).map(\.range)
     }
     guard !found.isEmpty else { return nil }
@@ -146,6 +143,17 @@ private let currencyPattern: String = {
         .sorted { $0.count > $1.count }
     return symbols.joined(separator: "|")
 }()
+
+/// Compiled once. These are called from view bodies — a summary and up to six
+/// bullets, re-evaluated on every scroll and every animation frame — and
+/// rebuilding twelve regular expressions each pass is real work on the main
+/// thread to arrive at the same objects every time.
+private let emphasisRegexes: [NSRegularExpression] = emphasisPatterns.compactMap {
+    try? NSRegularExpression(pattern: $0, options: [.caseInsensitive])
+}
+
+private let scopeCountRegex = try? NSRegularExpression(pattern: scopeCountPattern,
+                                                       options: [.caseInsensitive])
 
 /// A count and the thing being counted, for scope bullets.
 ///

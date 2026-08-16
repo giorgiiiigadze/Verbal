@@ -40,9 +40,8 @@ enum OnboardingMemory {
 
     private static func read() -> Bool {
         var query = baseQuery
-        query[kSecReturnData as String] = true
-        var item: CFTypeRef?
-        if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess { return true }
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        if SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess { return true }
 
         // Everyone who onboarded before this moved to the Keychain has the
         // answer in their defaults instead. Without this, updating the app
@@ -64,8 +63,14 @@ enum OnboardingMemory {
     /// updates while signed out.
     private static let legacyDefaultsKey = "hasSeenOnboarding"
 
+    /// Adds the item, or does nothing if it is already there.
+    ///
+    /// Deliberately NOT guarded by `read()`. It was, and `read()`'s migration
+    /// below calls this — so a user with the old default and no Keychain item
+    /// sent the two functions round each other until the stack ran out, on the
+    /// first launch after updating. `errSecDuplicateItem` is the cheaper and
+    /// safer way to ask the same question, and it cannot recurse.
     private static func write() {
-        guard !read() else { return }
         var query = baseQuery
         query[kSecValueData as String] = Data([1])
         // This device only, and only while it is unlocked. Nothing here is
