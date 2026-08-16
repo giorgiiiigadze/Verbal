@@ -57,6 +57,26 @@ func quoteDateLabel(_ date: Date, now: Date = Date()) -> String {
     return date.formatted(.dateTime.month(.abbreviated).day())
 }
 
+/// Heading for a day's worth of quotes on Home: "Earlier today", "Yesterday",
+/// "Wed 12 Aug", or "Wed 12 Aug 2025" once the year stops being obvious.
+///
+/// The weekday is there because a date on its own is hard to place — people
+/// look for "the one from Tuesday", not the one from the 12th.
+func quoteSectionTitle(_ date: Date, now: Date = Date()) -> String {
+    let calendar = Calendar.current
+    if calendar.isDateInToday(date) { return "Earlier today" }
+    if calendar.isDateInYesterday(date) { return "Yesterday" }
+
+    let day = date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+    // The year only earns its place once it isn't this one. Carrying it all
+    // year round puts four digits on every heading to say what the user
+    // already knows.
+    guard calendar.component(.year, from: date) != calendar.component(.year, from: now) else {
+        return day
+    }
+    return "\(day) \(date.formatted(.dateTime.year()))"
+}
+
 /// Formats a quantity + unit like "8 each" or "20 meters".
 func quantityLabel(_ quantity: Double?, _ unit: String?) -> String? {
     guard let quantity else { return nil }

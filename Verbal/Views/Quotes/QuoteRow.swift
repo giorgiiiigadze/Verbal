@@ -16,13 +16,20 @@ struct QuoteRow: View {
     /// Lines this quote can't price yet. Passed in because the summary row
     /// doesn't know what's inside a quote — the list reads it from the prefetch.
     var unpricedCount: Int = 0
+    /// True when a date heading directly above this row already names the day.
+    ///
+    /// The row then shows the clock time alone, because "Wed 12 Aug" and
+    /// "2 days ago" one under the other are the same fact told twice. Off by
+    /// default, and off for the pinned section, which has no date heading —
+    /// a bare "4:26 PM" there could be any day of the year.
+    var dayIsKnown: Bool = false
 
     /// Drafts only, and it takes the status pill's place rather than adding to
     /// the row.
     ///
-    /// The list is already grouped under "Drafts · 5", so a pill repeating that
-    /// word is the least informative thing in the row and can be spent on the
-    /// exception instead. Once a quote has gone out the trade is off: the gap
+    /// "Draft" is the least informative thing the pill could say — it is the
+    /// state every quote starts in — so the slot is spent on the exception
+    /// instead. Once a quote has gone out the trade is off: the gap
     /// was sent deliberately as TBC, and what the customer has done with it
     /// since is the thing worth reading.
     private var showsUnpriced: Bool {
@@ -89,9 +96,11 @@ struct QuoteRow: View {
     /// Client name when known, otherwise when the quote was made. The client is
     /// the more useful identifier — several quotes share the same job title.
     private var subtitle: String {
-        let age = quote.createdAt.formatted(.relative(presentation: .named))
-        guard let client = quote.clientName, !client.isEmpty else { return age }
-        return "\(client) · \(age)"
+        let when = dayIsKnown
+            ? quote.createdAt.formatted(.dateTime.hour().minute())
+            : quote.createdAt.formatted(.relative(presentation: .named))
+        guard let client = quote.clientName, !client.isEmpty else { return when }
+        return "\(client) · \(when)"
     }
 
     /// Small tinted capsule naming the quote's status — pale blue for the

@@ -2,7 +2,7 @@
 //  HomeView.swift
 //  Verbal
 //
-//  The "Your quotes" tab: a searchable, filterable, status-grouped list of the
+//  The "Your quotes" tab: a searchable, filterable, date-grouped list of the
 //  user's quotes with pin / share / duplicate / status / delete actions.
 //
 
@@ -307,7 +307,11 @@ struct HomeView: View {
                 // Header as a normal row (not a Section header) so it scrolls
                 // away with the content instead of pinning to the top.
                 Text(section.title)
-                    .font(.subheadline)
+                    // A shade heavier than the body around it. Not darker as
+                    // well: a date carries less than a status heading did, and
+                    // it only has to mark where one day ends and the next
+                    // begins.
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -315,7 +319,9 @@ struct HomeView: View {
 
                 ForEach(section.quotes) { quote in
                     ZStack {
-                        QuoteRow(quote: quote, unpricedCount: unpricedCount(for: quote))
+                        QuoteRow(quote: quote,
+                                 unpricedCount: unpricedCount(for: quote),
+                                 dayIsKnown: section.dated)
                         // Zero-opacity link so the row navigates without the
                         // default trailing chevron.
                         NavigationLink {
@@ -799,14 +805,14 @@ struct HomeView: View {
 
     // MARK: - Sections
 
-    /// Quotes grouped into status sections, honoring the active filter.
-    /// Section titles include a count, e.g. "Waiting to hear back · 2".
     /// The trimmed search text, as typed (for display in the no-match state).
     private var searchQuery: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var sections: [(title: String, quotes: [QuoteSummary])] {
+    /// `dated` says the heading above these rows names a day, so the rows can
+    /// drop to a clock time. False for Pinned, which spans every day there is.
+    private var sections: [(title: String, dated: Bool, quotes: [QuoteSummary])] {
         let query = searchQuery.lowercased()
         let filtered = quotes.filter { quote in
             guard filter.matches(quote.effectiveStatus) else { return false }
@@ -815,21 +821,29 @@ struct HomeView: View {
                 || (quote.jobSummary?.lowercased().contains(query) ?? false)
         }
         // Pinned quotes get their own section at the very top and are excluded
-        // from the status sections below so they aren't listed twice.
+        // from the date sections below so they aren't listed twice.
         let pinned = filtered.filter(\.pinned)
         let rest = filtered.filter { !$0.pinned }
 
-        var groups: [QuoteStatusGroup: [QuoteSummary]] = [:]
+        // By day, not by status. Every row already wears a status pill, so a
+        // status heading was saying the same thing twice — and status is a
+        // filter, which is the toolbar's job. Grouped by date the list reads
+        // the way people look for a quote: the one from Tuesday.
+        let calendar = Calendar.current
+        var days: [Date: [QuoteSummary]] = [:]
         for quote in rest {
-            groups[QuoteStatusGroup(status: quote.effectiveStatus), default: []].append(quote)
+            days[calendar.startOfDay(for: quote.createdAt), default: []].append(quote)
         }
-        var result: [(title: String, quotes: [QuoteSummary])] = []
+
+        var result: [(title: String, dated: Bool, quotes: [QuoteSummary])] = []
         if !pinned.isEmpty {
-            result.append(("Pinned · \(pinned.count)", pinned))
+            result.append(("Pinned", false, pinned))
         }
-        result += QuoteStatusGroup.allCases.compactMap { group in
-            guard let items = groups[group], !items.isEmpty else { return nil }
-            return ("\(group.title) · \(items.count)", items)
+        // Newest day first. Within a day the server's ordering already holds —
+        // it returns created_at descending — so the rows keep the order they
+        // were fetched in.
+        result += days.keys.sorted(by: >).map { day in
+            (quoteSectionTitle(day), true, days[day] ?? [])
         }
         return result
     }
@@ -1096,9 +1110,8 @@ struct SearchWhenAsked: ViewModifier {
     }
 }
 
-// MARK: - Status grouping & filtering
+// MARK: - Filtering
 
-/// Status buckets shown as list sections (in display order).
 /// A full-bleed List row draws no highlight of its own, so without this a tap on
 /// the summary band looks like nothing happened until the list rearranges.
 private struct BandPressStyle: ButtonStyle {
@@ -1106,32 +1119,6 @@ private struct BandPressStyle: ButtonStyle {
         configuration.label
             .opacity(configuration.isPressed ? 0.6 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-}
-
-private enum QuoteStatusGroup: CaseIterable, Hashable {
-    case drafts, waiting, accepted, declined, expired, other
-
-    init(status: String) {
-        switch status {
-        case "draft": self = .drafts
-        case "sent", "viewed": self = .waiting
-        case "accepted": self = .accepted
-        case "declined": self = .declined
-        case "expired": self = .expired
-        default: self = .other
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .drafts: return "Drafts"
-        case .waiting: return "Waiting to hear back"
-        case .accepted: return "Accepted"
-        case .declined: return "Declined"
-        case .expired: return "Expired"
-        case .other: return "Other"
-        }
     }
 }
 
