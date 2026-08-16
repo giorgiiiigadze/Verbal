@@ -140,6 +140,10 @@ struct QuoteRow: View {
                     .font(.caption2)
             }
             Text(showsUnpriced ? "\(unpricedCount) unpriced" : pillLabel)
+                // Same reasoning as the chip on the quote screen: the fill
+                // already fades when the status changes, so a label that cuts
+                // is the one part out of step.
+                .contentTransition(.opacity)
         }
         .font(.caption.weight(.medium))
         .foregroundStyle(pillForeground)

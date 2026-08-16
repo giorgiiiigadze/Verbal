@@ -672,6 +672,17 @@ struct QuoteDetailView: View {
                 showHeaderTitle = scrolledPastTitle
             }
         }
+        // Answers the tap. A selection tick for any change, and the fuller
+        // success pattern for Accepted — the one status that means the job was
+        // won, which Home already marks the same way.
+        //
+        // Keyed to the optimistic change rather than to the write landing: the
+        // tap should feel instant, the same reasoning the pin uses. A failed
+        // write reverts `status` and ticks again, which is honest — the state
+        // did change back.
+        .sensoryFeedback(trigger: status) { _, new in
+            new == "accepted" ? .success : .selection
+        }
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {

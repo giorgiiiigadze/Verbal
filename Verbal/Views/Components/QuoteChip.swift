@@ -34,9 +34,16 @@ struct QuoteChip<Leading: View>: View {
                 // chosen to sit together, and a grey glyph in the middle of it
                 // looks like a mistake.
                 .foregroundStyle(palette == nil && !tinted ? .secondary : foreground)
+                // For the one chip whose glyph changes in place — status. The
+                // others hold a constant symbol, so nothing else moves.
+                .contentTransition(.symbolEffect(.replace))
             Text(text)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(foreground)
+                // Crossfades with the fill behind it. Cut against a colour that
+                // fades, the label read as a different chip appearing rather
+                // than as this one changing.
+                .contentTransition(.opacity)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
