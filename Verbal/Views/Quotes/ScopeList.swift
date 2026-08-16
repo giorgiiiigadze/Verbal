@@ -32,13 +32,13 @@ struct ScopeList: View {
                                 // Centred on the first line's cap height rather
                                 // than its box, so the dot sits with the text.
                                 .padding(.top, 6)
-                            // Regular, not the medium this and the summary once
-                            // shared. They are two halves of one description of
-                            // the job, but the summary now carries bold facts
-                            // inside it, and five near-bold bullets under that
-                            // outweighed the prose they belong to.
-                            Text(item)
-                                .font(.subheadline)
+                            // Regular, with the count semibold — see
+                            // `emphasizedScopeItem`, which sets both. Medium
+                            // throughout was what this and the summary once
+                            // shared; the summary carries bold facts now, and
+                            // five near-bold bullets under it outweighed the
+                            // prose they belong to.
+                            Text(emphasizedScopeItem(item))
                                 .foregroundStyle(Color(.mainText))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }

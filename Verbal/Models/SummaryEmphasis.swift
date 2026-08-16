@@ -18,24 +18,69 @@ import SwiftUI
 /// The job summary with its facts — money, shares, spans of time, dates — set
 /// heavier than the prose, or all one weight when emphasis wouldn't help.
 ///
+/// A point larger than the scope bullets beneath it, and otherwise identical:
+/// same medium prose, same bold facts. The summary is the sentence that says
+/// what the job is and scope is the checklist under it, so it leads — but on
+/// size alone. Setting the bullets a weight lighter was tried and made them
+/// read as a different kind of text rather than as a quieter one.
+///
 /// Both weights are set here, and the call site must NOT add `.fontWeight()`
 /// of its own: that modifier is applied over every run in the string, so a
 /// `.fontWeight(.medium)` outside flattens the bold set inside and the whole
 /// thing renders in one weight. It looks like the matching failed. It hasn't.
-func emphasizedSummary(_ text: String, font: Font = .subheadline) -> AttributedString {
+func emphasizedSummary(_ text: String, font: Font = .callout) -> AttributedString {
     var attributed = AttributedString(text)
-    // The body weight the summary has always had, now carried by the string
-    // rather than by a modifier.
     attributed.font = font.weight(.medium)
     guard let ranges = emphasisRanges(in: text) else { return attributed }
 
     for range in ranges {
         guard let bounds = Range(range, in: attributed) else { continue }
-        // Bold against medium. Semibold is one step off medium and at this
-        // size the difference is invisible — which defeats the point.
+        // Bold, because the ground it stands on is already medium. Semibold
+        // against medium is one step, and at this size that step is invisible.
         attributed[bounds].font = font.weight(.bold)
     }
     return attributed
+}
+
+/// A scope bullet with its count set heavier — "Day-of coordination with
+/// **two assistants**", "Centerpieces on **twelve tables**".
+///
+/// A narrower rule than the summary's, because a bullet is a different kind of
+/// sentence. It carries no money, no dates and no terms — the prompt keeps
+/// those out of scope on purpose — so the only fact in one is how many of
+/// something the customer is getting, and that is the number they count back
+/// against the line items. One per bullet: a phrase of six words with two bold
+/// fragments in it is just a bold phrase.
+///
+func emphasizedScopeItem(_ text: String, font: Font = .subheadline) -> AttributedString {
+    var attributed = AttributedString(text)
+    // Medium and bold, the same pair the summary wears. The bullets were tried
+    // a step lighter, on the reasoning that five of them under a paragraph
+    // would out-shout it — but at one weight down they read as a different
+    // kind of text rather than as a quieter one. The summary stays dominant on
+    // size instead, which is the axis that can carry it without the two
+    // looking unrelated.
+    attributed.font = font.weight(.medium)
+    guard let range = countRange(in: text),
+          let bounds = Range(range, in: attributed) else { return attributed }
+    attributed[bounds].font = font.weight(.bold)
+    return attributed
+}
+
+/// The first count-and-noun in a bullet, if it has one.
+///
+/// One match rather than the summary's four. The bullets carry the same
+/// weights it does, so the restraint has to come from how many of them are
+/// emphasised rather than from how hard.
+private func countRange(in text: String) -> NSRange? {
+    let full = NSRange(text.startIndex..<text.endIndex, in: text)
+    guard let regex = try? NSRegularExpression(pattern: scopeCountPattern,
+                                               options: [.caseInsensitive]),
+          let match = regex.firstMatch(in: text, range: full) else { return nil }
+    // Never the whole bullet. "Two assistants" as a complete item would be set
+    // entirely in bold, which says nothing about which part matters.
+    guard match.range.length < text.utf16.count else { return nil }
+    return match.range
 }
 
 /// The ranges worth emphasising, or nil when the answer is "none of them".
@@ -101,6 +146,18 @@ private let currencyPattern: String = {
         .sorted { $0.count > $1.count }
     return symbols.joined(separator: "|")
 }()
+
+/// A count and the thing being counted, for scope bullets.
+///
+/// The noun is taken as whatever word follows rather than matched against a
+/// list of units: scope is written in the customer's language and counts
+/// anything the job happens to involve — assistants, tables, coats, sockets —
+/// and a list would always be missing the one this job needed. The summary's
+/// own count pattern does use a list, because there a bare number beside a
+/// word is as likely to be a house number as a quantity.
+private let scopeCountPattern =
+    #"\b(?:\d[\d,]*|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+"#
+    + #"[A-Za-z][A-Za-z-]+\b"#
 
 /// What counts as a fact in a quote summary.
 ///
