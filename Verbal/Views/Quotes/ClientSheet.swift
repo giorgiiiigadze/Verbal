@@ -39,7 +39,9 @@ struct ClientSheet: View {
                     .onSubmit(commit)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
-                    .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    // Tinted, not white. The sheet behind it is white, so a
+                    // white field was a hairline outline around nothing.
+                    .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .strokeBorder(Color(.royalBlue600).opacity(0.18), lineWidth: 1)

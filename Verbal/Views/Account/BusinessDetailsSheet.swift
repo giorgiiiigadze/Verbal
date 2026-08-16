@@ -139,7 +139,9 @@ struct BusinessDetailsSheet: View {
             .foregroundStyle(Color(.mainText))
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            // Tinted, not white. The sheet behind it is white, so a white
+            // field was a hairline outline around nothing.
+            .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(Color(.separator), lineWidth: 0.5)

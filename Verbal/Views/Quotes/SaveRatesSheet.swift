@@ -92,6 +92,11 @@ struct SaveRatesSheet: View {
                         }
                     }
                     .padding(.horizontal, 16)
+                    // Tinted, not bare. The sheet's page is white and this had
+                    // only a hairline, so the list read as an outline drawn
+                    // around nothing rather than as a thing on the page.
+                    .background(Color(.fieldFill),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .strokeBorder(Color(.separator), lineWidth: 0.5)

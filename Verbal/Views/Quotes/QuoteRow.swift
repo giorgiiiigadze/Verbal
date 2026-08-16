@@ -20,8 +20,9 @@ struct QuoteRow: View {
     ///
     /// The row then shows the clock time alone, because "Wed 12 Aug" and
     /// "2 days ago" one under the other are the same fact told twice. Off by
-    /// default, and off for the pinned section, which has no date heading —
-    /// a bare "4:26 PM" there could be any day of the year.
+    /// default, and off for the pinned section and the clients thread, neither
+    /// of which has a date heading — a bare "4:26 PM" there could be any day of
+    /// the year. Those get the day and the time together instead.
     var dayIsKnown: Bool = false
 
     /// Drafts only, and it takes the status pill's place rather than adding to
@@ -96,9 +97,13 @@ struct QuoteRow: View {
     /// Client name when known, otherwise when the quote was made. The client is
     /// the more useful identifier — several quotes share the same job title.
     private var subtitle: String {
+        // Without a heading to lean on, the day comes along with the time —
+        // "Yesterday, 7:45 PM", "Jul 27". `.relative` gave "2 days ago", which
+        // named neither the day nor the hour and so matched neither the list
+        // it sits in nor the row above it.
         let when = dayIsKnown
             ? quote.createdAt.formatted(.dateTime.hour().minute())
-            : quote.createdAt.formatted(.relative(presentation: .named))
+            : quoteDateLabel(quote.createdAt)
         guard let client = quote.clientName, !client.isEmpty else { return when }
         return "\(client) · \(when)"
     }

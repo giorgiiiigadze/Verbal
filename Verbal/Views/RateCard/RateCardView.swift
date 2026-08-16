@@ -168,12 +168,12 @@ struct RateCardView: View {
             }
 
             ForEach(groups, id: \.label) { group in
-                // Set and placed exactly as Home sets its status headings, and
+                // Set and placed exactly as Home sets its date headings, and
                 // as a normal row rather than a Section header for the same
                 // reason: it scrolls away with its rates instead of pinning to
                 // the top of the screen.
                 Text(group.label)
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -276,13 +276,13 @@ struct RateCardView: View {
                 || (item.unit?.lowercased().contains(query) ?? false)
         }
         let byType = Dictionary(grouping: matched, by: \.type)
-        // Counted in the heading, the way Home writes "Drafts · 5".
+        // Bare labels. The count went when Home's did — it counts what is
+        // directly beneath it, which the eye does faster than it reads.
         let known = Self.typeOrder.compactMap { type in
-            byType[type].map { ("\(Self.label(for: type)) · \($0.count)", $0) }
+            byType[type].map { (Self.label(for: type), $0) }
         }
         let rest = byType.keys.filter { !Self.typeOrder.contains($0) }.sorted().map { type in
-            let group = byType[type] ?? []
-            return ("\(Self.label(for: type)) · \(group.count)", group)
+            (Self.label(for: type), byType[type] ?? [])
         }
         return known + rest
     }
@@ -775,7 +775,9 @@ private struct ReadyToAddSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color(.cardSurface),
+            // Tinted, not white. This sheet's page is white, so a white row
+            // was a hairline outline around nothing.
+            .background(Color(.fieldFill),
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -910,7 +912,7 @@ private struct AddRateItemView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.cardSurface),
+                    .background(Color(.fieldFill),
                                 in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1034,7 +1036,7 @@ private struct AddRateItemView: View {
                 .foregroundStyle(isSelected ? .white : Color(.mainText))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
-                .background(isSelected ? Color(.royalBlue600) : Color(.cardSurface),
+                .background(isSelected ? Color(.royalBlue600) : Color(.fieldFill),
                             in: Capsule())
                 .overlay(
                     Capsule().strokeBorder(isSelected ? .clear : Color(.separator),
@@ -1100,7 +1102,7 @@ private struct AddRateItemView: View {
             .foregroundStyle(Color(.mainText))
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .background(Color(.cardSurface),
+            .background(Color(.fieldFill),
                         in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
