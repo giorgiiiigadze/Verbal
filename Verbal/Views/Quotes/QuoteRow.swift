@@ -103,8 +103,15 @@ struct QuoteRow: View {
         return "\(client) · \(when)"
     }
 
-    /// Small tinted capsule naming the quote's status — pale blue for the
-    /// working states, green/red for the settled ones.
+    /// Small tinted capsule naming the quote's status: gray while nothing has
+    /// happened to it, blue once it is out, green or red once it is settled.
+    ///
+    /// The colours are the `Status*` pairs in the asset catalogue rather than
+    /// the system's `.green` / `.red` at some alpha. Those are tuned for iOS
+    /// controls — vivid and cool — and a derived 14% tint of one is not a
+    /// chosen colour; on a warm off-white page the pills read louder than the
+    /// title above them. Each pair here is a muted ink over a ground picked to
+    /// go with it, in both appearances.
     ///
     /// "Viewed" is the exception, and deliberately: it's the one state that
     /// reports something the customer did rather than something the user did,
@@ -139,28 +146,32 @@ struct QuoteRow: View {
     }
 
     private var pillForeground: Color {
-        if showsUnpriced { return LineItemRow.amber }
+        if showsUnpriced { return Color(.statusWarningText) }
         switch quote.effectiveStatus {
-        case "draft": return .orange
+        // Gray, where this used to be orange. Draft is the state every quote
+        // starts in — it isn't a warning, and spending the app's one warm
+        // colour on it left nothing to say when something actually is wrong.
+        case "draft": return Color(.statusMutedText)
         case "viewed": return .white
-        case "accepted": return .green
-        case "declined": return .red
-        case "expired": return .secondary
-        default: return Color(.blueAccentText)
+        case "accepted": return Color(.statusAcceptedText)
+        case "declined": return Color(.statusDeclinedText)
+        case "expired": return Color(.statusMutedText)
+        default: return Color(.statusSentText)
         }
     }
 
     private var pillBackground: Color {
-        if showsUnpriced { return LineItemRow.amber.opacity(0.14) }
+        if showsUnpriced { return Color(.statusWarningFill) }
         switch quote.effectiveStatus {
-        case "draft": return .orange.opacity(0.14)
+        case "draft": return Color(.statusMutedFill)
         // Filled, where every other state is a tint. The only pill on the
-        // screen that has to be seen from across the list.
+        // screen that has to be seen from across the list — and the app's own
+        // accent doing it, rather than a colour borrowed from the palette.
         case "viewed": return Color(.royalBlue600)
-        case "accepted": return .green.opacity(0.14)
-        case "declined": return .red.opacity(0.12)
-        case "expired": return Color(.separator).opacity(0.5)
-        default: return Color(.royalBlue25)
+        case "accepted": return Color(.statusAcceptedFill)
+        case "declined": return Color(.statusDeclinedFill)
+        case "expired": return Color(.statusMutedFill)
+        default: return Color(.statusSentFill)
         }
     }
 }

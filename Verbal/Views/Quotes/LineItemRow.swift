@@ -23,7 +23,11 @@ struct LineItemRow: View {
     /// The one warning colour, shared with everything that flags an unpriced or
     /// low-confidence line — the rate card, the recording review and the list
     /// pill all read it off here so the mark is the same amber everywhere.
-    static let amber = Color(red: 217 / 255, green: 115 / 255, blue: 13 / 255)
+    ///
+    /// An asset rather than the fixed RGB it was, so it finally lightens in the
+    /// dark instead of staying the same deep orange against a dark card. The
+    /// light value is unchanged.
+    static let amber = Color(.statusWarningText)
 
     /// Compared as a string because that is what the column holds. Anything
     /// other than "low" — "high", nil, a value the model invents later — says
