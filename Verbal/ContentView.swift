@@ -8,7 +8,14 @@ import SwiftUI
 struct ContentView: View {
     @State private var network = NetworkMonitor()
     @State private var session: SessionStore
-    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    /// Whether this person has been through onboarding — read from the
+    /// Keychain, not `@AppStorage`, so it survives a delete and reinstall the
+    /// same way the auth session does. See `OnboardingMemory`.
+    ///
+    /// Mirrored into state because the Keychain is not observable: the flow
+    /// itself writes through `OnboardingMemory` and then flips this, which is
+    /// what moves the screen on.
+    @State private var hasSeenOnboarding = OnboardingMemory.hasSeenOnboarding
 
     /// Set when the user swipes the offline banner away. Cleared on reconnect,
     /// so dismissing one drop-out doesn't silence the next one.
@@ -102,6 +109,13 @@ struct ContentView: View {
         .task {
             await session.start()
         }
+        // Signing out is the one moment the mirror above can be stale: the
+        // session that `SessionStore` recorded arrived after this view read
+        // the Keychain, so without this a sign-out inside a reinstalled app
+        // drops back to onboarding rather than to sign-in.
+        .onChange(of: session.state) { _, _ in
+            hasSeenOnboarding = OnboardingMemory.hasSeenOnboarding
+        }
         .task {
             try? await Task.sleep(for: .seconds(0.5))
             minSplashElapsed = true
@@ -121,7 +135,10 @@ struct ContentView: View {
             if hasSeenOnboarding {
                 AuthView()
             } else {
-                OnboardingView { hasSeenOnboarding = true }
+                OnboardingView {
+                    OnboardingMemory.hasSeenOnboarding = true
+                    hasSeenOnboarding = true
+                }
             }
         case .ready:
             MainTabView()

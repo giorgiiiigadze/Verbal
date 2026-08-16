@@ -241,6 +241,7 @@ final class SessionStore {
             // first-paint data streams in via bootstrap() in the background.
             state = .ready
             isBootstrapped = true
+            markOnboardingSeen()
             Task { await bootstrap() }
         } else {
             state = .signedOut
@@ -252,6 +253,7 @@ final class SessionStore {
             case .signedIn, .userUpdated, .tokenRefreshed:
                 if change.session != nil {
                     state = .ready
+                    markOnboardingSeen()
                     await bootstrap()
                 }
             case .signedOut:
@@ -290,6 +292,17 @@ final class SessionStore {
         // writes into.
         await adoptOnboardingDraft()
         await refreshBusinessLogo()
+    }
+
+    /// Records that this person has been through onboarding, the moment a
+    /// session turns up.
+    ///
+    /// Belt and braces alongside the flow writing it at the end: someone whose
+    /// account already exists has plainly been through it, however they got
+    /// here — a reinstall that restored the Keychain session, or a sign-in on
+    /// a device that has never shown them the flow.
+    private func markOnboardingSeen() {
+        OnboardingMemory.hasSeenOnboarding = true
     }
 
     /// Onboarding runs before there is an account, so the trade it collects has
@@ -577,6 +590,11 @@ final class SessionStore {
     /// local session and returns the app to the auth screen.
     func deleteAccount() async throws {
         let _: DeleteAccountResponse = try await client.functions.invoke("delete-account")
+        // Forget that they were ever onboarded. Signing out deliberately does
+        // not do this — leaving is not forgetting — but deleting the account
+        // is the one place someone says so outright, and whoever signs up on
+        // this phone next is starting from nothing.
+        OnboardingMemory.erase()
         try? await client.auth.signOut()
     }
 }
