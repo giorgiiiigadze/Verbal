@@ -111,7 +111,9 @@ struct AuthView: View {
             ZStack {
                 Text("Continue with Google")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(Color(.mainText))
+                    // The button is white in both appearances, so the label and
+                    // spinner are pinned dark rather than following the scheme.
+                    .foregroundStyle(.black)
                     .opacity(isChoosingAccount ? 0.35 : 1)
                 HStack {
                     Image(.googleLogo)
@@ -120,14 +122,16 @@ struct AuthView: View {
                         .frame(width: 20, height: 20)
                         .opacity(isChoosingAccount ? 0.35 : 1)
                     Spacer(minLength: 0)
-                    if isChoosingAccount { ProgressView() }
+                    if isChoosingAccount {
+                        ProgressView().tint(.black)
+                    }
                 }
             }
             .padding(.horizontal, 22)
             .frame(maxWidth: .infinity)
             .frame(height: 56)
-            .background(Color(.surface), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
+            .background(.white, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.black.opacity(0.12), lineWidth: 0.5))
         }
         .buttonStyle(.plain)
     }
