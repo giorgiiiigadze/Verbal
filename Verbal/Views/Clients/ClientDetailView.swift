@@ -14,11 +14,10 @@
 import SwiftUI
 
 struct ClientDetailView: View {
-    /// The client as they were when this page was pushed. Held for identity
-    /// only — everything drawn comes from `client`, below, which is rebuilt from
-    /// the session so an edit made in the thread at the bottom of this page
-    /// reaches the figures at the top of it.
-    let pushed: Client
+    /// Who this page is about — their case-folded name, nothing more. The page
+    /// holds no copy of them: everything drawn comes from `client` below, so an
+    /// edit made in the thread at the bottom reaches the figures at the top.
+    let key: ClientKey
 
     @Environment(SessionStore.self) private var session
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
@@ -27,16 +26,15 @@ struct ClientDetailView: View {
     ///
     /// Matched case-insensitively on the name, the same rule `ClientsView`
     /// groups by — two spellings are one person there and must be one person
-    /// here. Falls back to the pushed copy when the last of their quotes has
-    /// just been deleted, so the page empties rather than vanishing under the
-    /// user mid-read.
+    /// here. Empty of quotes once the last of theirs is deleted, which is the
+    /// only way a client stops existing — the page then shows their name over
+    /// nothing for the moment before it is popped, rather than blanking.
     private var client: Client {
-        let key = pushed.id
         let mine = session.quotes.filter {
             ($0.clientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased() == key
+                .lowercased() == key.id
         }
-        return Client(mine) ?? pushed
+        return Client(mine) ?? Client(name: key.name, quotes: [])
     }
 
     /// Changes whenever a figure on this page would.
@@ -95,10 +93,6 @@ struct ClientDetailView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
-        // Also here, not only on the tab's root: the thread below pushes from a
-        // screen that is itself pushed, and a root's destination doesn't
-        // reliably reach it.
-        .modifier(QuoteDestination())
         .task(id: signature) {
             quoted = await ConvertedTotal.of(client.quotes, in: currencyCode)
             won = await ConvertedTotal.of(accepted, in: currencyCode)

@@ -85,7 +85,7 @@ struct ClientsView: View {
             }
         }
         .background(Color(.homeBackground))
-        .modifier(QuoteDestination())
+        .modifier(ClientsDestinations())
         .navigationTitle("Clients")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search clients")
@@ -149,9 +149,11 @@ struct ClientsView: View {
     /// the page existed.
     private func clientHeader(_ client: Client) -> some View {
         HStack(spacing: 12) {
-            NavigationLink {
-                ClientDetailView(pushed: client)
-            } label: {
+            // By value, like the quotes below. A closure link would build this
+            // page outside the stack, and the quote destination declared on
+            // this screen would then be out of scope for the thread at the foot
+            // of it — which is how tapping a quote there did nothing at all.
+            NavigationLink(value: ClientKey(id: client.id, name: client.name)) {
                 HStack(spacing: 12) {
                     // 44, against the ~40 of the two lines beside it. Big enough
                     // to be the thing you find the row by, and no bigger — past
@@ -257,6 +259,12 @@ struct Client: Identifiable, Hashable {
     /// Case-folded, matching how the group was built — two spellings of one
     /// name must not become two rows with the same identity.
     var id: String { name.lowercased() }
+
+    /// For a client who no longer has any quotes — see `ClientDetailView`.
+    init(name: String, quotes: [QuoteSummary]) {
+        self.name = name
+        self.quotes = quotes
+    }
 
     init?(_ quotes: [QuoteSummary]) {
         guard let first = quotes.first else { return nil }
