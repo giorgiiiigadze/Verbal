@@ -281,7 +281,7 @@ struct HomeView: View {
     /// reaching for once the list is moving.
     private var pageTitle: some View {
         Text("Your quotes")
-            .font(.robotoSlab(34, relativeTo: .largeTitle))
+            .font(.robotoSlab(30, relativeTo: .title))
             .foregroundStyle(Color(.mainText))
             .id(Self.topAnchor)
             .listRowBackground(Color.clear)

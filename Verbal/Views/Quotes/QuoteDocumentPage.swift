@@ -19,6 +19,14 @@ struct QuoteDocumentPage: View {
     let isLastPage: Bool
     let pageNumber: Int
     let pageCount: Int
+    /// Shrinks everything above the footer, to hold a quote that overruns one
+    /// page by a little rather than spilling onto a second.
+    ///
+    /// Set by `QuotePDF`, and only within a few percent of 1 — past that the
+    /// document splits instead. The text reflows at the wider measure and is
+    /// scaled back down, so this reads as slightly smaller type on the same
+    /// margins rather than as a shrunken page floating in white.
+    var contentScale: CGFloat = 1
 
     private var currency: String? { document.currency }
 
@@ -27,6 +35,26 @@ struct QuoteDocumentPage: View {
     private static let ink = Color(red: 0.098, green: 0.157, blue: 0.408)
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // The footer keeps its size and its place at the foot of the page;
+            // only the document above it shrinks.
+            content
+                .frame(width: PageMetrics.contentWidth / contentScale, alignment: .topLeading)
+                .scaleEffect(contentScale, anchor: .topLeading)
+                .frame(width: PageMetrics.contentWidth, alignment: .topLeading)
+
+            Spacer(minLength: 0)
+
+            pageFooter
+        }
+        .padding(PageMetrics.margin)
+        .frame(width: PageMetrics.width, height: PageMetrics.height, alignment: .topLeading)
+        .background(.white)
+        // The document is a printed artifact: always light, never the app's theme.
+        .environment(\.colorScheme, .light)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             if isFirstPage {
                 header
@@ -59,16 +87,7 @@ struct QuoteDocumentPage: View {
                 }
                 acceptance.padding(.top, 22)
             }
-
-            Spacer(minLength: 0)
-
-            pageFooter
         }
-        .padding(PageMetrics.margin)
-        .frame(width: PageMetrics.width, height: PageMetrics.height, alignment: .topLeading)
-        .background(.white)
-        // The document is a printed artifact: always light, never the app's theme.
-        .environment(\.colorScheme, .light)
     }
 
     // MARK: - Sections
