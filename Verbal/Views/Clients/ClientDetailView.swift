@@ -10,6 +10,11 @@
 //  quotes already in the session, so there is nothing to fetch and nothing that
 //  can disagree with the thread at the bottom of the page.
 //
+//  Laid out the way a stock page is, because a stock page answers the same
+//  shape of question: the figure that matters, how it moved, the history behind
+//  it, then the detail. The one thing not borrowed is the line through hundreds
+//  of points — see `ClientActivityChart` for what stands in its place.
+//
 
 import SwiftUI
 
@@ -44,43 +49,45 @@ struct ClientDetailView: View {
             .joined(separator: ",") + "→" + currencyCode
     }
 
-    /// Everything they have been quoted, and the part of it they said yes to.
-    /// Both converted, so a client quoted in two currencies gets one figure with
-    /// an "≈" rather than nothing at all.
-    @State private var quoted: ConvertedTotal = .none
-    @State private var won: ConvertedTotal = .none
-    @State private var waiting: ConvertedTotal = .none
+    /// Every quote of theirs, converted once into the display currency. Each
+    /// figure below is a filter and a sum over this — one pass over the rates,
+    /// and no two numbers on the page that can disagree about a conversion.
+    @State private var points: [ClientQuotePoint] = []
+    /// How far back the page is looking. All of it, until they say otherwise.
+    @State private var range: ClientRange = .all
 
-    private var accepted: [QuoteSummary] {
-        client.quotes.filter { $0.effectiveStatus == "accepted" }
+    /// The window in view, and the one before it for comparison.
+    private var visible: [ClientQuotePoint] { points.within(range) }
+    private var previous: [ClientQuotePoint] { points.before(range) }
+
+    /// Quotes for the thread, cut by date rather than by membership of
+    /// `visible` — a quote left out of the figures for want of a published rate
+    /// still exists, and dropping it from the list too would read as deleted.
+    private var visibleQuotes: [QuoteSummary] {
+        guard let cutoff = range.cutoff() else { return client.quotes }
+        return client.quotes.filter { $0.createdAt >= cutoff }
     }
 
-    private var declined: [QuoteSummary] {
-        client.quotes.filter { $0.effectiveStatus == "declined" }
-    }
-
-    private var outstanding: [QuoteSummary] {
-        client.quotes.filter { $0.effectiveStatus == "sent" || $0.effectiveStatus == "viewed" }
-    }
+    private var ranges: [ClientRange] { ClientRange.available(for: points) }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
                 header
                 headline
-                stats
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Quotes")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    // The same rail the tab draws, so arriving here is a closer
-                    // look at what was already on screen rather than a second
-                    // way of showing it.
-                    ClientThread(quotes: client.quotes)
-                        // The tab indents the rail past its client card; here
-                        // the thread is the whole width it has.
-                        .padding(.leading, -20)
+                if !visible.isEmpty {
+                    ClientActivityChart(points: visible, currencyCode: currencyCode)
+                }
+                if ranges.count > 1 { rangePicker }
+
+                section("Details") { stats }
+                section("Quotes") {
+                    // The same rows the tab draws, without the rail it hangs
+                    // them from: there the rail ties a run of quotes to the
+                    // client card above it, and here there is one client and
+                    // the page is already about them.
+                    ClientThread(quotes: visibleQuotes, showsRail: false)
                 }
             }
             .padding(.horizontal, 20)
@@ -94,9 +101,11 @@ struct ClientDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .task(id: signature) {
-            quoted = await ConvertedTotal.of(client.quotes, in: currencyCode)
-            won = await ConvertedTotal.of(accepted, in: currencyCode)
-            waiting = await ConvertedTotal.of(outstanding, in: currencyCode)
+            points = await ClientQuotePoint.of(client.quotes, in: currencyCode)
+            // A window that was on offer a moment ago may not be after an edit
+            // or a deletion; landing on one that no longer exists would show an
+            // empty page with no way back to the full history.
+            if !ranges.contains(range) { range = .all }
         }
     }
 
@@ -132,15 +141,87 @@ struct ClientDetailView: View {
     /// asked for. A quoted total on its own flatters every client equally.
     private var headline: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Won")
+            Text(range == .all ? "Won" : "Won · last \(range.spoken ?? "")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            RollingAmount(value: won.amount, code: currencyCode)
-                .font(.robotoSlab(28, relativeTo: .title).monospacedDigit())
+            RollingAmount(value: visible.won.total.amount, code: currencyCode)
+                .font(.robotoSlab(34, relativeTo: .largeTitle).monospacedDigit())
                 .foregroundStyle(Color(.mainText))
-            Text("of \(quoted.formatted(in: currencyCode)) quoted")
+            Text("of \(visible.total.formatted(in: currencyCode)) quoted")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            if let change { changeLine(change) }
+        }
+    }
+
+    /// The same window again, one window earlier — the comparison a stock page
+    /// gets for free from yesterday's close.
+    ///
+    /// Only when a window is chosen. Against "all" there is no earlier period
+    /// to hold it up to, and inventing one (the last ninety days, say) would
+    /// put a figure on the page that answers a question the user didn't ask.
+    private var change: Double? {
+        guard range != .all else { return nil }
+        let now = visible.won.total.amount
+        let then = previous.won.total.amount
+        guard now > 0 || then > 0 else { return nil }
+        return now - then
+    }
+
+    private func changeLine(_ delta: Double) -> some View {
+        let rising = delta >= 0
+        let tint = rising ? Color(.statusAcceptedText) : Color(.statusDeclinedText)
+        return HStack(spacing: 4) {
+            Image(systemName: rising ? "arrow.up" : "arrow.down")
+                .font(.caption2.weight(.semibold))
+            Text(AppCurrency.format(abs(delta), code: currencyCode))
+                .font(.footnote.weight(.medium).monospacedDigit())
+            Text("vs previous \(range.spoken ?? "")")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .foregroundStyle(tint)
+        .padding(.top, 2)
+    }
+
+    // MARK: - Range
+
+    /// Only the windows that draw something different from "All" are offered;
+    /// `ClientRange.available` decides, and a client with a short history gets
+    /// no selector rather than four buttons that agree with each other.
+    private var rangePicker: some View {
+        HStack(spacing: 6) {
+            ForEach(ranges) { option in
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { range = option }
+                } label: {
+                    Text(option.label)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(option == range ? Color(.mainText) : .secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background {
+                            if option == range {
+                                Capsule().fill(Color(.cardSurface))
+                                Capsule().strokeBorder(Color(.separator), lineWidth: 0.5)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Sections
+
+    private func section<Content: View>(_ title: String,
+                                        @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            content()
         }
     }
 
@@ -149,7 +230,7 @@ struct ClientDetailView: View {
     private var stats: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                stat("Accepted", acceptedText)
+                stat("Accepted", acceptedText, detail: winRateText)
                 divider
                 stat("Average quote", averageText)
             }
@@ -157,7 +238,13 @@ struct ClientDetailView: View {
             HStack(spacing: 0) {
                 stat("Waiting", waitingText, detail: oldestText)
                 divider
-                stat("Last quoted", client.lastQuoted.map { quoteDateLabel($0) } ?? "—")
+                stat("Last quoted", lastQuotedText)
+            }
+            Divider()
+            HStack(spacing: 0) {
+                stat("Largest quote", largestText)
+                divider
+                stat("Declined", declinedText)
             }
         }
         .background(Color(.cardSurface),
@@ -200,25 +287,51 @@ struct ClientDetailView: View {
     /// Out of the ones they have actually answered. Counting the undecided
     /// against them would read as a low rate for a client who simply hasn't
     /// replied yet — and with nothing decided there is no rate to state.
+    private var decided: Int { visible.won.count + visible.declined.count }
+
     private var acceptedText: String {
-        let decided = accepted.count + declined.count
         guard decided > 0 else { return "None yet" }
-        return "\(accepted.count) of \(decided)"
+        return "\(visible.won.count) of \(decided)"
+    }
+
+    private var winRateText: String? {
+        guard decided > 0 else { return nil }
+        let rate = Double(visible.won.count) / Double(decided)
+        return rate.formatted(.percent.precision(.fractionLength(0))) + " win rate"
     }
 
     private var averageText: String {
-        guard quoted.counted > 0 else { return "—" }
-        return AppCurrency.format(quoted.amount / Double(quoted.counted), code: currencyCode)
+        let total = visible.total
+        guard total.counted > 0 else { return "—" }
+        return AppCurrency.format(total.amount / Double(total.counted), code: currencyCode)
     }
 
     private var waitingText: String {
-        waiting.counted > 0 ? waiting.formatted(in: currencyCode) : "Nothing"
+        let waiting = visible.waiting.total
+        return waiting.counted > 0 ? waiting.formatted(in: currencyCode) : "Nothing"
     }
 
     /// Only when something is waiting — an age under "Nothing" would be an age
     /// of nothing.
     private var oldestText: String? {
-        guard let oldest = outstanding.map(\.createdAt).min() else { return nil }
+        guard let oldest = visible.waiting.map(\.date).min() else { return nil }
         return "Oldest \(oldest.formatted(.relative(presentation: .named)))"
+    }
+
+    private var lastQuotedText: String {
+        visible.map(\.date).max().map { quoteDateLabel($0) } ?? "—"
+    }
+
+    /// The biggest single job they have been quoted, won or not — the ceiling
+    /// on what this client is worth asking for.
+    private var largestText: String {
+        guard let largest = visible.map(\.amount).max() else { return "—" }
+        return AppCurrency.format(largest, code: currencyCode)
+    }
+
+    private var declinedText: String {
+        let declined = visible.declined.total
+        guard declined.counted > 0 else { return "None" }
+        return "\(declined.counted) · \(declined.formatted(in: currencyCode))"
     }
 }

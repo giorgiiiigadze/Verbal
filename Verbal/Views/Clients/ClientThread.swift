@@ -13,6 +13,14 @@ import SwiftUI
 
 struct ClientThread: View {
     let quotes: [QuoteSummary]
+    /// Whether the quotes hang off a rail or simply stack.
+    ///
+    /// The rail's whole job is to say "these belong to the card above", which is
+    /// a thing worth saying in the tab, where several clients' quotes run down
+    /// one screen. A client's own page has one client on it and says so in
+    /// thirty-point type at the top, so there the rail is a line drawn around a
+    /// list to no end.
+    var showsRail: Bool = true
 
     @Environment(SessionStore.self) private var session
 
@@ -26,7 +34,7 @@ struct ClientThread: View {
                 quoteReply(quote, isLast: index == quotes.count - 1)
             }
         }
-        .padding(.leading, 20)
+        .padding(.leading, showsRail ? 20 : 0)
     }
 
     private func quoteReply(_ quote: QuoteSummary, isLast: Bool) -> some View {
@@ -53,12 +61,14 @@ struct ClientThread: View {
         // rail carries straight through the gaps between cards rather than
         // breaking at each one.
         .padding(.vertical, 5)
-        .padding(.leading, ThreadConnector.gutter)
+        .padding(.leading, showsRail ? ThreadConnector.gutter : 0)
         .background(alignment: .leading) {
-            ThreadConnector(isLast: isLast)
-                .stroke(Color(.separator),
-                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-                .frame(width: ThreadConnector.gutter)
+            if showsRail {
+                ThreadConnector(isLast: isLast)
+                    .stroke(Color(.separator),
+                            style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                    .frame(width: ThreadConnector.gutter)
+            }
         }
         // Warm the cache so tapping opens the detail with line items already on
         // screen, and so the unpriced badge has something to count.
