@@ -101,70 +101,26 @@ struct ClientsView: View {
     // MARK: - Feed
 
     private var feed: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 14) {
-                    // Scrolls away with everything else rather than sitting
-                    // pinned: the quotes are the point of the screen, and a rail
-                    // that never leaves costs them ~90pt for good.
-                    avatarRail(proxy)
-                        .padding(.bottom, 4)
-
-                    ForEach(filtered) { client in
-                        clientThread(client)
-                            // What the rail scrolls to.
-                            .id(client.id)
-                    }
+        ScrollView {
+            LazyVStack(spacing: 14) {
+                // Money in play, at the top of the tab it is about. Hidden while
+                // a search is running: it reports the whole account, and above a
+                // narrowed list it would be describing something else.
+                //
+                // Scrolls away with the threads rather than sitting pinned —
+                // the quotes are the point of the screen.
+                if !isSearching {
+                    OutstandingBand(quotes: session.quotes)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 24)
-            }
-        }
-    }
 
-    /// Everyone you have quoted, as a row of faces — the same order as the feed
-    /// below, most recently quoted first.
-    ///
-    /// A way through a long list rather than a second copy of it: tapping one
-    /// takes you to their thread and opens it. Nothing is hidden and nothing is
-    /// filtered, so there is no state here to get stuck in — which is what the
-    /// search field is for.
-    private func avatarRail(_ proxy: ScrollViewProxy) -> some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 14) {
                 ForEach(filtered) { client in
-                    Button {
-                        // Open them first: scrolling to a collapsed thread lands
-                        // on a header with nothing under it.
-                        collapsed.remove(client.id)
-                        withAnimation(.easeOut(duration: 0.35)) {
-                            proxy.scrollTo(client.id, anchor: .top)
-                        }
-                    } label: {
-                        VStack(spacing: 6) {
-                            InitialsAvatar(name: client.name, size: 68)
-                            // First name only. A rail of full names is a rail of
-                            // truncations, and the face is the identifier here.
-                            Text(client.name.split(separator: " ").first.map(String.init)
-                                 ?? client.name)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .frame(maxWidth: 74)
-                        }
-                    }
-                    .buttonStyle(.plain)
+                    clientThread(client)
                 }
             }
-            // The rail runs to the screen edges while the feed keeps its
-            // margin, so the faces read as a strip rather than as another card.
             .padding(.horizontal, 20)
-            .padding(.vertical, 2)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
         }
-        .scrollIndicators(.hidden)
-        .scrollClipDisabled()
-        .padding(.horizontal, -20)
     }
 
     private func clientThread(_ client: Client) -> some View {

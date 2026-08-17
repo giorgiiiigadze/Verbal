@@ -45,20 +45,8 @@ struct HomeView: View {
     /// True when the last fetch failed — distinguishes "no quotes" from
     /// "couldn't reach the server".
     @State private var loadFailed = false
-    /// Outstanding quotes converted into the user's currency. Nil until the
-    /// first calculation finishes.
-    @State private var outstandingTotal: Double?
-    /// Quotes actually included above — a pair with no available rate is left
-    /// out rather than silently added at the wrong value.
-    @State private var outstandingCount = 0
-    /// True when at least one quote needed converting, so the figure is
-    /// a daily-rate approximation rather than an exact sum.
-    @State private var outstandingIsApproximate = false
-    /// The figure the band actually shows. Trails `outstandingTotal` so it can
-    /// roll up to it — from zero on first load, and between values when the
-    /// currency changes — rather than snapping.
-    @State private var animatedOutstanding: Double = 0
-    /// Observed so the summary re-converts when the user changes currency.
+    /// The currency the teaching card's sample quote is priced in, so a
+    /// first-run user sees their own symbol rather than someone else's.
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
     /// Set the first time a quote appears in this list, and never unset.
     /// Someone who deletes every quote still isn't a beginner, and the teaching
@@ -243,7 +231,6 @@ struct HomeView: View {
             .onChange(of: quotes.isEmpty) { _, isEmpty in
                 if !isEmpty { hasEverHadQuotes = true }
             }
-            .task(id: outstandingSignature) { await recalculateOutstanding() }
             .refreshable { await load() }
             .alert("Delete this quote?", isPresented: Binding(
                 get: { quoteToDelete != nil },
@@ -307,41 +294,7 @@ struct HomeView: View {
             List {
                 pageTitle
 
-                // Money in play, above the list — the number worth opening the app
-                // for. Hidden while searching or filtering, when it'd be misleading.
-                // Stays up under the waiting filter, where it describes exactly the
-                // set on screen — and is the way back out of it.
-                if showsOutstandingBand {
-                    Button {
-                        // The band names a specific set of quotes, so touching it
-                        // shows them. Same filter the toolbar menu offers, put where
-                        // the eye already is.
-                        withAnimation { filter = filter == .waiting ? .all : .waiting }
-                    } label: {
-                        outstandingSummary
-                    }
-                        .buttonStyle(BandPressStyle())
-                        // Full-bleed, and on the page's own colour. The tint was
-                        // royalBlue25, which this app uses for things asking to be
-                        // tapped — and with the pinned rows no longer filled it was
-                        // the only saturated block on Home, louder than the number
-                        // it reports needs to be. The hairline still separates the
-                        // header zone from the list; the figure carries itself on
-                        // size.
-                        .listRowBackground(
-                            Color(.homeBackground)
-                                .overlay(alignment: .bottom) {
-                                    // Hairline where the band meets the page.
-                                    Rectangle()
-                                        .fill(Color(.separator))
-                                        .frame(height: 0.5)
-                                }
-                        )
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 18, leading: 20, bottom: 20, trailing: 20))
-                }
-
-                ForEach(sections, id: \.title) { section in
+                    ForEach(sections, id: \.title) { section in
                     // Header as a normal row (not a Section header) so it scrolls
                     // away with the content instead of pinning to the top.
                     Text(section.title)
@@ -442,122 +395,6 @@ struct HomeView: View {
                     proxy.scrollTo(Self.topAnchor, anchor: .top)
                 }
             }
-        }
-    }
-
-    /// Quotes with a client and no decision yet — the pipeline.
-    private var outstanding: [QuoteSummary] {
-        quotes.filter { $0.effectiveStatus == "sent" || $0.effectiveStatus == "viewed" }
-    }
-
-    /// The rolling figure, formatted — reads off `animatedOutstanding` so the
-    /// digits count up rather than the final number appearing at once.
-    private var outstandingLabel: String {
-        let formatted = AppCurrency.format(animatedOutstanding, code: currencyCode)
-        return outstandingIsApproximate ? "≈ \(formatted)" : formatted
-    }
-
-    /// Whether the money-in-play band is on screen. Shown the moment there's a
-    /// pipeline to report — before the conversion finishes — so the total can
-    /// shimmer and count up in place rather than popping in fully formed.
-    private var showsOutstandingBand: Bool {
-        guard searchQuery.isEmpty, filter == .all || filter == .waiting else { return false }
-        return outstandingTotal == nil ? !outstanding.isEmpty : outstandingCount > 0
-    }
-
-    /// Until the conversion lands the exact count isn't known, so fall back to
-    /// the number of outstanding quotes rather than flashing "0 quotes".
-    private var displayedOutstandingCount: Int {
-        outstandingTotal == nil ? outstanding.count : outstandingCount
-    }
-
-    /// Convert each outstanding quote into the user's currency and total them.
-    /// A pair with no published rate is excluded from both the sum and the
-    /// count, so the figure is never quietly wrong.
-    /// Changes whenever the figure would — the quotes in play, their amounts
-    /// and currencies, or the currency they're being shown in.
-    private var outstandingSignature: String {
-        outstanding.map { "\($0.id)|\($0.total)|\($0.currency ?? "")" }
-            .joined(separator: ",") + "→" + currencyCode
-    }
-
-    private func recalculateOutstanding() async {
-        let target = currencyCode
-        var sum = 0.0
-        var counted = 0
-        var converted = false
-
-        for quote in outstanding {
-            let code = quote.currency ?? target
-            if code == target {
-                sum += quote.total
-                counted += 1
-            } else if let rate = try? await FXService.rate(from: code, to: target) {
-                sum += quote.total * rate
-                counted += 1
-                converted = true
-            }
-        }
-
-        outstandingTotal = sum
-        outstandingCount = counted
-        outstandingIsApproximate = converted
-    }
-
-    /// Age of the oldest quote still waiting on a client.
-    ///
-    /// Read from `createdAt` because that's all a summary carries — there's no
-    /// sent-at timestamp — so this says "oldest", not "sent", and doesn't claim
-    /// to date something it can't see.
-    private var oldestLabel: String? {
-        guard let oldest = outstanding.map(\.createdAt).min() else { return nil }
-        return "Oldest · \(oldest.formatted(.relative(presentation: .named)))"
-    }
-
-    private var outstandingSummary: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 3) {
-                // Secondary now the ground behind it is the page. Blue ink on
-                // a blue tint was one idea; blue ink on the bare page is the
-                // app's accent spent on a label.
-                Text("Waiting on clients")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                // Always in the user's own currency, converting quotes priced
-                // in another one — a raw sum across currencies is meaningless.
-                //
-                // It shimmers while the conversion runs, then rolls up to the
-                // figure — the app's "working on it" motion, the same touch the
-                // generator has, on the number worth opening the app for.
-                Text(outstandingLabel)
-                    .font(.title3.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(Color(.mainText))
-                    .contentTransition(.numericText(value: animatedOutstanding))
-                    .shimmer(active: outstandingTotal == nil)
-                // The total on its own is a fact. The age is the part that says
-                // whether anything needs chasing.
-                if let oldestLabel {
-                    Text(oldestLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer(minLength: 8)
-            HStack(spacing: 4) {
-                Text("\(displayedOutstandingCount) quote\(displayedOutstandingCount == 1 ? "" : "s")")
-                Image(systemName: filter == .waiting ? "chevron.left" : "chevron.right")
-                    .font(.caption2.weight(.semibold))
-            }
-            .font(.caption)
-            .foregroundStyle(Color(.blueAccentText))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // The band is mostly empty space, and all of it should be the target.
-        .contentShape(.rect)
-        // Roll the figure up whenever the conversion produces a new one — from
-        // zero on first load, and between values when the currency changes.
-        .onChange(of: outstandingTotal, initial: true) { _, total in
-            withAnimation(.snappy(duration: 0.55)) { animatedOutstanding = total ?? 0 }
         }
     }
 
@@ -1184,16 +1021,6 @@ struct SearchWhenAsked: ViewModifier {
 }
 
 // MARK: - Filtering
-
-/// A full-bleed List row draws no highlight of its own, so without this a tap on
-/// the summary band looks like nothing happened until the list rearranges.
-private struct BandPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.6 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-}
 
 /// Filter options for the toolbar menu.
 enum QuoteFilter: CaseIterable, Hashable, Identifiable {
