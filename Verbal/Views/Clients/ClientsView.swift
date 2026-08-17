@@ -128,7 +128,7 @@ struct ClientsView: View {
             clientHeader(client)
 
             if isExpanded(client) {
-                quotesThread(client)
+                ClientThread(quotes: client.quotes)
                     .padding(.top, 8)
                     // A plain cross-fade, no slide. The quotes moving up out of
                     // the header read as the list glitching; fading them in
@@ -139,124 +139,86 @@ struct ClientsView: View {
     }
 
     /// The container: the client, and the shape you tap to fold their quotes
-    /// away. A card so it reads as the parent the thread hangs from, with the
-    /// chevron carrying the open/closed state the way a comment's collapse does.
+    /// away. A card so it reads as the parent the thread hangs from.
+    ///
+    /// Two targets in one row. The name opens the client's own page; the
+    /// chevron folds the thread, the way a comment's collapse does. They sit at
+    /// opposite ends with the total between them, so neither is a mis-tap of
+    /// the other — which is why the chevron moved to the trailing edge before
+    /// the page existed.
     private func clientHeader(_ client: Client) -> some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.2)) { toggleCollapse(client) }
-        } label: {
-            HStack(spacing: 12) {
-                // 44, against the ~40 of the two lines beside it. Big enough to
-                // be the thing you find the row by, and no bigger — past that
-                // the header outgrows the quote cards hanging off it, which is
-                // the hierarchy the wrong way up.
-                InitialsAvatar(name: client.name, size: 44)
+        HStack(spacing: 12) {
+            NavigationLink {
+                ClientDetailView(client: client)
+            } label: {
+                HStack(spacing: 12) {
+                    // 44, against the ~40 of the two lines beside it. Big enough
+                    // to be the thing you find the row by, and no bigger — past
+                    // that the header outgrows the quote cards hanging off it,
+                    // which is the hierarchy the wrong way up.
+                    InitialsAvatar(name: client.name, size: 44)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    // Slab, like the headings on Home and a quote's own title.
-                    // A client is a name the app is filed under rather than a
-                    // field on a row, and the serif is what the app uses to say
-                    // so — the quotes hanging beneath keep the system face, so
-                    // the parent and its thread stay told apart.
-                    Text(client.name)
-                        .font(.robotoSlab(17, relativeTo: .headline))
-                        .foregroundStyle(Color(.mainText))
-                        .lineLimit(1)
-                    Text(client.subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        // Slab, like the headings on Home and a quote's own
+                        // title. A client is a name the app is filed under
+                        // rather than a field on a row, and the serif is what
+                        // the app uses to say so — the quotes hanging beneath
+                        // keep the system face, so the parent and its thread
+                        // stay told apart.
+                        Text(client.name)
+                            .font(.robotoSlab(17, relativeTo: .headline))
+                            .foregroundStyle(Color(.mainText))
+                            .lineLimit(1)
+                        Text(client.subtitle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    // Only when every one of their quotes is priced in the same
+                    // currency. Adding two currencies into one figure would be a
+                    // number that is true of nothing.
+                    if let total = client.singleCurrencyTotal {
+                        Text(total)
+                            .font(.footnote.weight(.medium).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                // The link takes the whole of its half, blank space included,
+                // or the row only opens where there happens to be ink.
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
 
-                Spacer(minLength: 8)
-
-                // Only when every one of their quotes is priced in the same
-                // currency. Adding two currencies into one figure would be a
-                // number that is true of nothing.
-                if let total = client.singleCurrencyTotal {
-                    Text(total)
-                        .font(.footnote.weight(.medium).monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-
-                // Trailing, where a disclosure belongs — and it leaves the
-                // leading edge to the avatar, which now lines up with the rail
-                // running down to the quotes below.
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { toggleCollapse(client) }
+            } label: {
                 Image(systemName: isExpanded(client) ? "chevron.down" : "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 12)
+                    // A thumb-sized target around a 12pt glyph. Sharing a row
+                    // with a link, the mark itself is far too small to be the
+                    // whole of it.
+                    .frame(width: 34, height: 34)
+                    .contentShape(.rect)
                     // No animation on the glyph swap itself — the thread opening
                     // is the motion; a spinning chevron on top is noise.
                     .animation(nil, value: isExpanded(client))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.cardSurface),
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
-    }
-
-    /// The replies: a continuous rail down the left with each quote branching
-    /// off it on a rounded elbow that meets the card at its mid-height — the
-    /// way a comment thread curves into each reply. The rail runs straight
-    /// through the siblings above the last one and closes into the final elbow.
-    private func quotesThread(_ client: Client) -> some View {
-        VStack(spacing: 0) {
-            ForEach(Array(client.quotes.enumerated()), id: \.element.id) { index, quote in
-                quoteReply(quote, isLast: index == client.quotes.count - 1)
-            }
-        }
-        .padding(.leading, 20)
-    }
-
-    private func quoteReply(_ quote: QuoteSummary, isLast: Bool) -> some View {
-        // The card itself is the link's label, so the whole row is the tap
-        // target. Home gets away with a zero-opacity link because it's a List,
-        // where a row is tappable on its own; here in a ScrollView an empty
-        // label would have no area to tap.
-        NavigationLink {
-            QuoteDetailView(
-                quote: quote,
-                initialLineItems: session.lineItems(for: quote.id) ?? [],
-                onDeleted: {}
-            )
-        } label: {
-            // The header above this thread already names the client, so the
-            // row drops it and keeps the timestamp.
-            QuoteRow(quote: quote,
-                     unpricedCount: unpricedCount(for: quote),
-                     clientIsKnown: true)
-        }
-        .buttonStyle(.plain)
-        // The vertical padding is inside the connector's drawing area, so the
-        // rail carries straight through the gaps between cards rather than
-        // breaking at each one.
-        .padding(.vertical, 5)
-        .padding(.leading, ThreadConnector.gutter)
-        .background(alignment: .leading) {
-            ThreadConnector(isLast: isLast)
-                .stroke(Color(.separator),
-                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-                .frame(width: ThreadConnector.gutter)
-        }
-        // Warm the cache so tapping opens the detail with line items already on
-        // screen, and so the unpriced badge has something to count.
-        .onAppear {
-            Task { await session.prefetchLineItems(for: quote.id) }
-        }
-    }
-
-    /// Read from the prefetched line items, the same as Home does — the summary
-    /// row can't see inside a quote on its own.
-    private func unpricedCount(for quote: QuoteSummary) -> Int {
-        (session.lineItems(for: quote.id) ?? []).filter(\.isMissingPrice).count
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
     }
 
     // MARK: - Placeholder states
@@ -330,7 +292,9 @@ struct Client: Identifiable, Hashable {
 /// padding), so stacking these leaves the rail unbroken between siblings. The
 /// last quote gets no continuation below its elbow — the thread ends where it
 /// turns in, the way the final reply closes a comment chain.
-private struct ThreadConnector: Shape {
+/// Not private: `ClientThread` draws it, and it lives here beside the feed the
+/// rail was designed against.
+struct ThreadConnector: Shape {
     var isLast: Bool
 
     /// Width of the connector column, and so where the elbow meets the card.

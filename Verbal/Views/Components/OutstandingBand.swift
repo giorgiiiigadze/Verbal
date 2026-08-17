@@ -52,8 +52,10 @@ struct OutstandingBand: View {
     /// The rolling figure, formatted — reads off `animatedOutstanding` so the
     /// digits count up rather than the final number appearing at once.
     private var outstandingLabel: String {
-        let formatted = AppCurrency.format(animatedOutstanding, code: currencyCode)
-        return outstandingIsApproximate ? "≈ \(formatted)" : formatted
+        ConvertedTotal(amount: animatedOutstanding,
+                       counted: outstandingCount,
+                       isApproximate: outstandingIsApproximate)
+            .formatted(in: currencyCode)
     }
 
     /// Until the conversion lands the exact count isn't known, so fall back to
@@ -70,29 +72,13 @@ struct OutstandingBand: View {
     }
 
     /// Convert each outstanding quote into the user's currency and total them.
-    /// A pair with no published rate is excluded from both the sum and the
-    /// count, so the figure is never quietly wrong.
+    /// The arithmetic lives in `ConvertedTotal`, which the client page uses to
+    /// answer the same question about one person.
     private func recalculateOutstanding() async {
-        let target = currencyCode
-        var sum = 0.0
-        var counted = 0
-        var converted = false
-
-        for quote in outstanding {
-            let code = quote.currency ?? target
-            if code == target {
-                sum += quote.total
-                counted += 1
-            } else if let rate = try? await FXService.rate(from: code, to: target) {
-                sum += quote.total * rate
-                counted += 1
-                converted = true
-            }
-        }
-
-        outstandingTotal = sum
-        outstandingCount = counted
-        outstandingIsApproximate = converted
+        let result = await ConvertedTotal.of(outstanding, in: currencyCode)
+        outstandingTotal = result.amount
+        outstandingCount = result.counted
+        outstandingIsApproximate = result.isApproximate
     }
 
     /// Age of the oldest quote still waiting on a client.
