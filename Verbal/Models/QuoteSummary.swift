@@ -8,20 +8,28 @@
 import Foundation
 
 /// Lightweight quote row for the Home list.
-struct QuoteSummary: Identifiable, Decodable, Sendable {
+/// Equatable so a screen holding its own copy can tell a row that changed from
+/// one that didn't — Home adopts edits made through `SessionStore.updateQuote`
+/// by comparing against what it already has.
+///
+/// Hashable so a quote can be pushed as a navigation value. Hashed on `id`
+/// alone, deliberately: the synthesised conformance would make a quote a
+/// different navigation value the moment one of its fields was edited, and the
+/// screen showing it would be torn down mid-edit.
+struct QuoteSummary: Identifiable, Decodable, Sendable, Equatable, Hashable {
     let id: UUID
-    /// Mutable so Home can reflect a rename made on the detail screen.
+    // Everything the quote screen can edit is `var`: it writes each change
+    // straight into `SessionStore.quotes` through `updateQuote`, so the tabs
+    // drawn from that list are current without a refetch.
     var title: String?
-    let jobSummary: String?
-    let total: Double
-    /// Mutable so Home can optimistically reflect a status change from the menu.
+    var jobSummary: String?
+    var total: Double
     var status: String
     let createdAt: Date
     /// ISO 4217 code this quote was priced in. Nil on legacy rows; formatting
     /// falls back to the user's current setting in that case.
-    let currency: String?
+    var currency: String?
     /// Pinned quotes sort into a dedicated section at the top of the Home list.
-    /// Mutable so Home can optimistically reflect a pin toggle.
     var pinned: Bool
     /// Client-facing "what we'll do" bullet list (may be empty on legacy rows).
     var scope: [String]
@@ -33,7 +41,7 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
     /// because Postgres `date` columns aren't ISO-8601 timestamps.
     let validityDateText: String?
     /// Name of the customer this quote is for, via the linked customer row.
-    let clientName: String?
+    var clientName: String?
     /// Sum of the line items, before tax.
     let subtotal: Double
     /// Tax percentage (20 = 20%) and the resulting amount. Both are computed
@@ -124,6 +132,8 @@ struct QuoteSummary: Identifiable, Decodable, Sendable {
     /// and a date can't undo them; a draft was never sent, so nothing about it
     /// has expired. That leaves sent and viewed — exactly the set the
     /// outstanding figure is built from.
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+
     var effectiveStatus: String {
         guard isPastValidity, status == "sent" || status == "viewed" else { return status }
         return "expired"

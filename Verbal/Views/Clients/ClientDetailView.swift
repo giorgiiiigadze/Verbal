@@ -14,9 +14,37 @@
 import SwiftUI
 
 struct ClientDetailView: View {
-    let client: Client
+    /// The client as they were when this page was pushed. Held for identity
+    /// only — everything drawn comes from `client`, below, which is rebuilt from
+    /// the session so an edit made in the thread at the bottom of this page
+    /// reaches the figures at the top of it.
+    let pushed: Client
 
+    @Environment(SessionStore.self) private var session
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
+
+    /// This person as the session has them now.
+    ///
+    /// Matched case-insensitively on the name, the same rule `ClientsView`
+    /// groups by — two spellings are one person there and must be one person
+    /// here. Falls back to the pushed copy when the last of their quotes has
+    /// just been deleted, so the page empties rather than vanishing under the
+    /// user mid-read.
+    private var client: Client {
+        let key = pushed.id
+        let mine = session.quotes.filter {
+            ($0.clientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() == key
+        }
+        return Client(mine) ?? pushed
+    }
+
+    /// Changes whenever a figure on this page would.
+    private var signature: String {
+        client.quotes
+            .map { "\($0.id)|\($0.total)|\($0.effectiveStatus)|\($0.currency ?? "")" }
+            .joined(separator: ",") + "→" + currencyCode
+    }
 
     /// Everything they have been quoted, and the part of it they said yes to.
     /// Both converted, so a client quoted in two currencies gets one figure with
@@ -67,7 +95,11 @@ struct ClientDetailView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
-        .task(id: currencyCode) {
+        // Also here, not only on the tab's root: the thread below pushes from a
+        // screen that is itself pushed, and a root's destination doesn't
+        // reliably reach it.
+        .modifier(QuoteDestination())
+        .task(id: signature) {
             quoted = await ConvertedTotal.of(client.quotes, in: currencyCode)
             won = await ConvertedTotal.of(accepted, in: currencyCode)
             waiting = await ConvertedTotal.of(outstanding, in: currencyCode)

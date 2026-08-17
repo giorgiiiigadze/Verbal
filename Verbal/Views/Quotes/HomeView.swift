@@ -148,6 +148,34 @@ struct HomeView: View {
                     .accessibilityLabel("Rate card")
                 }
             }
+            .navigationDestination(for: QuoteSummary.self) { quote in
+                // The row is read from the session rather than taken from the
+                // pushed value, which is a snapshot of whatever the list held
+                // when it was tapped.
+                QuoteDetailView(
+                    quote: live(quote),
+                    initialLineItems: session.lineItems(for: quote.id) ?? [],
+                    onDeleted: {
+                        withAnimation(Self.rowRemoval) {
+                            quotes.removeAll { $0.id == quote.id }
+                        }
+                        // Delay so the toast animates in on the now-visible
+                        // Home, after the detail view's pop finishes (setting it
+                        // mid-dismiss shows it off-screen and it's effectively
+                        // missed).
+                        Task {
+                            try? await Task.sleep(for: .seconds(0.4))
+                            toast = Toast(style: .success, message: "Quote deleted")
+                        }
+                    },
+                    // No onRenamed or onPinChanged: both wrote by hand what the
+                    // quote screen now puts in the session, which `sync` picks
+                    // up — with the same spring, so a pin still lands the card
+                    // in the Pinned section rather than jumping.
+                    onNeedsRefresh: { Task { await load() } }
+                )
+                .environment(session)
+            }
             .navigationDestination(isPresented: $showRateCard) {
                 RateCardView()
             }
@@ -220,14 +248,9 @@ struct HomeView: View {
                 }
                 await load()
             }
-            // Bootstrap can finish after this view has already read an empty
-            // list — signing in reaches Home before the preload returns. Take
-            // what arrives rather than sitting on the empty copy.
-            .onChange(of: session.listsLoaded) { _, loaded in
-                guard loaded, quotes.isEmpty, !session.quotes.isEmpty else { return }
-                quotes = session.quotes
-                loadFailed = false
-            }
+            .modifier(SessionSync(quotes: session.quotes,
+                                  listsLoaded: session.listsLoaded,
+                                  apply: sync))
             .onChange(of: quotes.isEmpty) { _, isEmpty in
                 if !isEmpty { hasEverHadQuotes = true }
             }
@@ -314,47 +337,13 @@ struct HomeView: View {
                                      unpricedCount: unpricedCount(for: quote),
                                      dayIsKnown: section.dated)
                             // Zero-opacity link so the row navigates without the
-                            // default trailing chevron.
-                            NavigationLink {
-                                QuoteDetailView(
-                                    quote: quote,
-                                    initialLineItems: session.lineItems(for: quote.id) ?? [],
-                                    onDeleted: {
-                                        withAnimation(Self.rowRemoval) {
-                                            quotes.removeAll { $0.id == quote.id }
-                                        }
-                                        // Delay so the toast animates in on the
-                                        // now-visible Home, after the detail view's
-                                        // pop finishes (setting it mid-dismiss shows
-                                        // it off-screen and it's effectively missed).
-                                        Task {
-                                            try? await Task.sleep(for: .seconds(0.4))
-                                            toast = Toast(style: .success, message: "Quote deleted")
-                                        }
-                                    },
-                                    onRenamed: { newTitle in
-                                        // This list holds its own copy of the rows
-                                        // and only refetches on its own schedule,
-                                        // so the row keeps the old name until told.
-                                        guard let index = quotes.firstIndex(where: { $0.id == quote.id })
-                                        else { return }
-                                        quotes[index].title = newTitle
-                                    },
-                                    onPinChanged: { isPinned in
-                                        guard let index = quotes.firstIndex(where: { $0.id == quote.id })
-                                        else { return }
-                                        // The same spring the row's own pin uses, so
-                                        // popping back finds the card already where
-                                        // it belongs rather than watching it jump.
-                                        withAnimation(Self.pinSpring) {
-                                            quotes[index].pinned = isPinned
-                                        }
-                                    },
-                                    onNeedsRefresh: { Task { await load() } }
-                                )
-                                .environment(session)
-                            } label: { EmptyView() }
-                            .opacity(0)
+                            // default trailing chevron. By value rather than by
+                            // closure: this row is rebuilt whenever the session's
+                            // copy of the quote changes, and a closure link left
+                            // the screen it pushed detached from the list feeding
+                            // it — see the destination below.
+                            NavigationLink(value: quote) { EmptyView() }
+                                .opacity(0)
                         }
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -819,6 +808,40 @@ struct HomeView: View {
         return lines.joined(separator: "\n")
     }
 
+    /// The quote as the session has it now, rather than as it was when the row
+    /// was tapped.
+    private func live(_ quote: QuoteSummary) -> QuoteSummary {
+        session.quotes.first { $0.id == quote.id } ?? quote
+    }
+
+    /// Keep this screen's list in step with the session's.
+    ///
+    /// An edit made on the quote screen goes into the session, not into this
+    /// array — so the changed rows are taken from it rather than each field
+    /// being announced by a callback per screen that wants one.
+    ///
+    /// Matched by id and applied in place: Home owns the order, the sections
+    /// and its own fetch, and swallowing the session's whole list would throw
+    /// away a filter or a search that is on screen.
+    ///
+    /// The exception is the empty case. Bootstrap can finish after this view
+    /// has already read an empty list — signing in reaches Home before the
+    /// preload returns — and there is nothing to match against, so what arrives
+    /// is taken whole.
+    private func sync(_ fresh: [QuoteSummary], _ listsLoaded: Bool) {
+        if quotes.isEmpty {
+            guard listsLoaded, !fresh.isEmpty else { return }
+            quotes = fresh
+            loadFailed = false
+            return
+        }
+        for updated in fresh {
+            guard let index = quotes.firstIndex(where: { $0.id == updated.id }),
+                  quotes[index] != updated else { continue }
+            withAnimation(Self.pinSpring) { quotes[index] = updated }
+        }
+    }
+
     private func load() async {
         isLoading = true
         defer { isLoading = false }
@@ -1021,6 +1044,23 @@ struct SearchWhenAsked: ViewModifier {
 }
 
 // MARK: - Filtering
+
+/// Watches the session's copy of the quote list on Home's behalf.
+///
+/// A modifier rather than two `onChange`s in the body: that body is already at
+/// the limit of what the type-checker will take in one expression, and the
+/// second one tipped it over.
+private struct SessionSync: ViewModifier {
+    let quotes: [QuoteSummary]
+    let listsLoaded: Bool
+    let apply: ([QuoteSummary], Bool) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: quotes) { _, fresh in apply(fresh, listsLoaded) }
+            .onChange(of: listsLoaded) { _, loaded in apply(quotes, loaded) }
+    }
+}
 
 /// Filter options for the toolbar menu.
 enum QuoteFilter: CaseIterable, Hashable, Identifiable {

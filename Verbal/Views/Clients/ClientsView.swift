@@ -85,6 +85,7 @@ struct ClientsView: View {
             }
         }
         .background(Color(.homeBackground))
+        .modifier(QuoteDestination())
         .navigationTitle("Clients")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search clients")
@@ -149,7 +150,7 @@ struct ClientsView: View {
     private func clientHeader(_ client: Client) -> some View {
         HStack(spacing: 12) {
             NavigationLink {
-                ClientDetailView(client: client)
+                ClientDetailView(pushed: client)
             } label: {
                 HStack(spacing: 12) {
                     // 44, against the ~40 of the two lines beside it. Big enough
@@ -281,8 +282,16 @@ struct Client: Identifiable, Hashable {
         return AppCurrency.format(quotes.reduce(0) { $0 + $1.total }, code: code)
     }
 
-    static func == (lhs: Client, rhs: Client) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    // Equality and hashing are synthesised, over the quotes as well as the
+    // name. They used to compare `id` alone, which reads as harmless — two
+    // spellings of a name are one person — but it made a client whose quote
+    // just changed status equal to the client before the change, so SwiftUI
+    // skipped redrawing that row. The tab kept showing Declined while the
+    // client's own page, which rebuilds from the session every pass, showed
+    // Viewed.
+    //
+    // Identity stays the case-folded name: that is what `id` is for, and it is
+    // a different question from whether anything about them has changed.
 }
 
 /// The thread line beside one quote: a vertical rail with a rounded elbow that

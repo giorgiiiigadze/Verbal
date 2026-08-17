@@ -14,16 +14,14 @@ struct QuoteDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let quote: QuoteSummary
     var onDeleted: () -> Void
-    /// Lets the list behind this screen show the new name straight away. Home
-    /// keeps its own copy of the rows and only refetches on its own schedule,
-    /// so without this a rename doesn't reach the list you came from.
-    var onRenamed: (String?) -> Void = { _ in }
-    /// Same reason as `onRenamed`: the list holds its own rows, and a pin has
-    /// to move the card into the Pinned section behind this screen.
-    var onPinChanged: (Bool) -> Void = { _ in }
-    /// For changes the list can't be handed directly — a duplicate is a row it
-    /// knows nothing about, and edited line items change a total it holds a
-    /// stale copy of. Both mean: refetch.
+    /// For changes no list can be handed directly — a duplicate is a row it
+    /// knows nothing about. That means a refetch.
+    ///
+    /// Everything else this screen edits goes into `SessionStore.quotes`
+    /// through `updateQuote`, and the screens drawn from it follow. There used
+    /// to be a callback per field, which is why a status change — the one field
+    /// nobody had written a callback for — was still the old one on the Clients
+    /// tab.
     var onNeedsRefresh: () -> Void = { }
     @State private var showHeaderTitle = false
     @State private var lineItems: [QuoteLineItem]
@@ -109,13 +107,9 @@ struct QuoteDetailView: View {
 
     init(quote: QuoteSummary, initialLineItems: [QuoteLineItem] = [],
          onDeleted: @escaping () -> Void,
-         onRenamed: @escaping (String?) -> Void = { _ in },
-         onPinChanged: @escaping (Bool) -> Void = { _ in },
          onNeedsRefresh: @escaping () -> Void = { }) {
         self.quote = quote
         self.onDeleted = onDeleted
-        self.onRenamed = onRenamed
-        self.onPinChanged = onPinChanged
         self.onNeedsRefresh = onNeedsRefresh
         _pinned = State(initialValue: quote.pinned)
         // The status as the list shows it, so a quote filed under Expired there
@@ -402,6 +396,7 @@ struct QuoteDetailView: View {
             // to stop saying it. The stored column is what it reverts to.
             if status == "expired", quote.status != "expired" {
                 status = quote.status
+                session.updateQuote(id: quote.id) { $0.status = quote.status }
             }
         }
 
@@ -412,6 +407,7 @@ struct QuoteDetailView: View {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     validityDate = previousDate
                     status = previousStatus
+                    session.updateQuote(id: quote.id) { $0.status = previousStatus }
                 }
             }
         }
@@ -420,12 +416,22 @@ struct QuoteDetailView: View {
     private func changeStatus(to newStatus: String) {
         guard newStatus != status else { return }
         let previous = status
-        withAnimation(.easeInOut(duration: 0.2)) { status = newStatus }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            status = newStatus
+            // Into the shared list as well as this screen's own state, so the
+            // pill on Home and the client's stats change with it. The revert
+            // below has to do the same, or a write the server refused is left
+            // standing everywhere except here.
+            session.updateQuote(id: quote.id) { $0.status = newStatus }
+        }
         Task {
             do {
                 try await QuoteService.updateStatus(id: quote.id, status: newStatus)
             } catch {
-                withAnimation(.easeInOut(duration: 0.2)) { status = previous }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    status = previous
+                    session.updateQuote(id: quote.id) { $0.status = previous }
+                }
             }
         }
     }
@@ -453,13 +459,13 @@ struct QuoteDetailView: View {
         // tap answers immediately.
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         pinned = newValue
-        onPinChanged(newValue)
+        session.updateQuote(id: quote.id) { $0.pinned = newValue }
         Task {
             do {
                 try await QuoteService.setPinned(id: quote.id, pinned: newValue)
             } catch {
                 pinned = !newValue
-                onPinChanged(!newValue)
+                session.updateQuote(id: quote.id) { $0.pinned = !newValue }
                 toast = Toast(style: .error,
                               message: newValue ? "Couldn't pin this quote"
                                                 : "Couldn't unpin this quote")
@@ -476,13 +482,13 @@ struct QuoteDetailView: View {
         guard !trimmed.isEmpty, trimmed != title else { return }
         let previous = title
         withAnimation(.easeInOut(duration: 0.2)) { title = trimmed }
-        onRenamed(trimmed)
+        session.updateQuote(id: quote.id) { $0.title = trimmed }
         Task {
             do {
                 try await QuoteService.setTitle(quoteId: quote.id, title: trimmed)
             } catch {
                 withAnimation(.easeInOut(duration: 0.2)) { title = previous }
-                onRenamed(previous)
+                session.updateQuote(id: quote.id) { $0.title = previous }
                 toast = Toast(style: .error, message: "Couldn't rename this quote")
             }
         }
@@ -569,6 +575,10 @@ struct QuoteDetailView: View {
         .onChange(of: clientName) { previous, current in
             // Persist only real edits, not the initial seed.
             guard previous != current else { return }
+            // This one moves the quote between people: the Clients tab groups by
+            // the name on it, so naming a different client has to reach the
+            // shared list or the quote stays hanging under the old one.
+            session.updateQuote(id: quote.id) { $0.clientName = current }
             Task { try? await QuoteService.setClient(quoteId: quote.id, name: current) }
         }
         .sheet(isPresented: $showTranscript) {
@@ -581,6 +591,10 @@ struct QuoteDetailView: View {
                           scope: scope) { newSummary, newScope in
                 jobSummary = newSummary
                 scope = newScope
+                session.updateQuote(id: quote.id) {
+                    $0.jobSummary = newSummary
+                    $0.scope = newScope
+                }
             }
         }
         .sheet(isPresented: $showLineItems) {
@@ -589,6 +603,7 @@ struct QuoteDetailView: View {
                            taxRate: quote.taxRate,
                            lineItems: lineItems) { _, newTotal in
                 total = newTotal
+                session.updateQuote(id: quote.id) { $0.total = newTotal }
                 // Refetched rather than handed back: items added in the sheet
                 // have no server id until they're inserted, and the rows here
                 // are keyed by it.
@@ -654,8 +669,10 @@ struct QuoteDetailView: View {
                                  fromCode: currency,
                                  toCode: target.id) { newCurrency, newTotal in
                 currency = newCurrency
+                session.updateQuote(id: quote.id) { $0.currency = newCurrency }
                 if let newTotal {
                     total = newTotal
+                    session.updateQuote(id: quote.id) { $0.total = newTotal }
                     // Reload line items to show the converted unit prices.
                     Task { lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? lineItems }
                     toast = Toast(style: .success, message: "Converted to \(newCurrency)")

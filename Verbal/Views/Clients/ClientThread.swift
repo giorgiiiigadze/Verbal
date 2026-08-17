@@ -30,17 +30,18 @@ struct ClientThread: View {
     }
 
     private func quoteReply(_ quote: QuoteSummary, isLast: Bool) -> some View {
+        // By value, not by closure. The destination then belongs to the stack
+        // rather than to this row — and this row is rebuilt every time the
+        // session's copy of a quote changes, which is every time the screen it
+        // pushed edits something. A closure link left that pushed screen
+        // detached from the list feeding it: the first status change landed and
+        // every one after it went nowhere.
+        //
         // The card itself is the link's label, so the whole row is the tap
         // target. Home gets away with a zero-opacity link because it's a List,
         // where a row is tappable on its own; here in a ScrollView an empty
         // label would have no area to tap.
-        NavigationLink {
-            QuoteDetailView(
-                quote: quote,
-                initialLineItems: session.lineItems(for: quote.id) ?? [],
-                onDeleted: {}
-            )
-        } label: {
+        NavigationLink(value: quote) {
             // The header above this thread already names the client, so the
             // row drops it and keeps the timestamp.
             QuoteRow(quote: quote,
@@ -70,5 +71,28 @@ struct ClientThread: View {
     /// row can't see inside a quote on its own.
     private func unpricedCount(for quote: QuoteSummary) -> Int {
         (session.lineItems(for: quote.id) ?? []).filter(\.isMissingPrice).count
+    }
+}
+
+/// Where a tapped quote goes, for the screens on the Clients tab.
+///
+/// Registered on both the tab and a client's page rather than on the tab alone:
+/// a destination declared by the stack's root is not reliably visible to links
+/// in a screen pushed on top of it, and the thread at the foot of a client's
+/// page is exactly that.
+///
+/// The row is read from the session rather than taken from the pushed value,
+/// which is a snapshot of whatever the list held when it was tapped.
+struct QuoteDestination: ViewModifier {
+    @Environment(SessionStore.self) private var session
+
+    func body(content: Content) -> some View {
+        content.navigationDestination(for: QuoteSummary.self) { quote in
+            QuoteDetailView(
+                quote: session.quotes.first { $0.id == quote.id } ?? quote,
+                initialLineItems: session.lineItems(for: quote.id) ?? [],
+                onDeleted: {}
+            )
+        }
     }
 }

@@ -168,6 +168,23 @@ final class SessionStore {
         lineItemsCache[id] = nil
     }
 
+    /// Apply an edit to the shared copy of a quote.
+    ///
+    /// Every screen drawn from `quotes` — the Clients tab, its threads, a
+    /// client's page, the outstanding band — sees it at once. Before this, the
+    /// quote screen kept each field in its own state, wrote to the server and
+    /// told nobody, so a status changed there was still the old one on the tab
+    /// next door until something refetched. Home papered over its half with a
+    /// callback per field, which is the same fix written once per screen that
+    /// asks for it.
+    ///
+    /// Takes a closure rather than one method per field: the fields differ, the
+    /// plumbing doesn't.
+    func updateQuote(id: UUID, _ edit: (inout QuoteSummary) -> Void) {
+        guard let index = quotes.firstIndex(where: { $0.id == id }) else { return }
+        edit(&quotes[index])
+    }
+
     /// Replace the shared list with a freshly fetched one. `quotes` is otherwise
     /// only set at launch, so a quote made afterwards never reached the Clients
     /// tab until the next cold start. Home fetches the authoritative list on
