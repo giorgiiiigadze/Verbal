@@ -26,6 +26,11 @@ struct ClientsView: View {
     /// expanded — the quotes are the point of the screen, not a reveal.
     @State private var collapsed: Set<Client.ID> = []
 
+    /// How many of a client's quotes the thread shows before it offers the
+    /// rest. Enough to see the shape of recent work, few enough that the next
+    /// client is still on the screen.
+    private static let previewCount = 3
+
     /// Everyone with a name on at least one quote, most recently quoted first.
     ///
     /// Grouped case-insensitively for the same reason `customerID(named:)`
@@ -136,7 +141,13 @@ struct ClientsView: View {
             clientHeader(client)
 
             if isExpanded(client) {
-                ClientThread(quotes: client.quotes)
+                // Three, then a way through to the rest. The tab is a list of
+                // people; a client with a long history used to bury everyone
+                // after them, and scrolling past one person's back catalogue is
+                // work the client's own page already exists to take.
+                ClientThread(quotes: client.quotes,
+                             limit: Self.previewCount,
+                             seeAll: ClientKey(id: client.id, name: client.name))
                     .padding(.top, 8)
                     // A plain cross-fade, no slide. The quotes moving up out of
                     // the header read as the list glitching; fading them in

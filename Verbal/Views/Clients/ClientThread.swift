@@ -21,19 +21,83 @@ struct ClientThread: View {
     /// thirty-point type at the top, so there the rail is a line drawn around a
     /// list to no end.
     var showsRail: Bool = true
+    /// How many quotes to draw before the thread is cut short.
+    ///
+    /// A client with thirty quotes pushed everyone under them off the screen,
+    /// which made the tab a list of one person's history rather than a list of
+    /// people. Nil draws the lot — which is what the client's own page wants,
+    /// being the place the cut-short thread sends you.
+    var limit: Int? = nil
+    /// Who the "See all" row pushes to. Without it the thread simply stops at
+    /// the limit, silently, so the two are set together or not at all.
+    var seeAll: ClientKey? = nil
 
     @Environment(SessionStore.self) private var session
+
+    /// The quotes actually drawn, newest first as they already are.
+    private var shown: [QuoteSummary] {
+        guard let limit, quotes.count > limit else { return quotes }
+        return Array(quotes.prefix(limit))
+    }
+
+    private var isTruncated: Bool { shown.count < quotes.count }
 
     /// A continuous rail down the left, a node on it for each quote, and a
     /// short arm from the node to the card at its mid-height. The rail runs
     /// through the siblings still to come and stops at the last node.
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(Array(quotes.enumerated()), id: \.element.id) { index, quote in
-                quoteReply(quote, isLast: index == quotes.count - 1)
+            ForEach(Array(shown.enumerated()), id: \.element.id) { index, quote in
+                // Not the last node when there is more below: the rail has to
+                // carry on down into the "See all" row, or the thread would
+                // close itself and then something would hang under the end.
+                quoteReply(quote, isLast: !isTruncated && index == shown.count - 1)
+            }
+            if isTruncated, let seeAll {
+                seeAllRow(seeAll)
             }
         }
         .padding(.leading, showsRail ? 20 : 0)
+    }
+
+    /// The end of a shortened thread: how many more there are, and the way to
+    /// them.
+    ///
+    /// It hangs off the rail like a quote does — same gutter, same node, same
+    /// arm turning in at its mid-height — so it reads as the thread finishing
+    /// rather than a control parked underneath it. No card, though: a card
+    /// would be a fourth quote. Type alone, in the secondary weight the rest of
+    /// the row furniture uses.
+    private func seeAllRow(_ key: ClientKey) -> some View {
+        NavigationLink(value: key) {
+            HStack(spacing: 4) {
+                Text("See all \(quotes.count) quotes")
+                    .font(.footnote.weight(.medium))
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.secondary)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, 7)
+        .padding(.leading, showsRail ? ThreadConnector.gutter : 0)
+        .background(alignment: .leading) {
+            if showsRail {
+                ZStack(alignment: .leading) {
+                    ThreadConnector(isLast: true)
+                        .stroke(Color(.separator),
+                                style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                    Circle()
+                        .fill(Color(.statusMutedText).opacity(0.45))
+                        .frame(width: ThreadConnector.nodeRadius * 2,
+                               height: ThreadConnector.nodeRadius * 2)
+                        .offset(x: ThreadConnector.railX - ThreadConnector.nodeRadius)
+                }
+                .frame(width: ThreadConnector.gutter)
+            }
+        }
     }
 
     private func quoteReply(_ quote: QuoteSummary, isLast: Bool) -> some View {
