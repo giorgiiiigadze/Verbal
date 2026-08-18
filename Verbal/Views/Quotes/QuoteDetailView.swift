@@ -155,7 +155,17 @@ struct QuoteDetailView: View {
                 Button { showClientSheet = true } label: {
                     QuoteChip(text: clientName.isEmpty ? "Add client" : clientName,
                               tinted: clientName.isEmpty) {
-                        Image(systemName: clientName.isEmpty ? "person.badge.plus" : "person.fill")
+                        // Their own avatar once there is a name to draw it
+                        // from, rather than the generic figure every client
+                        // shared. It picks its colour off the name, so the
+                        // chip carries the same circle the client list and
+                        // their page do — identity without spending a tint the
+                        // status chip beside it has the better claim to.
+                        if clientName.isEmpty {
+                            Image(systemName: "person.badge.plus")
+                        } else {
+                            InitialsAvatar(name: clientName, size: 26)
+                        }
                     }
                 }
                 .buttonStyle(.plain)
