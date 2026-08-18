@@ -314,34 +314,32 @@ struct Client: Identifiable, Hashable {
 struct ThreadConnector: Shape {
     var isLast: Bool
 
-    /// Width of the connector column, and so where the elbow meets the card.
+    /// Width of the connector column, and so where the branch meets the card.
     static let gutter: CGFloat = 24
 
-    private let railX: CGFloat = 7
-    private let corner: CGFloat = 9
+    /// Where the rail runs, measured from the leading edge of the column. The
+    /// node is drawn on top of the path at this same x — see `ClientThread`.
+    static let railX: CGFloat = 7
+    /// Radius of that node, so the branch can start clear of it rather than
+    /// running out from under it.
+    static let nodeRadius: CGFloat = 3.5
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
+        let railX = Self.railX
         let midY = rect.midY
-        let rightX = rect.maxX
 
-        if isLast {
-            // Rail comes down and turns once into the card — nothing below it.
-            path.move(to: CGPoint(x: railX, y: rect.minY))
-            path.addLine(to: CGPoint(x: railX, y: midY - corner))
-            path.addQuadCurve(to: CGPoint(x: railX + corner, y: midY),
-                              control: CGPoint(x: railX, y: midY))
-            path.addLine(to: CGPoint(x: rightX, y: midY))
-        } else {
-            // Rail runs the whole height for the siblings still to come…
-            path.move(to: CGPoint(x: railX, y: rect.minY))
-            path.addLine(to: CGPoint(x: railX, y: rect.maxY))
-            // …and a rounded branch peels off it into this card.
-            path.move(to: CGPoint(x: railX, y: midY - corner))
-            path.addQuadCurve(to: CGPoint(x: railX + corner, y: midY),
-                              control: CGPoint(x: railX, y: midY))
-            path.addLine(to: CGPoint(x: rightX, y: midY))
-        }
+        // Straight lines and a right angle, not a rounded elbow peeling off a
+        // curve. The rail is a spine with a node on it for each quote and a
+        // short arm out to the card — the shape a timeline has, where the
+        // curve made it a comment thread.
+        path.move(to: CGPoint(x: railX, y: rect.minY))
+        // The rail carries through the siblings still to come, and stops at the
+        // last node rather than running on to nothing.
+        path.addLine(to: CGPoint(x: railX, y: isLast ? midY : rect.maxY))
+
+        path.move(to: CGPoint(x: railX + Self.nodeRadius, y: midY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: midY))
         return path
     }
 }

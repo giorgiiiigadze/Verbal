@@ -2,7 +2,7 @@
 //  ClientThread.swift
 //  Verbal
 //
-//  A client's quotes, hanging off a rail — the way replies hang off a comment.
+//  A client's quotes, hanging off a rail — a node each, down one spine.
 //
 //  Lifted out of `ClientsView` when the client page arrived: both screens draw
 //  the same thread, and a second copy of a rail this fiddly would have drifted
@@ -24,10 +24,9 @@ struct ClientThread: View {
 
     @Environment(SessionStore.self) private var session
 
-    /// The replies: a continuous rail down the left with each quote branching
-    /// off it on a rounded elbow that meets the card at its mid-height — the
-    /// way a comment thread curves into each reply. The rail runs straight
-    /// through the siblings above the last one and closes into the final elbow.
+    /// A continuous rail down the left, a node on it for each quote, and a
+    /// short arm from the node to the card at its mid-height. The rail runs
+    /// through the siblings still to come and stops at the last node.
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(quotes.enumerated()), id: \.element.id) { index, quote in
@@ -64,10 +63,21 @@ struct ClientThread: View {
         .padding(.leading, showsRail ? ThreadConnector.gutter : 0)
         .background(alignment: .leading) {
             if showsRail {
-                ThreadConnector(isLast: isLast)
-                    .stroke(Color(.separator),
-                            style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-                    .frame(width: ThreadConnector.gutter)
+                // The node is a filled circle rather than part of the path: a
+                // stroked shape can only give a ring, and a hollow node on a
+                // hairline rail reads as a gap in the line. Darker than the
+                // rail too — the line is structure, the node is the quote.
+                ZStack(alignment: .leading) {
+                    ThreadConnector(isLast: isLast)
+                        .stroke(Color(.separator),
+                                style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                    Circle()
+                        .fill(Color(.statusMutedText).opacity(0.45))
+                        .frame(width: ThreadConnector.nodeRadius * 2,
+                               height: ThreadConnector.nodeRadius * 2)
+                        .offset(x: ThreadConnector.railX - ThreadConnector.nodeRadius)
+                }
+                .frame(width: ThreadConnector.gutter)
             }
         }
         // Warm the cache so tapping opens the detail with line items already on
