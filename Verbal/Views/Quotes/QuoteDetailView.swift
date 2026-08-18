@@ -504,6 +504,40 @@ struct QuoteDetailView: View {
         }
     }
 
+    /// The terms and the note that print at the foot of the quote.
+    ///
+    /// Both are set once in Quote defaults and go out on every quote, which is
+    /// exactly why they belong on this screen: they are part of what the client
+    /// receives, and the only place they could be read before was the PDF —
+    /// after the decision to send it. Same order and same names the document
+    /// gives them, so nothing here is a second version of anything there.
+    @ViewBuilder private var documentFooter: some View {
+        let terms = (session.businessProfile?.defaultTerms ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let notes = (session.businessProfile?.defaultNotes ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        VStack(alignment: .leading, spacing: 20) {
+            if !terms.isEmpty { footerBlock("Terms", terms) }
+            if !notes.isEmpty { footerBlock("Notes", notes) }
+        }
+    }
+
+    /// Headed the way the scope list above is headed — the label stepped back
+    /// from the words it names, because what the quote says should be the
+    /// darkest thing on the page.
+    private func footerBlock(_ title: String, _ body: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(body)
+                .foregroundStyle(Color(.mainText))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -532,6 +566,9 @@ struct QuoteDetailView: View {
                     .padding(.top, 4)
 
                 lineItemsSection
+                    .padding(.top, 4)
+
+                documentFooter
                     .padding(.top, 4)
             }
             // 20, matching Home and the rate card. A quote opened from the list
