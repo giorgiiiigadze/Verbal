@@ -284,20 +284,35 @@ struct ClientDetailView: View {
         .padding(.vertical, 12)
     }
 
-    /// Out of the ones they have actually answered. Counting the undecided
-    /// against them would read as a low rate for a client who simply hasn't
-    /// replied yet — and with nothing decided there is no rate to state.
+    /// How many of the client's answered quotes went their way. Not the same
+    /// denominator as the line above it, and deliberately so — see below.
     private var decided: Int { visible.won.count + visible.declined.count }
 
+    /// Out of everything they have been sent.
+    ///
+    /// It read "1 of 1" against a client holding four quotes, which is true of
+    /// the ones they answered and true of nothing the reader is looking at. The
+    /// figure a page about a client has to survive is the one they can check
+    /// against the list underneath it, so the denominator is every quote in the
+    /// window — the same number the header counts.
     private var acceptedText: String {
-        guard decided > 0 else { return "None yet" }
-        return "\(visible.won.count) of \(decided)"
+        guard !visible.isEmpty else { return "—" }
+        return "\(visible.won.count) of \(visible.count)"
     }
 
+    /// The rate underneath, over answers rather than over everything.
+    ///
+    /// Both numbers are needed and neither can do the other's job: counting the
+    /// undecided as losses reads as a poor client when they simply haven't
+    /// replied yet, and counting only the decided hides how much is still out
+    /// there. So the line states its own denominator and can't be misread as
+    /// disagreeing with the count above.
     private var winRateText: String? {
-        guard decided > 0 else { return nil }
+        guard decided > 0 else {
+            return visible.isEmpty ? nil : "None answered yet"
+        }
         let rate = Double(visible.won.count) / Double(decided)
-        return rate.formatted(.percent.precision(.fractionLength(0))) + " win rate"
+        return rate.formatted(.percent.precision(.fractionLength(0))) + " of answered"
     }
 
     private var averageText: String {
