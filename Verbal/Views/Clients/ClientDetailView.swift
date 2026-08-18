@@ -76,8 +76,13 @@ struct ClientDetailView: View {
                 header
                 headline
 
-                if !visible.isEmpty {
-                    ClientActivityChart(points: visible, currencyCode: currencyCode)
+                // Two quotes is the least that can make a line. One is an
+                // event, not a history, and a chart of a single event says
+                // less than the figures above it already do.
+                if visible.count >= 2 {
+                    ClientActivityChart(points: visible,
+                                        currencyCode: currencyCode,
+                                        windowStart: range.cutoff())
                 }
                 if ranges.count > 1 { rangePicker }
 

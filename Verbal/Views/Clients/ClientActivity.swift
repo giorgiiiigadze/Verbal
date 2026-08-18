@@ -59,6 +59,28 @@ struct ClientQuotePoint: Identifiable, Equatable {
     }
 }
 
+/// The client's running totals at one moment: what they had been quoted by then,
+/// and how much of it they had said yes to.
+///
+/// A quote is an event, not a level — there is no "amount" for a Tuesday nobody
+/// sent anything on, which is why a line drawn through quote amounts describes
+/// days that never happened. A running total is the opposite: it has a value
+/// every day, holds flat while nothing happens, and steps when something does.
+/// That is the quantity a chart can honestly draw a line through.
+struct ClientRunningTotal: Identifiable {
+    let date: Date
+    /// Everything quoted up to and including this moment.
+    let quoted: Double
+    /// The accepted part of it.
+    let won: Double
+    /// The quote that stepped the totals here, for the dot the chart draws on
+    /// it. Nil on the two synthetic ends — the zero the line rises from and the
+    /// carry out to today.
+    let quote: ClientQuotePoint?
+
+    var id: Date { date }
+}
+
 extension Array where Element == ClientQuotePoint {
     /// These quotes as one figure, in the shape the page already formats.
     var total: ConvertedTotal {
@@ -74,6 +96,38 @@ extension Array where Element == ClientQuotePoint {
     func within(_ range: ClientRange, now: Date = .now) -> [ClientQuotePoint] {
         guard let cutoff = range.cutoff(now: now) else { return self }
         return filter { $0.date >= cutoff }
+    }
+
+    /// These quotes as two lines climbing left to right.
+    ///
+    /// Each entry carries the totals *after* its quote, so the dot the chart
+    /// puts on it sits at the top of its own riser rather than at the foot of
+    /// it. Quotes sharing a date give two entries at the same moment, which
+    /// draws as one taller step and needs no special case.
+    ///
+    /// It opens on a zero — at `start` when a window is chosen, otherwise just
+    /// before the earliest quote — so the first step rises off the floor rather
+    /// than beginning mid-air. And it closes at `now` rather than at the last
+    /// quote: the flat run out to today is how a client who has gone quiet
+    /// looks quiet, and a series that stops at their last quote hides exactly
+    /// the thing worth seeing.
+    func runningTotals(from start: Date? = nil, now: Date = .now) -> [ClientRunningTotal] {
+        guard let earliest = first?.date else { return [] }
+
+        var quoted = 0.0
+        var won = 0.0
+        var series = [ClientRunningTotal(date: start ?? earliest.addingTimeInterval(-86_400),
+                                         quoted: 0, won: 0, quote: nil)]
+
+        for point in self {
+            quoted += point.amount
+            if point.isWon { won += point.amount }
+            series.append(ClientRunningTotal(date: point.date,
+                                             quoted: quoted, won: won, quote: point))
+        }
+
+        series.append(ClientRunningTotal(date: now, quoted: quoted, won: won, quote: nil))
+        return series
     }
 
     /// The window of the same length immediately before this one, which is what
