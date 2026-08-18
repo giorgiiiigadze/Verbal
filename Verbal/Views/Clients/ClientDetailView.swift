@@ -10,10 +10,10 @@
 //  quotes already in the session, so there is nothing to fetch and nothing that
 //  can disagree with the thread at the bottom of the page.
 //
-//  Laid out the way a stock page is, because a stock page answers the same
-//  shape of question: the figure that matters, how it moved, the history behind
-//  it, then the detail. The one thing not borrowed is the line through hundreds
-//  of points — see `ClientActivityChart` for what stands in its place.
+//  The figure that matters, what it is made of, then the detail. The middle of
+//  those was a chart for a while — a bar per quote, then a running total — and
+//  both drew a history nobody was asking this page for. `ClientMoneyBar` says
+//  the same thing in a fifth of the height.
 //
 
 import SwiftUI
@@ -76,13 +76,8 @@ struct ClientDetailView: View {
                 header
                 headline
 
-                // Two quotes is the least that can make a line. One is an
-                // event, not a history, and a chart of a single event says
-                // less than the figures above it already do.
-                if visible.count >= 2 {
-                    ClientActivityChart(points: visible,
-                                        currencyCode: currencyCode,
-                                        windowStart: range.cutoff())
+                if !visible.isEmpty {
+                    ClientMoneyBar(points: visible, currencyCode: currencyCode)
                 }
                 if ranges.count > 1 { rangePicker }
 
