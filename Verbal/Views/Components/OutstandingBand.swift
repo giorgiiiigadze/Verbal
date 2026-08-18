@@ -18,19 +18,15 @@ struct OutstandingBand: View {
     /// which statuses count as waiting.
     let quotes: [QuoteSummary]
 
-    /// Outstanding quotes converted into the user's currency. Nil until the
-    /// first calculation finishes.
-    @State private var outstandingTotal: Double?
-    /// Quotes actually included above — a pair with no available rate is left
-    /// out rather than silently added at the wrong value.
-    @State private var outstandingCount = 0
-    /// True when at least one quote needed converting, so the figure is
-    /// a daily-rate approximation rather than an exact sum.
-    @State private var outstandingIsApproximate = false
-    /// The figure the band actually shows. Trails `outstandingTotal` so it can
-    /// roll up to it — from zero on first load, and between values when the
-    /// currency changes — rather than snapping.
-    @State private var animatedOutstanding: Double = 0
+    /// The total, when reaching it meant fetching a rate table. Nil whenever
+    /// today's cache could answer on its own, which is nearly always.
+    @State private var fetchedTotal: ConvertedTotal?
+    /// The figure on screen. Trails `total` so a change the user is watching —
+    /// switching currency — rolls to its new value instead of snapping. Nil
+    /// until the first figure arrives, and that first one is taken without
+    /// animation: counting up from zero to a number that was known before the
+    /// screen was drawn is a loading spinner with extra steps.
+    @State private var shown: Double?
     /// Observed so the summary re-converts when the user changes currency.
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
@@ -39,29 +35,40 @@ struct OutstandingBand: View {
         quotes.filter { $0.effectiveStatus == "sent" || $0.effectiveStatus == "viewed" }
     }
 
-    /// Whether there is a pipeline to report.
-    ///
-    /// True the moment there is one — before the conversion finishes — so the
-    /// total can shimmer and count up in place rather than popping in fully
-    /// formed. False once the conversion comes back with nothing it could
-    /// price, which is the offline case.
-    private var hasAnything: Bool {
-        outstandingTotal == nil ? !outstanding.isEmpty : outstandingCount > 0
+    /// The total as today's cached rates can give it — computed here in the
+    /// view rather than awaited, so it is right on the first frame the band is
+    /// drawn. Nil only when a quote is priced in a currency whose rate table
+    /// hasn't been fetched today, which is the one case worth waiting for.
+    private var immediateTotal: ConvertedTotal? {
+        ConvertedTotal.cached(outstanding, in: currencyCode)
     }
 
-    /// The rolling figure, formatted — reads off `animatedOutstanding` so the
-    /// digits count up rather than the final number appearing at once.
+    /// What the band knows, from whichever of the two got there.
+    private var total: ConvertedTotal? { immediateTotal ?? fetchedTotal }
+
+    /// Whether there is a pipeline to report.
+    ///
+    /// True the moment there is one — before a pending conversion finishes — so
+    /// the total can shimmer in place rather than popping in fully formed.
+    /// False once the conversion comes back with nothing it could price, which
+    /// is the offline case.
+    private var hasAnything: Bool {
+        total.map { $0.counted > 0 } ?? !outstanding.isEmpty
+    }
+
+    /// The figure, formatted — read off `shown` so a change rolls, keeping the
+    /// count and the "≈" of the total it is trailing.
     private var outstandingLabel: String {
-        ConvertedTotal(amount: animatedOutstanding,
-                       counted: outstandingCount,
-                       isApproximate: outstandingIsApproximate)
+        ConvertedTotal(amount: shown ?? total?.amount ?? 0,
+                       counted: total?.counted ?? 0,
+                       isApproximate: total?.isApproximate ?? false)
             .formatted(in: currencyCode)
     }
 
-    /// Until the conversion lands the exact count isn't known, so fall back to
-    /// the number of outstanding quotes rather than flashing "0 quotes".
+    /// Until a pending conversion lands the exact count isn't known, so fall
+    /// back to the number of outstanding quotes rather than flashing "0 quotes".
     private var displayedOutstandingCount: Int {
-        outstandingTotal == nil ? outstanding.count : outstandingCount
+        total?.counted ?? outstanding.count
     }
 
     /// Changes whenever the figure would — the quotes in play, their amounts
@@ -71,24 +78,30 @@ struct OutstandingBand: View {
             .joined(separator: ",") + "→" + currencyCode
     }
 
-    /// Convert each outstanding quote into the user's currency and total them.
+    /// Fetch what the cache couldn't supply, and only that.
+    ///
     /// The arithmetic lives in `ConvertedTotal`, which the client page uses to
     /// answer the same question about one person.
     private func recalculateOutstanding() async {
-        let result = await ConvertedTotal.of(outstanding, in: currencyCode)
-        outstandingTotal = result.amount
-        outstandingCount = result.counted
-        outstandingIsApproximate = result.isApproximate
+        guard immediateTotal == nil else { return }
+        fetchedTotal = await ConvertedTotal.of(outstanding, in: currencyCode)
     }
 
-    /// Age of the oldest quote still waiting on a client.
+    /// How many, and how long the oldest has been sitting there.
     ///
-    /// Read from `createdAt` because that's all a summary carries — there's no
-    /// sent-at timestamp — so this says "oldest", not "sent", and doesn't claim
-    /// to date something it can't see.
-    private var oldestLabel: String? {
-        guard let oldest = outstanding.map(\.createdAt).min() else { return nil }
-        return "Oldest · \(oldest.formatted(.relative(presentation: .named)))"
+    /// One line rather than two facts in opposite corners. The count used to sit
+    /// baseline-aligned with the caption at the far right, where it belonged to
+    /// nothing and read as a stray; both halves are about the same pile of
+    /// quotes and say more side by side than apart.
+    ///
+    /// The age is read from `createdAt` because that's all a summary carries —
+    /// there's no sent-at timestamp — so this says "oldest", not "sent", and
+    /// doesn't claim to date something it can't see.
+    private var detailLabel: String {
+        let count = displayedOutstandingCount
+        let quotes = "\(count) quote\(count == 1 ? "" : "s")"
+        guard let oldest = outstanding.map(\.createdAt).min() else { return quotes }
+        return "\(quotes) · oldest \(oldest.formatted(.relative(presentation: .named)))"
     }
 
     var body: some View {
@@ -105,52 +118,61 @@ struct OutstandingBand: View {
             if hasAnything { content }
         }
         .task(id: outstandingSignature) { await recalculateOutstanding() }
-        // Roll the figure up whenever the conversion produces a new one — from
-        // zero on first load, and between values when the currency changes.
-        .onChange(of: outstandingTotal, initial: true) { _, total in
-            withAnimation(.snappy(duration: 0.55)) { animatedOutstanding = total ?? 0 }
+        // The first figure lands as it is; every one after it rolls. A figure
+        // that was known before the screen was drawn has nothing to announce,
+        // and announcing it anyway is what made this band look like it was
+        // still loading. A currency switch is the opposite case — the user did
+        // something and the motion is the answer.
+        .onChange(of: total?.amount, initial: true) { _, amount in
+            guard let amount else { return }
+            guard shown != nil else {
+                shown = amount
+                return
+            }
+            withAnimation(.snappy(duration: 0.55)) { shown = amount }
         }
     }
 
     private var content: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Waiting on clients")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                // Always in the user's own currency, converting quotes priced
-                // in another one — a raw sum across currencies is meaningless.
-                //
-                // It shimmers while the conversion runs, then rolls up to the
-                // figure — the app's "working on it" motion, the same touch the
-                // generator has, on the number worth opening the app for.
-                // Slab, and a headline size. It is the one figure that sums
-                // up the whole tab, and the app already keeps the serif for
-                // the things a page is about — its headings, a quote's title,
-                // a client's name. Losing the blue fill left it quiet; the
-                // weight comes back through size instead of colour.
-                //
-                // Monospaced so the digits don't shuffle sideways as it rolls.
-                Text(outstandingLabel)
-                    .font(.robotoSlab(28, relativeTo: .title).monospacedDigit())
-                    .foregroundStyle(Color(.mainText))
-                    .contentTransition(.numericText(value: animatedOutstanding))
-                    .shimmer(active: outstandingTotal == nil)
-                // The total on its own is a fact. The age is the part that says
-                // whether anything needs chasing.
-                if let oldestLabel {
-                    Text(oldestLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer(minLength: 8)
-            // Secondary, where this was `blueAccentText` — the colour was
-            // marking the tappable half of a band that no longer is one.
-            Text("\(displayedOutstandingCount) quote\(displayedOutstandingCount == 1 ? "" : "s")")
+        // One column, three lines, nothing floating opposite anything. What the
+        // figure is, the figure, and what it is made of — read top to bottom in
+        // the order the question is asked.
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Waiting on clients")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            // Always in the user's own currency, converting quotes priced in
+            // another one — a raw sum across currencies is meaningless.
+            //
+            // Shown the instant it can be totalled, which is nearly always: it
+            // shimmers only while a rate table is genuinely being fetched.
+            //
+            // Slab, and a headline size. It is the one figure that sums up the
+            // whole tab, and the app already keeps the serif for the things a
+            // page is about — its headings, a quote's title, a client's name.
+            //
+            // Monospaced so the digits don't shuffle sideways as it rolls.
+            Text(outstandingLabel)
+                .font(.robotoSlab(28, relativeTo: .title).monospacedDigit())
+                .foregroundStyle(Color(.mainText))
+                .contentTransition(.numericText(value: shown ?? 0))
+                .shimmer(active: total == nil)
+            // The total on its own is a fact. How many it covers, and how long
+            // the oldest has waited, is the part that says whether anything
+            // needs chasing.
+            Text(detailLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // The band answers "how much is in play"; the threads below answer
+        // "with whom". Set off by more than the gap between two client cards so
+        // the reader sees a summary and then a list, rather than a first list
+        // item that happens to look different.
+        //
+        // Inside `content` rather than at the call site: this view draws
+        // nothing at all when nothing is outstanding, and padding on the
+        // outside of nothing is a gap above the first client for no reason.
+        .padding(.bottom, 12)
     }
 }

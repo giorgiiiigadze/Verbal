@@ -61,6 +61,31 @@ enum FXService {
         return rate
     }
 
+    /// What today's cache can say about a pair without going near the network.
+    ///
+    /// Three answers, not an optional, because "we can never price this" and
+    /// "we haven't fetched yet" are opposite instructions to the caller: the
+    /// first means carry on without the quote, the second means wait.
+    enum CachedRate {
+        /// Today's table for this base has the pair.
+        case known(Double)
+        /// Today's table is here and has no such pair — the ECB list is ~30
+        /// majors, so this is a permanent no, not a slow yes.
+        case unsupported
+        /// No table for this base yet today. Only `rate(from:to:)` can answer.
+        case needsFetch
+    }
+
+    /// Today's rate from the cache alone. Never makes a request, so it is safe
+    /// to call while a view is being drawn — which is the point of it: a figure
+    /// that can be totalled during `body` needs no spinner over it.
+    static func cachedRate(from: String, to: String) -> CachedRate {
+        if from == to { return .known(1) }
+        guard let table = cachedTable(base: from) else { return .needsFetch }
+        guard let rate = table[to] else { return .unsupported }
+        return .known(rate)
+    }
+
     /// Warm the cache for a base currency in the background (best effort), so
     /// the first real conversion resolves instantly. Errors are ignored.
     static func prefetch(base: String) async {
