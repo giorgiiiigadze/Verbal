@@ -88,8 +88,15 @@ struct ClientsView: View {
         .modifier(ClientsDestinations())
         .navigationTitle("Clients")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $searchText, prompt: "Search clients")
-        .searchToolbarBehavior(.minimize)
+        // Drawn out across the header, not minimised into a magnifying glass in
+        // the corner. The field is the first thing anyone with more than a
+        // screenful of clients wants, and a button that has to be tapped before
+        // it becomes a field puts a step in front of it. `.always` keeps it
+        // there while the feed scrolls rather than letting it hide on the way
+        // down.
+        .searchable(text: $searchText,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search clients")
         // Asked for on every appearance, so arriving here after recording or
         // deleting a quote shows that, rather than whatever the list happened to
         // hold when the app started. This screen keeps no copy of its own —
