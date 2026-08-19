@@ -16,14 +16,6 @@ struct QuoteRow: View {
     /// Lines this quote can't price yet. Passed in because the summary row
     /// doesn't know what's inside a quote — the list reads it from the prefetch.
     var unpricedCount: Int = 0
-    /// True when a date heading directly above this row already names the day.
-    ///
-    /// The row then shows the clock time alone, because "Wed 12 Aug" and
-    /// "2 days ago" one under the other are the same fact told twice. Off by
-    /// default, and off for the pinned section and the clients thread, neither
-    /// of which has a date heading — a bare "4:26 PM" there could be any day of
-    /// the year. Those get the day and the time together instead.
-    var dayIsKnown: Bool = false
     /// True when the row already sits under the client it belongs to.
     ///
     /// The clients thread hangs every one of a person's quotes off a header
@@ -86,7 +78,11 @@ struct QuoteRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
-        .padding(.vertical, 18)
+        // 15, not the 18 it was. The list is read to find a quote, and finding
+        // is helped more by seeing another row than by the air around any one.
+        // Horizontal stays at 16 on purpose: taking that in narrows the text
+        // column and truncates long job titles, which costs more than it buys.
+        .padding(.vertical, 15)
         // One fill for every row, pinned or not. A pinned quote already sits
         // under its own heading at the top of the list, which says where it is
         // better than a colour can — and royalBlue25 is the tint the app uses
@@ -101,18 +97,16 @@ struct QuoteRow: View {
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    /// Client name and when the quote was made — or just the timestamp, when
-    /// the list around the row has already said whose it is. The client leads
-    /// where it appears: several quotes share the same job title, and names
-    /// don't.
+    /// Client name and how long ago the quote went out. The client leads where
+    /// it appears: several quotes share the same job title, and names don't.
     private var subtitle: String {
-        // Without a heading to lean on, the day comes along with the time —
-        // "Yesterday, 7:45 PM", "Jul 27". `.relative` gave "2 days ago", which
-        // named neither the day nor the hour and so matched neither the list
-        // it sits in nor the row above it.
-        let when = dayIsKnown
-            ? quote.createdAt.formatted(.dateTime.hour().minute())
-            : quoteDateLabel(quote.createdAt)
+        // Relative, not absolute. "12 Aug" is a fact the reader has to convert
+        // before it means anything; "Sent 1w ago" is the conversion already
+        // done, and the answer — chase it or leave it — falls out of it. The
+        // day headings above the rows still carry the absolute date, and the
+        // quote's own screen has it to the minute.
+        let age = quoteRelativeLabel(quote.createdAt)
+        let when = quote.status == "draft" ? age : "Sent \(age)"
         guard !clientIsKnown,
               let client = quote.clientName, !client.isEmpty else { return when }
         return "\(client) · \(when)"
@@ -195,7 +189,7 @@ struct QuoteRowSkeleton: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 18)
+        .padding(.vertical, 15)
         .background(Color(.cardSurface),
                     in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(

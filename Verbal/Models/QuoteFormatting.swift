@@ -57,6 +57,23 @@ func quoteDateLabel(_ date: Date, now: Date = Date()) -> String {
     return date.formatted(.dateTime.month(.abbreviated).day())
 }
 
+/// A quote's age at a glance: "now", "40m ago", "2h ago", "8d ago", "3w ago".
+///
+/// Deliberately shorter and vaguer than `quoteDateLabel`. A list is scanned for
+/// the thing that needs doing, and "Sent 8d ago" answers that where "12 Aug"
+/// makes the reader do the subtraction first. The exact date still lives on the
+/// quote's own screen, which is where someone goes when they need it.
+func quoteRelativeLabel(_ date: Date, now: Date = Date()) -> String {
+    let seconds = now.timeIntervalSince(date)
+    if seconds < 60 { return "now" }
+    if seconds < 3_600 { return "\(Int(seconds / 60))m ago" }
+    if seconds < 86_400 { return "\(Int(seconds / 3_600))h ago" }
+    let days = Int(seconds / 86_400)
+    if days < 7 { return "\(days)d ago" }
+    if days < 365 { return "\(days / 7)w ago" }
+    return "\(days / 365)y ago"
+}
+
 /// Heading for a day's worth of quotes on Home: "Earlier today", "Yesterday",
 /// "Wed 12 Aug", or "Wed 12 Aug 2025" once the year stops being obvious.
 ///

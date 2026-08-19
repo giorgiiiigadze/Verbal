@@ -334,8 +334,7 @@ struct HomeView: View {
                     ForEach(section.quotes) { quote in
                         ZStack {
                             QuoteRow(quote: quote,
-                                     unpricedCount: unpricedCount(for: quote),
-                                     dayIsKnown: section.dated)
+                                     unpricedCount: unpricedCount(for: quote))
                             // Zero-opacity link so the row navigates without the
                             // default trailing chevron. By value rather than by
                             // closure: this row is rebuilt whenever the session's
@@ -354,6 +353,29 @@ struct HomeView: View {
                             Task { await session.prefetchLineItems(for: quote.id) }
                         }
                         .contextMenu { quoteMenu(for: quote) }
+                        // The two moves the list is actually read for: chase the
+                        // ones that have gone quiet, tick off the ones that came
+                        // back yes. Both were buried in a long-press menu, which
+                        // is where features go to be forgotten.
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            // "Nudge" is the share panel again — sending the
+                            // quote a second time is what a nudge is here, and
+                            // inventing a separate reminder would be a feature,
+                            // not a swipe.
+                            Button {
+                                share(quote)
+                            } label: {
+                                Label("Nudge", systemImage: "bell.fill")
+                            }
+                            .tint(Color(.royalBlue300))
+
+                            Button {
+                                Task { await changeStatus(quote, to: "accepted") }
+                            } label: {
+                                Label("Accepted", systemImage: "checkmark.circle.fill")
+                            }
+                            .tint(Color(.statusAcceptedText))
+                        }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             // No .destructive role: it would animate the row out
                             // on tap, before the confirmation alert is answered.
@@ -363,6 +385,13 @@ struct HomeView: View {
                                 Label("Delete", systemImage: "trash")
                             }
                             .tint(.red)
+
+                            Button {
+                                quoteToDuplicate = quote
+                            } label: {
+                                Label("Duplicate", systemImage: "plus.square.on.square")
+                            }
+                            .tint(Color(.statusMutedText))
 
                             Button {
                                 share(quote)
@@ -376,6 +405,11 @@ struct HomeView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            // Room under the last row for the floating tab bar, which draws
+            // over the list rather than beside it. Without this the bottom
+            // quote is permanently cut in half, and the one below it is the one
+            // you can never quite reach.
+            .contentMargins(.bottom, 88, for: .scrollContent)
             // Back to the top when a quote arrives — see `load()`. The token is
             // what carries the news down here, since `load()` has no way to
             // reach the proxy.
@@ -693,9 +727,12 @@ struct HomeView: View {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// `dated` says the heading above these rows names a day, so the rows can
-    /// drop to a clock time. False for Pinned, which spans every day there is.
-    private var sections: [(title: String, dated: Bool, quotes: [QuoteSummary])] {
+    /// The list, split into Pinned and then one section per day.
+    ///
+    /// The headings stay absolute ("Wed 12 Aug") now that the rows have gone
+    /// relative. That is the division of labour: the heading says which day you
+    /// are looking at, the row says how long ago that was.
+    private var sections: [(title: String, quotes: [QuoteSummary])] {
         let query = searchQuery.lowercased()
         let filtered = quotes.filter { quote in
             guard filter.matches(quote.effectiveStatus) else { return false }
@@ -718,15 +755,15 @@ struct HomeView: View {
             days[calendar.startOfDay(for: quote.createdAt), default: []].append(quote)
         }
 
-        var result: [(title: String, dated: Bool, quotes: [QuoteSummary])] = []
+        var result: [(title: String, quotes: [QuoteSummary])] = []
         if !pinned.isEmpty {
-            result.append(("Pinned", false, pinned))
+            result.append(("Pinned", pinned))
         }
         // Newest day first. Within a day the server's ordering already holds —
         // it returns created_at descending — so the rows keep the order they
         // were fetched in.
         result += days.keys.sorted(by: >).map { day in
-            (quoteSectionTitle(day), true, days[day] ?? [])
+            (quoteSectionTitle(day), days[day] ?? [])
         }
         return result
     }
