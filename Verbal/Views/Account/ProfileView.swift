@@ -155,11 +155,11 @@ struct ProfileView: View {
     private func save() {
         isSaving = true
         var profile = loaded
-        profile.businessName = trimmedOrNil(businessName)
-        profile.phone = trimmedOrNil(phone)
-        profile.email = trimmedOrNil(email)
-        profile.address = trimmedOrNil(address)
-        profile.taxNumber = trimmedOrNil(taxNumber)
+        profile.businessName = businessName.trimmedOrNil
+        profile.phone = phone.trimmedOrNil
+        profile.email = email.trimmedOrNil
+        profile.address = address.trimmedOrNil
+        profile.taxNumber = taxNumber.trimmedOrNil
         Task {
             defer { isSaving = false }
             do {
@@ -179,8 +179,4 @@ struct ProfileView: View {
         }
     }
 
-    private func trimmedOrNil(_ text: String) -> String? {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? nil : t
-    }
 }

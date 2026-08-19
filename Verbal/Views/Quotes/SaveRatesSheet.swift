@@ -15,14 +15,6 @@
 import SwiftUI
 import UIKit
 
-/// A line the extraction couldn't price, as a candidate rate-card entry.
-struct UnpricedItem: Identifiable {
-    let id: UUID
-    let name: String
-    let unit: String?
-    let type: String
-}
-
 struct SaveRatesSheet: View {
     let items: [UnpricedItem]
     /// The currency prices are being entered in, for the field prefix.

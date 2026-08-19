@@ -151,7 +151,7 @@ struct DictationLanguageView: View {
             if let previous, previous != locale.identifier {
                 await AssetInventory.release(reservedLocale: Locale(identifier: previous))
             }
-            try? await AssetInventory.reserve(locale: locale)
+            _ = try? await AssetInventory.reserve(locale: locale)
 
             guard let request = try await AssetInventory.assetInstallationRequest(
                 supporting: [transcriber]

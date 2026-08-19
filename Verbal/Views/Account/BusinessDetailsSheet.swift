@@ -16,23 +16,6 @@
 
 import SwiftUI
 
-/// Whether the share flow should stop to collect business details first.
-enum BusinessPrompt {
-    private static let askedKey = "hasPromptedBusinessDetails"
-
-    /// True when nothing identifies the business yet and we haven't already
-    /// asked. Asked once per install — a second nag would just be in the way.
-    static func shouldAsk(_ profile: BusinessProfile?) -> Bool {
-        guard !UserDefaults.standard.bool(forKey: askedKey) else { return false }
-        let name = profile?.businessName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return name.isEmpty
-    }
-
-    static func markAsked() {
-        UserDefaults.standard.set(true, forKey: askedKey)
-    }
-}
-
 struct BusinessDetailsSheet: View {
     /// Called after saving or skipping — the share continues either way.
     var onFinish: () -> Void
@@ -153,8 +136,8 @@ struct BusinessDetailsSheet: View {
         Task {
             // Start from the saved row so this never wipes a field it doesn't show.
             var profile = session.businessProfile ?? .empty
-            profile.businessName = trimmedOrNil(businessName)
-            profile.phone = trimmedOrNil(phone)
+            profile.businessName = businessName.trimmedOrNil
+            profile.phone = phone.trimmedOrNil
             try? await BusinessService.save(profile)
             session.cacheBusinessProfile(profile)
             isSaving = false
@@ -168,10 +151,5 @@ struct BusinessDetailsSheet: View {
         BusinessPrompt.markAsked()
         onFinish()
         dismiss()
-    }
-
-    private func trimmedOrNil(_ text: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

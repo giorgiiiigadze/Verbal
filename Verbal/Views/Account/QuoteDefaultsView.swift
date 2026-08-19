@@ -380,9 +380,9 @@ struct QuoteDefaultsView: View {
         var profile = loaded
         profile.defaultValidityDays = validityDays
         profile.defaultTaxRate = taxRateValue
-        profile.defaultTerms = trimmedOrNil(terms)
-        profile.defaultNotes = trimmedOrNil(notes)
-        profile.quoteNumberPrefix = trimmedOrNil(numberPrefix)
+        profile.defaultTerms = terms.trimmedOrNil
+        profile.defaultNotes = notes.trimmedOrNil
+        profile.quoteNumberPrefix = numberPrefix.trimmedOrNil
         profile.quoteNumberStart = numberStartValue
         Task {
             defer { isSaving = false }
@@ -402,8 +402,4 @@ struct QuoteDefaultsView: View {
         }
     }
 
-    private func trimmedOrNil(_ text: String) -> String? {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? nil : t
-    }
 }
