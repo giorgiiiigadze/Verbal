@@ -41,6 +41,11 @@ struct QuoteRecordingView: View {
     /// sheet has closed rather than under it.
     @State private var startAfterMicPermission = false
     @State private var toast: Toast?
+    /// Named only when the user has overridden the automatic choice: the
+    /// language the mic is listening in. Silence is the right default, but
+    /// someone who set this deliberately — or by accident — should be able to
+    /// see it where the words are coming out wrong.
+    @State private var dictationOverride: String?
     /// Currency for the quote being built — always the user's Settings default.
     /// Changing a quote's currency happens later, on the detail page.
     @State private var currency = AppCurrency.current.rawValue
@@ -219,6 +224,16 @@ struct QuoteRecordingView: View {
                 .onAppear {
                     // Use the current Settings currency each time the sheet opens.
                     currency = AppCurrency.current.rawValue
+                }
+                // Read each time the sheet opens, so a language changed in
+                // Settings is named the next time the mic is picked up.
+                .task {
+                    guard DictationLanguage.isOverridden,
+                          let locale = await DictationLanguage.resolved() else {
+                        dictationOverride = nil
+                        return
+                    }
+                    dictationOverride = DictationLanguage.label(for: locale)
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
@@ -558,6 +573,11 @@ struct QuoteRecordingView: View {
                                         in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                     transcript
+                    if let dictationOverride {
+                        Text("Listening in \(dictationOverride)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .transition(.opacity)
             }

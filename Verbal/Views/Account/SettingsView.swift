@@ -9,6 +9,12 @@ struct SettingsView: View {
     @Environment(SessionStore.self) private var session
 
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
+    /// Read only to refresh the row's value when the picker writes it.
+    @AppStorage(DictationLanguage.defaultsKey) private var dictationLocale = ""
+
+    /// What the dictation row reads on the right — resolved, so automatic still
+    /// names the language it picked.
+    @State private var dictationLabel = ""
 
     @State private var showSignOutConfirmation = false
     @State private var toast: Toast?
@@ -66,6 +72,21 @@ struct SettingsView: View {
                 // that row and this description was written before it moved
                 // there, so it was pointing at a screen it no longer described.
                 Text("Your letterhead, validity, tax and standard terms, applied to every new quote. The currency also formats your rate card.")
+            }
+            .listRowBackground(Color(.cardSurface))
+
+            // The language the mic hears, which was inferred from the phone and
+            // never mentioned. It sits above the doors rather than inside
+            // "Other": getting it wrong spoils every recording, which makes it
+            // a setting people come looking for.
+            Section {
+                NavigationLink {
+                    DictationLanguageView()
+                } label: {
+                    LabeledContent("Dictation language", value: dictationLabel)
+                }
+            } header: {
+                Text("Recording")
             }
             .listRowBackground(Color(.cardSurface))
 
@@ -128,5 +149,10 @@ struct SettingsView: View {
             }
         }
         .toast($toast)
+        // Keyed on the stored choice so the row updates when the user comes
+        // back from the picker.
+        .task(id: dictationLocale) {
+            dictationLabel = await DictationLanguage.summaryLabel()
+        }
     }
 }
