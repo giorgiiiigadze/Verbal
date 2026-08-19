@@ -177,6 +177,82 @@ enum QuoteService {
         return rows.compactMap(\.name).filter { !$0.isEmpty }
     }
 
+    /// Rename a client on every quote of theirs at once, merging them into an
+    /// existing person when the new name is already taken.
+    ///
+    /// The name a client is filed under is whatever was said into the mic, and
+    /// a misheard one could only be corrected quote by quote — which is also
+    /// how "Tamar Beridze" and "Tamar Beridge" became two clients. So the merge
+    /// isn't a separate feature: repointing the quotes and dropping the emptied
+    /// row is what renaming onto an existing name has to mean.
+    ///
+    /// A change of spelling or capitalisation alone is not a merge — that is
+    /// the same row being corrected, so the survivor is looked for among rows
+    /// other than the ones being renamed.
+    static func renameClient(from oldName: String, to newName: String) async throws {
+        guard let userID = client.auth.currentUser?.id else {
+            throw QuoteError.notSignedIn
+        }
+        let old = oldName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let new = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !old.isEmpty, !new.isEmpty else { return }
+
+        struct Row: Decodable { let id: UUID }
+        struct NamePayload: Encodable { let name: String }
+        struct CustomerPayload: Encodable {
+            let customerId: UUID
+            enum CodingKeys: String, CodingKey { case customerId = "customer_id" }
+        }
+
+        func rows(named name: String) async throws -> [Row] {
+            try await client
+                .from("customers")
+                .select("id")
+                .eq("user_id", value: userID)
+                .ilike("name", pattern: escapingLikeWildcards(name))
+                .execute()
+                .value
+        }
+
+        let renaming = try await rows(named: old).map(\.id)
+        guard !renaming.isEmpty else { return }
+        let survivor = try await rows(named: new).map(\.id).first { !renaming.contains($0) }
+
+        if let survivor {
+            // Every quote of theirs moves to the person who keeps the name,
+            // before the emptied rows go — an order that leaves no quote
+            // pointing at a customer that no longer exists, even if the second
+            // call never happens.
+            try await client
+                .from("quotes")
+                .update(CustomerPayload(customerId: survivor))
+                .eq("user_id", value: userID)
+                .in("customer_id", values: renaming)
+                .execute()
+            // The survivor takes the spelling that was just typed, so correcting
+            // the capitalisation of a name that already exists still corrects it.
+            try await client
+                .from("customers")
+                .update(NamePayload(name: new))
+                .eq("user_id", value: userID)
+                .eq("id", value: survivor)
+                .execute()
+            try await client
+                .from("customers")
+                .delete()
+                .eq("user_id", value: userID)
+                .in("id", values: renaming)
+                .execute()
+        } else {
+            try await client
+                .from("customers")
+                .update(NamePayload(name: new))
+                .eq("user_id", value: userID)
+                .in("id", values: renaming)
+                .execute()
+        }
+    }
+
     /// Link an existing quote to a client by name (used when editing).
     static func setClient(quoteId: UUID, name: String) async throws {
         guard let userID = client.auth.currentUser?.id else {

@@ -17,6 +17,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct ClientDetailView: View {
     /// Who this page is about — their case-folded name, nothing more. The page
@@ -25,7 +26,19 @@ struct ClientDetailView: View {
     let key: ClientKey
 
     @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
+
+    /// Who the page is about now. Starts as the key it was pushed with and
+    /// follows a rename — the page is keyed on the name, so without this a
+    /// rename would leave it looking up a person who no longer exists and
+    /// showing an empty history.
+    @State private var currentKey: ClientKey?
+    private var activeKey: ClientKey { currentKey ?? key }
+
+    @State private var showRename = false
+    @State private var renameText = ""
+    @State private var toast: Toast?
 
     /// This person as the session has them now.
     ///
@@ -37,9 +50,9 @@ struct ClientDetailView: View {
     private var client: Client {
         let mine = session.quotes.filter {
             ($0.clientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                .lowercased() == key.id
+                .lowercased() == activeKey.id
         }
-        return Client(mine) ?? Client(name: key.name, quotes: [])
+        return Client(mine) ?? Client(name: activeKey.name, quotes: [])
     }
 
     /// Changes whenever a figure on this page would.
@@ -100,12 +113,70 @@ struct ClientDetailView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        renameText = client.name
+                        showRename = true
+                    } label: {
+                        Label("Rename client", systemImage: "character.cursor.ibeam")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityLabel("Client options")
+            }
+        }
+        // The same native alert the quote screen renames behind: one field, two
+        // buttons, and nothing to learn.
+        .alert("Rename client", isPresented: $showRename) {
+            TextField("Name", text: $renameText)
+                .textInputAutocapitalization(.words)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { rename(to: renameText) }
+        } message: {
+            Text("Changes the name on every quote of theirs. If someone else already has this name, the two are merged.")
+        }
+        .toast($toast)
         .task(id: signature) {
             points = await ClientQuotePoint.of(client.quotes, in: currencyCode)
             // A window that was on offer a moment ago may not be after an edit
             // or a deletion; landing on one that no longer exists would show an
             // empty page with no way back to the full history.
             if !ranges.contains(range) { range = .all }
+        }
+    }
+
+    // MARK: - Renaming
+
+    /// Writes the new name, then moves the page onto it.
+    ///
+    /// The list the page reads from is patched in place rather than refetched:
+    /// the quotes themselves haven't changed, only who they point at, and a
+    /// round trip would blank the figures on screen for as long as it took.
+    private func rename(to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous = client.name
+        guard !trimmed.isEmpty, trimmed != previous else { return }
+        let affected = client.quotes.map(\.id)
+
+        Task {
+            do {
+                try await QuoteService.renameClient(from: previous, to: trimmed)
+            } catch {
+                toast = Toast(style: .error, message: "Couldn't rename this client")
+                return
+            }
+            for id in affected {
+                session.updateQuote(id: id) { $0.clientName = trimmed }
+            }
+            // A merge folds this person into someone else's history, so the key
+            // has to move with them or the page would show only the quotes it
+            // arrived with.
+            currentKey = ClientKey(id: trimmed.lowercased(), name: trimmed)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            toast = Toast(style: .success, message: "Renamed to \(trimmed)")
         }
     }
 
