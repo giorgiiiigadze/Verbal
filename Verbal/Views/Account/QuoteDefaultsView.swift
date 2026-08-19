@@ -30,7 +30,10 @@ struct QuoteDefaultsView: View {
     @State private var saveFailed = false
     @State private var loadFailed = false
 
-    @FocusState private var keyboardShown: Bool
+    private enum Field: Hashable {
+        case numberPrefix, numberStart, taxRate, terms, notes
+    }
+    @FocusState private var focus: Field?
 
     // MARK: - Validation
 
@@ -153,6 +156,7 @@ struct QuoteDefaultsView: View {
                             .multilineTextAlignment(.trailing)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
+                            .focused($focus, equals: .numberPrefix)
                     }
 
                     LabeledContent("Start at") {
@@ -160,6 +164,7 @@ struct QuoteDefaultsView: View {
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.numberPad)
                             .font(.body.monospacedDigit())
+                            .focused($focus, equals: .numberStart)
                     }
 
                     LabeledContent("Next quote", value: numberPreview)
@@ -196,7 +201,7 @@ struct QuoteDefaultsView: View {
                             TextField("0", text: $taxRate)
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
-                                .focused($keyboardShown)
+                                .focused($focus, equals: .taxRate)
 
                             Text("%")
                                 .foregroundStyle(.secondary)
@@ -224,7 +229,7 @@ struct QuoteDefaultsView: View {
                         axis: .vertical
                     )
                     .lineLimit(3...8)
-                    .focused($keyboardShown)
+                    .focused($focus, equals: .terms)
                 }
                 .listRowBackground(Color(.cardSurface))
 
@@ -235,7 +240,7 @@ struct QuoteDefaultsView: View {
                         axis: .vertical
                     )
                     .lineLimit(2...6)
-                    .focused($keyboardShown)
+                    .focused($focus, equals: .notes)
                 }
                 .listRowBackground(Color(.cardSurface))
             }
@@ -259,10 +264,12 @@ struct QuoteDefaultsView: View {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
 
-                    Button("Done") {
-                        keyboardShown = false
+                    Button {
+                        focus = nil
+                    } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
                     }
-                    .fontWeight(.semibold)
+                    .accessibilityLabel("Hide keyboard")
                 }
             }
             .task {
@@ -353,8 +360,13 @@ struct QuoteDefaultsView: View {
         let logo = session.businessLogo
         let profile = session.businessProfile
 
-        let name = profile?.businessName?
+        let businessName = profile?.businessName?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayBusinessName = if let businessName, !businessName.isEmpty {
+            businessName
+        } else {
+            "Your business name"
+        }
 
         let contact = [
             profile?.phone,
@@ -407,14 +419,10 @@ struct QuoteDefaultsView: View {
                     .padding(.bottom, 3)
                 }
 
-                Text(
-                    name?.isEmpty == false
-                        ? name!
-                        : "Your business name"
-                )
+                Text(displayBusinessName)
                 .font(.robotoSlab(16, relativeTo: .headline))
                 .foregroundStyle(
-                    name?.isEmpty == false
+                    businessName?.isEmpty == false
                         ? .black
                         : .black.opacity(0.35)
                 )
@@ -601,6 +609,7 @@ struct QuoteDefaultsView: View {
     private func save() {
         guard canSave else { return }
 
+        focus = nil
         isSaving = true
 
         var profile = loaded

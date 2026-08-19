@@ -44,7 +44,11 @@ struct QuoteDocument {
 
     var businessName: String {
         let name = business?.businessName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (name?.isEmpty == false) ? name! : "Quote"
+        return if let name, !name.isEmpty {
+            name
+        } else {
+            "Quote"
+        }
     }
 
     /// Contact lines shown under the business name, blank ones dropped.
@@ -58,7 +62,11 @@ struct QuoteDocument {
     var fileName: String {
         var parts: [String] = []
         if let number, !number.isEmpty { parts.append("Quote \(number)") } else { parts.append("Quote") }
-        let subject = clientName?.isEmpty == false ? clientName! : title
+        let subject = if let clientName, !clientName.isEmpty {
+            clientName
+        } else {
+            title
+        }
         if !subject.isEmpty { parts.append(subject) }
         let joined = parts.joined(separator: " — ")
         let safe = joined.components(separatedBy: CharacterSet(charactersIn: "/\\:?%*|\"<>"))

@@ -26,7 +26,12 @@ struct BusinessDetailsSheet: View {
     @State private var businessName = ""
     @State private var phone = ""
     @State private var isSaving = false
-    @FocusState private var nameFocused: Bool
+    @State private var saveFailed = false
+
+    private enum Field: Hashable {
+        case businessName, phone
+    }
+    @FocusState private var focus: Field?
 
     private var canSave: Bool {
         !businessName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -50,9 +55,10 @@ struct BusinessDetailsSheet: View {
 
                     VStack(spacing: 10) {
                         field("Business name", text: $businessName)
-                            .focused($nameFocused)
+                            .focused($focus, equals: .businessName)
                             .textInputAutocapitalization(.words)
                         field("Phone", text: $phone)
+                            .focused($focus, equals: .phone)
                             .keyboardType(.phonePad)
                     }
                     .padding(.top, 24)
@@ -68,6 +74,17 @@ struct BusinessDetailsSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .close) { finish() }
                         .disabled(isSaving)
+                }
+
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+
+                    Button {
+                        focus = nil
+                    } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                    }
+                    .accessibilityLabel("Hide keyboard")
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -106,12 +123,17 @@ struct BusinessDetailsSheet: View {
         }
         .presentationDetents([.height(520)])
         .presentationBackground(Color(.systemBackground))
+        .alert("Couldn't save business details", isPresented: $saveFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Check your connection and try again, or tap Not now to continue without saving.")
+        }
         .task {
             // Prefill anything already saved, so this is never a retype.
             businessName = session.businessProfile?.businessName ?? ""
             phone = session.businessProfile?.phone ?? ""
             try? await Task.sleep(for: .seconds(0.35))
-            nameFocused = true
+            focus = .businessName
         }
     }
 
@@ -132,15 +154,26 @@ struct BusinessDetailsSheet: View {
     }
 
     private func save() {
+        focus = nil
         isSaving = true
         Task {
+            defer {
+                isSaving = false
+            }
+
             // Start from the saved row so this never wipes a field it doesn't show.
             var profile = session.businessProfile ?? .empty
             profile.businessName = businessName.trimmedOrNil
             profile.phone = phone.trimmedOrNil
-            try? await BusinessService.save(profile)
+
+            do {
+                try await BusinessService.save(profile)
+            } catch {
+                saveFailed = true
+                return
+            }
+
             session.cacheBusinessProfile(profile)
-            isSaving = false
             finish()
         }
     }

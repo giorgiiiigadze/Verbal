@@ -32,6 +32,7 @@ struct AddRateItemView: View {
     @State private var priceText = ""
     @State private var type = "labor"
     @State private var isSaving = false
+    @State private var saveFailed = false
     /// The rate being corrected — either the one passed in, or one the user
     /// adopted from the duplicate warning.
     @State private var target: RateCardItem?
@@ -147,6 +148,11 @@ struct AddRateItemView: View {
         // replaced — a caption above it, and a taller target under the thumb.
         .presentationDetents([.height(560)])
         .presentationBackground(Color(.systemBackground))
+        .alert("Couldn't save rate", isPresented: $saveFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Check your connection and try again. Your changes are still here.")
+        }
         .task {
             if let editing { adopt(editing) }
             try? await Task.sleep(for: .seconds(0.35))
@@ -256,15 +262,24 @@ struct AddRateItemView: View {
     private func save() {
         isSaving = true
         Task {
-            if let target {
-                try? await QuoteService.updateRateCardItem(
-                    id: target.id, name: trimmedName, unit: unit,
-                    unitPrice: price, type: type)
-            } else {
-                try? await QuoteService.addRateCardItem(
-                    name: trimmedName, unit: unit, unitPrice: price, type: type)
+            defer {
+                isSaving = false
             }
-            isSaving = false
+
+            do {
+                if let target {
+                    try await QuoteService.updateRateCardItem(
+                        id: target.id, name: trimmedName, unit: unit,
+                        unitPrice: price, type: type)
+                } else {
+                    try await QuoteService.addRateCardItem(
+                        name: trimmedName, unit: unit, unitPrice: price, type: type)
+                }
+            } catch {
+                saveFailed = true
+                return
+            }
+
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             dismiss()
         }

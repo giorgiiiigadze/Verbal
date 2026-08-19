@@ -838,7 +838,13 @@ struct QuoteDetailView: View {
         .alert("Delete this quote?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
                 Task {
-                    try? await QuoteService.deleteQuote(id: quote.id)
+                    do {
+                        try await QuoteService.deleteQuote(id: quote.id)
+                    } catch {
+                        toast = Toast(style: .error, message: "Couldn't delete this quote")
+                        return
+                    }
+
                     // Drop it from the shared list too, so the Clients tab — which
                     // is drawn from it — loses the quote and the client if it was
                     // their last. `onDeleted` only tells the screen we came from.

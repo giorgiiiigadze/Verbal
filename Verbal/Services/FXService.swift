@@ -96,7 +96,9 @@ enum FXService {
     private static func ratesTable(base: String) async throws -> [String: Double] {
         if let cached = cachedTable(base: base) { return cached }
 
-        var components = URLComponents(string: "https://api.frankfurter.app/latest")!
+        guard var components = URLComponents(string: "https://api.frankfurter.app/latest") else {
+            throw FXError.badResponse
+        }
         components.queryItems = [URLQueryItem(name: "from", value: base)]
         guard let url = components.url else { throw FXError.badResponse }
 

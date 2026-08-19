@@ -277,9 +277,11 @@ struct QuoteDocumentPage: View {
     /// leaves them to work it out themselves.
     private var acceptance: some View {
         let phone = document.business?.phone?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let how = (phone?.isEmpty == false)
-            ? "reply to this message or call \(phone!)"
-            : "reply to this message"
+        let how = if let phone, !phone.isEmpty {
+            "reply to this message or call \(phone)"
+        } else {
+            "reply to this message"
+        }
         return HStack(spacing: 0) {
             Text("To accept this quote, \(how).")
                 .font(.system(size: 10))
