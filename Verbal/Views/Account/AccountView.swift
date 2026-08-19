@@ -1,11 +1,29 @@
 //
-//  SettingsView.swift
+//  AccountView.swift
 //  Verbal
+//
+//  The Account tab: who is signed in, and everything set once and left alone —
+//  the business details printed on quotes, quote defaults, currency, the
+//  language the mic listens in, and the doors out.
+//
+//  These were two screens until now: a profile form in the tab, and settings
+//  behind a gear in its corner. That put the things people come looking for —
+//  currency, sign out, help — one tap behind a screen named after something
+//  else, while the form they fill in once at setup held the top level. The gear
+//  is gone with the split, and so is the toolbar dance where Save had to take
+//  its place to avoid two trailing buttons.
+//
+//  A `List` with real sections, unlike the screens it leads to. Every row here
+//  is a stock control — a link, a picker, a destructive button — and drawing
+//  those by hand costs the press states, the swipe-back highlight and the
+//  Dynamic Type behaviour that come free, to gain nothing the eye can name. The
+//  card colour and the page ground are the app's own, so it still sits in the
+//  same room as Home.
 //
 
 import SwiftUI
 
-struct SettingsView: View {
+struct AccountView: View {
     @Environment(SessionStore.self) private var session
 
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
@@ -49,8 +67,31 @@ struct SettingsView: View {
         )
     }
 
+    /// The page's heading. Their name where the account has one, and otherwise
+    /// the business — never a blank line where a title should be.
+    private var displayName: String {
+        if let name = session.profile?.fullName?.trimmedOrNil { return name }
+        if let name = session.businessProfile?.businessName?.trimmedOrNil { return name }
+        return "Your account"
+    }
+
     var body: some View {
         List {
+            // The face, the name and the address they signed in with — and a
+            // tap on all of it to reach the details a client actually sees.
+            // The same row Settings screens elsewhere open with, because it is
+            // the same question: who is this, and where do I go to change it.
+            Section {
+                NavigationLink {
+                    BusinessDetailsView()
+                } label: {
+                    header
+                }
+            } footer: {
+                Text("Your business name, number and address as a client sees them, and the trade Verbal reads your jobs against.")
+            }
+            .listRowBackground(Color(.cardSurface))
+
             // Currency belongs here rather than in a section of its own: it is
             // a quote-formatting setting, and one row wrapped in its own header
             // and footer is more chrome than content on a screen this short.
@@ -68,9 +109,6 @@ struct SettingsView: View {
             } header: {
                 Text("Quotes")
             } footer: {
-                // Names the letterhead: it is the most visible thing behind
-                // that row and this description was written before it moved
-                // there, so it was pointing at a screen it no longer described.
                 Text("Your letterhead, validity, tax and standard terms, applied to every new quote. The currency also formats your rate card.")
             }
             .listRowBackground(Color(.cardSurface))
@@ -123,9 +161,14 @@ struct SettingsView: View {
             }
             .listRowBackground(Color(.cardSurface))
         }
+        // A list opens with room for a large title; this one has a face and a
+        // name in that space instead, and the stock inset left it floating.
+        .contentMargins(.top, 6, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .background(Color(.homeBackground))
-        .navigationTitle("Settings")
+        // The bar names the screen, as it does on every screen this one leads
+        // to. The row below it is the account, not the title.
+        .navigationTitle("Account")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Sign out of Verbal?", isPresented: $showSignOutConfirmation) {
             Button("Sign out", role: .destructive) {
@@ -154,5 +197,34 @@ struct SettingsView: View {
         .task(id: dictationLocale) {
             dictationLabel = await DictationLanguage.summaryLabel()
         }
+    }
+
+    // MARK: - Header
+
+    /// Face, name, account address — the same heading a client's page opens
+    /// with, sized for a row rather than a title.
+    ///
+    /// The name and the face come from the account they signed in with and
+    /// can't be edited here; what the tap leads to is the business the client
+    /// sees, which is what the footer under the row says.
+    private var header: some View {
+        HStack(spacing: 12) {
+            AvatarView(image: session.avatarImage,
+                       urlString: session.profile?.avatarUrl, size: 52)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayName)
+                    .font(.robotoSlab(19, relativeTo: .headline))
+                    .foregroundStyle(Color(.mainText))
+                    .lineLimit(1)
+                if let email = session.email, !email.isEmpty {
+                    Text(email)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+        }
+        .padding(.vertical, 6)
     }
 }

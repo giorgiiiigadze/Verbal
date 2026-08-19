@@ -10,7 +10,11 @@ struct MainTabView: View {
     /// The rate card is deliberately absent: it lives in Home's header now.
     /// A tab is for somewhere you go back to; the rate card is something you
     /// set up, and it was holding a quarter of the bar for a monthly visit.
-    private enum TabItem: Hashable { case home, clients, profile, record }
+    ///
+    /// Account is the same argument run the other way. Profile and Settings
+    /// were one tab and a gear in its corner, which buried the settings people
+    /// go looking for behind a form they fill in once. One tab now holds both.
+    private enum TabItem: Hashable { case home, clients, account, record }
 
     @Environment(SessionStore.self) private var session
     @Environment(\.colorScheme) private var colorScheme
@@ -71,13 +75,13 @@ struct MainTabView: View {
             Tab("Clients", systemImage: "person.2.fill", value: .clients) {
                 NavigationStack { ClientsView() }
             }
-            Tab(value: TabItem.profile) {
-                NavigationStack { ProfileView() }
+            Tab(value: TabItem.account) {
+                NavigationStack { AccountView() }
             } label: {
                 Label {
-                    Text("Profile")
+                    Text("Account")
                 } icon: {
-                    profileIcon
+                    accountIcon
                 }
             }
             // Detached trailing button in the tab bar — opens the recording sheet
@@ -144,7 +148,7 @@ struct MainTabView: View {
     /// outline version read as a different family of icon from its neighbours,
     /// and at tab-bar size an outlined circle with a head in it is a globe.
     @ViewBuilder
-    private var profileIcon: some View {
+    private var accountIcon: some View {
         if let uiImage = session.avatarUIImage,
            let circular = Self.circularIcon(from: uiImage, size: 26) {
             Image(uiImage: circular)

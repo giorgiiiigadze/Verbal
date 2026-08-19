@@ -926,49 +926,39 @@ struct QuoteRecordingView: View {
             // that can, in plain glass rather than blue: while typing the bar is
             // two utilities, and the action worth a colour comes back with the
             // screen. Same glyph, same reasoning, as the profile page.
-            if focus != nil {
-                Button {
+            Button {
+                if focus != nil {
                     focus = nil
-                } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(Color(.mainText))
-                        .frame(width: 56, height: 24)
-                }
-                .buttonStyle(.glass)
-                .controlSize(.large)
-                .accessibilityLabel("Hide keyboard")
-                .transition(.opacity)
-            } else {
-                Button {
+                } else {
                     if generated == nil {
                         generate()
                     } else {
                         save()
                     }
-                } label: {
-                    Group {
-                        if isSaving || isGenerating {
-                            ProgressView().tint(.white)
-                        } else {
-                            // "Done" once a quote exists — it is banked, or about to
-                            // be, so there is nothing left to save. The label doesn't
-                            // wait on the write; flickering Save→Done would only
-                            // advertise a round trip the user shouldn't have to think
-                            // about.
-                            Text(generated == nil ? "Generate" : "Done")
-                                .font(.body.weight(.semibold))
-                        }
-                    }
-                    .frame(height: 24)
-                    .padding(.horizontal, 8)
                 }
-                .buttonStyle(.glassProminent)
-                .tint(Color(.royalBlue600))
-                .controlSize(.large)
-                .disabled(!hasText || recorder.isRecording || isSaving || isGenerating)
-                .transition(.opacity)
+            } label: {
+                Group {
+                    if focus != nil {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                            .font(.system(size: 20, weight: .semibold))
+                    } else if isSaving || isGenerating {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Text(generated == nil ? "Generate" : "Done")
+                            .font(.body.weight(.semibold))
+                    }
+                }
+                .frame(height: 24)
+                .padding(.horizontal, 8)
             }
+            .buttonStyle(.glassProminent)
+            .tint(Color(.royalBlue600))
+            .controlSize(.large)
+            .disabled(
+                focus == nil &&
+                (!hasText || recorder.isRecording || isSaving || isGenerating)
+            )
         }
         .animation(.easeInOut(duration: 0.2), value: focus)
     }

@@ -2,9 +2,7 @@
 //  QuoteDefaultsView.swift
 //  Verbal
 //
-//  Settings → Quote defaults. Values that pre-fill every new quote: how long
-//  it's valid, plus standard terms and notes. Saved onto the same
-//  business_profiles row as the profile identity.
+//  Settings → Quote defaults. Values that pre-fill every new quote.
 //
 
 import SwiftUI
@@ -14,201 +12,322 @@ struct QuoteDefaultsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
 
-    /// The logo saves the moment it's picked, on its own — it isn't part of the
-    /// Save button, because choosing a picture already reads as a decision and
-    /// nobody expects to confirm it twice.
     @State private var pickedLogo: PhotosPickerItem?
     @State private var isUploadingLogo = false
     @State private var toast: Toast?
 
     @State private var validityDays = 14
-    /// Percentage as typed, e.g. "20". Empty means not tax registered.
     @State private var taxRate = ""
     @State private var terms = ""
     @State private var notes = ""
     @State private var numberPrefix = ""
-    /// Typed, so the field can be emptied while it's being retyped. Blank reads
-    /// as 1 rather than refusing to save.
     @State private var numberStart = ""
 
-    /// The full row as loaded, so saving our subset preserves the identity fields.
     @State private var loaded = BusinessProfile.empty
     @State private var isLoading = true
     @State private var isSaving = false
-    /// Set when the write failed, so the screen stays put and says so.
+
     @State private var saveFailed = false
+    @State private var loadFailed = false
+
     @FocusState private var keyboardShown: Bool
 
-    /// Typed rate as a number; blank or unparseable means no tax.
+    // MARK: - Validation
+
     private var taxRateValue: Double {
-        Double(taxRate.replacingOccurrences(of: ",", with: ".")) ?? 0
+        Double(
+            taxRate
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: ",", with: ".")
+        ) ?? 0
     }
 
-    /// At least 1: the allocator treats the start as a floor, and a floor of
-    /// zero would ask it for a number it can't issue.
+    private var isTaxRateValid: Bool {
+        let trimmed = taxRate.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmed.isEmpty else {
+            return true
+        }
+
+        guard let value = Double(trimmed.replacingOccurrences(of: ",", with: ".")) else {
+            return false
+        }
+
+        return (0...100).contains(value)
+    }
+
     private var numberStartValue: Int {
-        max(Int(numberStart.trimmingCharacters(in: .whitespaces)) ?? 1, 1)
+        max(
+            Int(numberStart.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 1,
+            1
+        )
+    }
+
+    private var isNumberStartValid: Bool {
+        let trimmed = numberStart.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmed.isEmpty else {
+            return true
+        }
+
+        guard let value = Int(trimmed) else {
+            return false
+        }
+
+        return value >= 1
     }
 
     private var trimmedPrefix: String {
         numberPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// What the next quote's reference will read as, shown under the fields.
-    /// Numbering is a setting people get wrong in the abstract and right when
-    /// they can see it.
     private var numberPreview: String {
         let padded = String(format: "%04d", numberStartValue)
         return trimmedPrefix.isEmpty ? padded : trimmedPrefix + padded
     }
 
+    private var isInputValid: Bool {
+        isTaxRateValid && isNumberStartValid
+    }
+
     private var isDirty: Bool {
         validityDays != loaded.defaultValidityDays
             || taxRateValue != loaded.defaultTaxRate
-            || terms != (loaded.defaultTerms ?? "")
-            || notes != (loaded.defaultNotes ?? "")
-            || trimmedPrefix != (loaded.quoteNumberPrefix ?? "")
+            || terms.trimmedOrNil != loaded.defaultTerms
+            || notes.trimmedOrNil != loaded.defaultNotes
+            || trimmedPrefix.trimmedOrNil != loaded.quoteNumberPrefix
             || numberStartValue != loaded.quoteNumberStart
     }
 
+    private var canSave: Bool {
+        !isLoading
+            && !loadFailed
+            && !isSaving
+            && isDirty
+            && isInputValid
+    }
+
+    private var taxRateError: String? {
+        guard !isTaxRateValid else { return nil }
+        return "Enter a tax rate from 0% to 100%."
+    }
+
+    private var numberStartError: String? {
+        guard !isNumberStartValid else { return nil }
+        return "Enter a whole number of 1 or higher."
+    }
+
+    // MARK: - Body
+
     var body: some View {
         ZStack {
-            Color(.homeBackground).ignoresSafeArea()
+            Color(.homeBackground)
+                .ignoresSafeArea()
+
             Form {
-            Section {
-                // One row holding the whole block, on a clear background: as
-                // separate Form rows the controls were divided from the page
-                // they act on, and ruled off from each other as though they
-                // were unrelated settings.
-                VStack(spacing: 12) {
-                    letterheadPreview
-                    logoControls
-                }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
-            } header: {
-                Text("Letterhead")
-            } footer: {
-                Text("The top of every quote you send. Your business name and contact details come from Profile.")
-            }
-
-            Section {
-                LabeledContent("Prefix") {
-                    TextField("None", text: $numberPrefix)
-                        .multilineTextAlignment(.trailing)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                }
-                LabeledContent("Start at") {
-                    TextField("1", text: $numberStart)
-                        .multilineTextAlignment(.trailing)
-                        .keyboardType(.numberPad)
-                        .font(.body.monospacedDigit())
-                }
-                LabeledContent("Next quote", value: numberPreview)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("Quote numbers")
-            } footer: {
-                // Both halves of the truth, because both surprise people: the
-                // start can't reach back, and the prefix isn't stored per quote.
-                Text("Start only applies while your numbering is still below it — quotes already issued keep their numbers. Changing the prefix relabels every quote, including ones you've sent.")
-            }
-            .listRowBackground(Color(.cardSurface))
-
-            Section {
-                Stepper("Valid for \(validityDays) day\(validityDays == 1 ? "" : "s")",
-                        value: $validityDays, in: 1...365)
-            } footer: {
-                Text("How long a new quote stays valid for.")
-            }
-            .listRowBackground(Color(.cardSurface))
-
-            Section {
-                LabeledContent("Tax rate") {
-                    HStack(spacing: 4) {
-                        TextField("0", text: $taxRate)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .focused($keyboardShown)
-                        Text("%").foregroundStyle(.secondary)
+                Section {
+                    VStack(spacing: 12) {
+                        letterheadPreview
+                        logoControls
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: 0,
+                            leading: 0,
+                            bottom: 8,
+                            trailing: 0
+                        )
+                    )
+                } header: {
+                    Text("Letterhead")
+                } footer: {
+                    Text(
+                        "The top of every quote you send. Your business name and contact details come from Profile."
+                    )
                 }
-            } header: {
-                Text("Tax")
-            } footer: {
-                Text("Added to new quotes and shown as a separate line on the PDF. Leave at 0 if you're not tax registered.")
-            }
-            .listRowBackground(Color(.cardSurface))
 
-            Section("Terms & conditions") {
-                TextField("Standard terms shown on every quote", text: $terms, axis: .vertical)
+                Section {
+                    LabeledContent("Prefix") {
+                        TextField("None", text: $numberPrefix)
+                            .multilineTextAlignment(.trailing)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                    }
+
+                    LabeledContent("Start at") {
+                        TextField("1", text: $numberStart)
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.numberPad)
+                            .font(.body.monospacedDigit())
+                    }
+
+                    LabeledContent("Next quote", value: numberPreview)
+                        .foregroundStyle(.secondary)
+
+                    if let numberStartError {
+                        Text(numberStartError)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                } header: {
+                    Text("Quote numbers")
+                } footer: {
+                    Text(
+                        "Start only applies while your numbering is still below it. Quotes already issued keep their numbers. Changing the prefix relabels every quote that uses the shared prefix."
+                    )
+                }
+                .listRowBackground(Color(.cardSurface))
+
+                Section {
+                    Stepper(
+                        "Valid for \(validityDays) day\(validityDays == 1 ? "" : "s")",
+                        value: $validityDays,
+                        in: 1...365
+                    )
+                } footer: {
+                    Text("How long a new quote stays valid for.")
+                }
+                .listRowBackground(Color(.cardSurface))
+
+                Section {
+                    LabeledContent("Tax rate") {
+                        HStack(spacing: 4) {
+                            TextField("0", text: $taxRate)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .focused($keyboardShown)
+
+                            Text("%")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let taxRateError {
+                        Text(taxRateError)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                } header: {
+                    Text("Tax")
+                } footer: {
+                    Text(
+                        "Added to new quotes and shown as a separate line on the PDF. Leave blank or 0 if you're not tax registered."
+                    )
+                }
+                .listRowBackground(Color(.cardSurface))
+
+                Section("Terms & conditions") {
+                    TextField(
+                        "Standard terms shown on every quote",
+                        text: $terms,
+                        axis: .vertical
+                    )
                     .lineLimit(3...8)
                     .focused($keyboardShown)
-            }
-            .listRowBackground(Color(.cardSurface))
+                }
+                .listRowBackground(Color(.cardSurface))
 
-            Section("Notes / footer") {
-                TextField("A note added to the bottom of each quote", text: $notes, axis: .vertical)
+                Section("Notes / footer") {
+                    TextField(
+                        "A note added to the bottom of each quote",
+                        text: $notes,
+                        axis: .vertical
+                    )
                     .lineLimit(2...6)
                     .focused($keyboardShown)
+                }
+                .listRowBackground(Color(.cardSurface))
             }
-            .listRowBackground(Color(.cardSurface))
-        }
-        .scrollContentBackground(.hidden)
-        .navigationTitle("Quote defaults")
-        .navigationBarTitleDisplayMode(.large)
-        .disabled(isLoading)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                if isSaving {
-                    ProgressView()
-                } else {
-                    Button("Save") { save() }
+            .scrollContentBackground(.hidden)
+            .navigationTitle("Quote defaults")
+            .navigationBarTitleDisplayMode(.large)
+            .disabled(isLoading)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Button("Save") {
+                            save()
+                        }
                         .fontWeight(.semibold)
-                        .disabled(isLoading || !isDirty)
+                        .disabled(!canSave)
+                    }
+                }
+
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+
+                    Button("Done") {
+                        keyboardShown = false
+                    }
+                    .fontWeight(.semibold)
                 }
             }
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { keyboardShown = false }.fontWeight(.semibold)
+            .task {
+                await load()
             }
-        }
-        .task { await load() }
-        .onChange(of: pickedLogo) { _, item in
-            guard let item else { return }
-            Task { await applyLogo(item) }
-        }
-        .toast($toast)
-        .alert("Couldn't save your defaults", isPresented: $saveFailed) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Check your connection and tap Save again. Your changes are still here.")
-        }
+            .onChange(of: pickedLogo) { _, item in
+                guard let item else { return }
+
+                Task {
+                    await applyLogo(item)
+                }
+            }
+            .toast($toast)
+            .alert(
+                "Couldn't save your defaults",
+                isPresented: $saveFailed
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(
+                    "Check your connection and tap Save again. Your changes are still here."
+                )
+            }
+            .alert(
+                "Couldn't load your quote defaults",
+                isPresented: $loadFailed
+            ) {
+                Button("OK", role: .cancel) {
+                    dismiss()
+                }
+            } message: {
+                Text(
+                    "Your existing settings couldn't be loaded, so saving has been disabled to prevent replacing them accidentally."
+                )
+            }
         }
     }
 
     // MARK: - Letterhead
 
-    /// Glass, like the toast and the Share button — the app's own material
-    /// rather than a Form row pretending to be a control. Side by side because
-    /// they are two answers to the same question, and Remove only exists once
-    /// there is something to remove, so the pair never has a dead half.
     private var logoControls: some View {
-        // Read before the closures: a picker's label is a Sendable closure and
-        // can't reach the main-actor store from inside it.
         let hasLogo = session.businessLogo != nil
+
         return HStack(spacing: 10) {
-            PhotosPicker(selection: $pickedLogo, matching: .images) {
-                glassLabel(hasLogo ? "Replace" : "Add logo",
-                           systemImage: "photo",
-                           tint: Color(.blueAccentText))
+            PhotosPicker(
+                selection: $pickedLogo,
+                matching: .images
+            ) {
+                glassLabel(
+                    hasLogo ? "Replace" : "Add logo",
+                    systemImage: "photo",
+                    tint: Color(.blueAccentText)
+                )
             }
             .disabled(isUploadingLogo)
 
             if hasLogo {
-                Button { removeLogo() } label: {
-                    glassLabel("Remove", systemImage: "trash", tint: .red)
+                Button {
+                    removeLogo()
+                } label: {
+                    glassLabel(
+                        "Remove",
+                        systemImage: "trash",
+                        tint: .red
+                    )
                 }
                 .buttonStyle(.plain)
                 .disabled(isUploadingLogo)
@@ -217,7 +336,11 @@ struct QuoteDefaultsView: View {
         .padding(.horizontal, 16)
     }
 
-    private func glassLabel(_ title: String, systemImage: String, tint: Color) -> some View {
+    private func glassLabel(
+        _ title: String,
+        systemImage: String,
+        tint: Color
+    ) -> some View {
         Label(title, systemImage: systemImage)
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(tint)
@@ -226,20 +349,24 @@ struct QuoteDefaultsView: View {
             .glassEffect(in: .capsule)
     }
 
-    /// The header of the printed quote, not a settings row with a thumbnail in
-    /// it. A logo is only ever seen next to the business name and contact
-    /// lines, and this is the one screen where the user can be shown that
-    /// arrangement instead of asked to imagine it.
-    ///
-    /// White regardless of the app's appearance, because paper is. The same
-    /// reason the text on it is set in black rather than the theme's ink.
     private var letterheadPreview: some View {
         let logo = session.businessLogo
         let profile = session.businessProfile
-        let name = profile?.businessName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let contact = [profile?.phone, profile?.email, profile?.address]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+
+        let name = profile?.businessName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let contact = [
+            profile?.phone,
+            profile?.email,
+            profile?.address
+        ]
+        .compactMap {
+            $0?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        .filter {
+            !$0.isEmpty
+        }
 
         return HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 5) {
@@ -247,26 +374,51 @@ struct QuoteDefaultsView: View {
                     Image(uiImage: logo)
                         .resizable()
                         .scaledToFit()
-                        .frame(maxWidth: 120, maxHeight: 42, alignment: .leading)
+                        .frame(
+                            maxWidth: 120,
+                            maxHeight: 42,
+                            alignment: .leading
+                        )
                         .padding(.bottom, 3)
                         .opacity(isUploadingLogo ? 0.3 : 1)
                 } else {
-                    // Holds the space the logo will occupy, so adding one
-                    // rearranges nothing — and shows its size before committing.
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                        .foregroundStyle(.black.opacity(0.18))
-                        .frame(width: 76, height: 42)
-                        .overlay {
-                            Image(systemName: "photo")
-                                .font(.system(size: 15, weight: .light))
-                                .foregroundStyle(.black.opacity(0.3))
-                        }
-                        .padding(.bottom, 3)
+                    RoundedRectangle(
+                        cornerRadius: 6,
+                        style: .continuous
+                    )
+                    .strokeBorder(
+                        style: StrokeStyle(
+                            lineWidth: 1,
+                            dash: [4, 4]
+                        )
+                    )
+                    .foregroundStyle(.black.opacity(0.18))
+                    .frame(width: 76, height: 42)
+                    .overlay {
+                        Image(systemName: "photo")
+                            .font(
+                                .system(
+                                    size: 15,
+                                    weight: .light
+                                )
+                            )
+                            .foregroundStyle(.black.opacity(0.3))
+                    }
+                    .padding(.bottom, 3)
                 }
-                Text(name?.isEmpty == false ? name! : "Your business name")
-                    .font(.robotoSlab(16, relativeTo: .headline))
-                    .foregroundStyle(name?.isEmpty == false ? .black : .black.opacity(0.35))
+
+                Text(
+                    name?.isEmpty == false
+                        ? name!
+                        : "Your business name"
+                )
+                .font(.robotoSlab(16, relativeTo: .headline))
+                .foregroundStyle(
+                    name?.isEmpty == false
+                        ? .black
+                        : .black.opacity(0.35)
+                )
+
                 ForEach(contact, id: \.self) { line in
                     Text(line)
                         .font(.system(size: 8))
@@ -274,88 +426,146 @@ struct QuoteDefaultsView: View {
                         .lineLimit(1)
                 }
             }
+
             Spacer(minLength: 12)
-            // The other half of the printed header, so the preview reads as a
-            // page rather than as a picture of a logo.
+
             Text("QUOTE")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color(.royalBlue800))
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(
+            .white,
+            in: RoundedRectangle(
+                cornerRadius: 14,
+                style: .continuous
+            )
+        )
         .padding(.horizontal, 16)
         .overlay {
-            if isUploadingLogo { ProgressView() }
+            if isUploadingLogo {
+                ProgressView()
+            }
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-                .padding(.horizontal, 16)
-        )
+        .overlay {
+            RoundedRectangle(
+                cornerRadius: 14,
+                style: .continuous
+            )
+            .strokeBorder(
+                Color(.separator),
+                lineWidth: 0.5
+            )
+            .padding(.horizontal, 16)
+        }
     }
 
-    /// Shown immediately, uploaded after. The picture is already on screen in
-    /// the picker when they tap it; making the preview wait for a round trip
-    /// before agreeing would be the app doubting a choice the user has made.
-    private func applyLogo(_ item: PhotosPickerItem) async {
-        isUploadingLogo = true
-        defer { isUploadingLogo = false; pickedLogo = nil }
+    // MARK: - Logo
 
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else {
-            toast = Toast(style: .error, message: "Couldn't read that image")
+    private func applyLogo(
+        _ item: PhotosPickerItem
+    ) async {
+        isUploadingLogo = true
+
+        defer {
+            isUploadingLogo = false
+            pickedLogo = nil
+        }
+
+        guard
+            let data = try? await item.loadTransferable(type: Data.self),
+            let image = UIImage(data: data)
+        else {
+            toast = Toast(
+                style: .error,
+                message: "Couldn't read that image"
+            )
             return
         }
 
         let previousURL = loaded.logoUrl
         let previousImage = session.businessLogo
+
         session.cacheBusinessLogo(image)
 
         var profile = loaded
+        var uploadedURL: String?
+
         do {
-            profile.logoUrl = try await LogoService.upload(image)
+            let newURL = try await LogoService.upload(image)
+            uploadedURL = newURL
+
+            profile.logoUrl = newURL
+
             try await BusinessService.save(profile)
         } catch {
-            // Put back exactly what was there, including the case where that
-            // was nothing. A logo that looks saved and isn't goes out on the
-            // next quote as a blank letterhead.
             session.cacheBusinessLogo(previousImage)
-            toast = Toast(style: .error, message: "Couldn't save your logo")
+
+            // Prevent an orphaned uploaded logo if the database save failed.
+            if let uploadedURL {
+                await LogoService.removeStored(at: uploadedURL)
+            }
+
+            toast = Toast(
+                style: .error,
+                message: "Couldn't save your logo"
+            )
             return
         }
+
         loaded = profile
         session.cacheBusinessProfile(profile)
-        // Only once the new one is safely referenced. Deleting first would risk
-        // a failed upload leaving the user with no logo at all.
+
+        // Only remove the old logo after the new one is safely referenced.
         await LogoService.removeStored(at: previousURL)
-        toast = Toast(style: .success, message: "Logo saved")
+
+        toast = Toast(
+            style: .success,
+            message: "Logo saved"
+        )
     }
 
     private func removeLogo() {
         let previousURL = loaded.logoUrl
         let previousImage = session.businessLogo
+
         session.cacheBusinessLogo(nil)
+
         var profile = loaded
         profile.logoUrl = nil
+
         Task {
             do {
                 try await BusinessService.save(profile)
             } catch {
                 session.cacheBusinessLogo(previousImage)
-                toast = Toast(style: .error, message: "Couldn't remove your logo")
+
+                toast = Toast(
+                    style: .error,
+                    message: "Couldn't remove your logo"
+                )
                 return
             }
+
             loaded = profile
             session.cacheBusinessProfile(profile)
+
             await LogoService.removeStored(at: previousURL)
-            toast = Toast(style: .success, message: "Logo removed")
+
+            toast = Toast(
+                style: .success,
+                message: "Logo removed"
+            )
         }
     }
 
-    /// "20" rather than "20.0", but keeps a real fraction like 8.5.
+    // MARK: - Loading
+
     private func trimmedRate(_ rate: Double) -> String {
-        rate == rate.rounded() ? String(Int(rate)) : String(rate)
+        rate == rate.rounded()
+            ? String(Int(rate))
+            : String(rate)
     }
 
     private func load() async {
@@ -363,43 +573,61 @@ struct QuoteDefaultsView: View {
             loaded = cached
         } else if let fetched = try? await BusinessService.fetch() {
             loaded = fetched
+        } else {
+            isLoading = false
+            loadFailed = true
+            return
         }
+
         validityDays = loaded.defaultValidityDays
-        taxRate = loaded.defaultTaxRate == 0 ? "" : trimmedRate(loaded.defaultTaxRate)
+
+        taxRate = loaded.defaultTaxRate == 0
+            ? ""
+            : trimmedRate(loaded.defaultTaxRate)
+
         terms = loaded.defaultTerms ?? ""
         notes = loaded.defaultNotes ?? ""
         numberPrefix = loaded.quoteNumberPrefix ?? ""
-        // Blank rather than "1", so the placeholder carries the default and the
-        // field doesn't look like something already set.
-        numberStart = loaded.quoteNumberStart <= 1 ? "" : String(loaded.quoteNumberStart)
+
+        numberStart = loaded.quoteNumberStart <= 1
+            ? ""
+            : String(loaded.quoteNumberStart)
+
         isLoading = false
     }
 
+    // MARK: - Saving
+
     private func save() {
+        guard canSave else { return }
+
         isSaving = true
+
         var profile = loaded
+
         profile.defaultValidityDays = validityDays
         profile.defaultTaxRate = taxRateValue
         profile.defaultTerms = terms.trimmedOrNil
         profile.defaultNotes = notes.trimmedOrNil
         profile.quoteNumberPrefix = numberPrefix.trimmedOrNil
         profile.quoteNumberStart = numberStartValue
+
         Task {
-            defer { isSaving = false }
+            defer {
+                isSaving = false
+            }
+
             do {
                 try await BusinessService.save(profile)
             } catch {
-                // Closing on a failed write is worse here than anywhere else in
-                // the app: the tax rate set on this screen is copied onto every
-                // quote made afterwards, so a save that quietly didn't happen
-                // means months of quotes priced without VAT on them.
                 saveFailed = true
                 return
             }
+
             session.cacheBusinessProfile(profile)
             loaded = profile
+
             dismiss()
         }
     }
-
 }
