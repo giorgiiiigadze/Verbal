@@ -62,6 +62,12 @@ struct QuoteRecordingView: View {
     @State private var savedTitle = ""
     @State private var savedClient = ""
 
+    private enum Field: Hashable { case title, transcript }
+    /// Which field the keyboard belongs to, if any. Both fields are vertical,
+    /// so Return makes a new line and can't put the keyboard away — the bottom
+    /// bar does that instead, see `bottomBar`.
+    @FocusState private var focus: Field?
+
 
     private var hasText: Bool {
         !transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -89,6 +95,7 @@ struct QuoteRecordingView: View {
                                     .shimmer(active: recorder.hasContent)
                             } else {
                                 TextField("Untitled quote", text: $title, axis: .vertical)
+                                    .focused($focus, equals: .title)
                                     .foregroundStyle(Color(.mainText))
                                     .textFieldStyle(.plain)
                                     .lineLimit(2)
@@ -131,6 +138,7 @@ struct QuoteRecordingView: View {
                     .padding(.top, 12)
                     .animation(.easeInOut(duration: 0.35), value: isGenerating)
                 }
+                .scrollDismissesKeyboard(.interactively)
                 .background(Color(.homeBackground))
                 // Follow the words down as they arrive. Speech runs past the
                 // bottom of the screen after a few lines, and a job description is
@@ -495,6 +503,8 @@ struct QuoteRecordingView: View {
 
     /// Start (or resume) recording from whatever is currently on screen.
     private func beginRecording() async {
+        // The keyboard on its way down before the trace needs the room.
+        focus = nil
         // Resuming to add more: drop the generated review so the transcript
         // reappears and re-generates on the next stop. The banked draft goes
         // too — the next stop replaces it.
@@ -844,6 +854,7 @@ struct QuoteRecordingView: View {
                     text: $transcriptText,
                     axis: .vertical
                 )
+                .focused($focus, equals: .transcript)
                 .foregroundStyle(Color(.mainText))
             }
         }
@@ -909,33 +920,56 @@ struct QuoteRecordingView: View {
 
             Spacer()
 
-            Button {
-                if generated == nil {
-                    generate()
-                } else {
-                    save()
+            // While the keyboard is up this corner is the only control under the
+            // user's thumb, and Generate is the wrong one — they are mid-sentence,
+            // and nothing here can put the keyboard away. So it becomes the glyph
+            // that can, in plain glass rather than blue: while typing the bar is
+            // two utilities, and the action worth a colour comes back with the
+            // screen. Same glyph, same reasoning, as the profile page.
+            if focus != nil {
+                Button {
+                    focus = nil
+                } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(Color(.mainText))
+                        .frame(width: 56, height: 24)
                 }
-            } label: {
-                Group {
-                    if isSaving || isGenerating {
-                        ProgressView().tint(.white)
+                .buttonStyle(.glass)
+                .controlSize(.large)
+                .accessibilityLabel("Hide keyboard")
+                .transition(.opacity)
+            } else {
+                Button {
+                    if generated == nil {
+                        generate()
                     } else {
-                        // "Done" once a quote exists — it is banked, or about to
-                        // be, so there is nothing left to save. The label doesn't
-                        // wait on the write; flickering Save→Done would only
-                        // advertise a round trip the user shouldn't have to think
-                        // about.
-                        Text(generated == nil ? "Generate" : "Done")
-                            .font(.body.weight(.semibold))
+                        save()
                     }
+                } label: {
+                    Group {
+                        if isSaving || isGenerating {
+                            ProgressView().tint(.white)
+                        } else {
+                            // "Done" once a quote exists — it is banked, or about to
+                            // be, so there is nothing left to save. The label doesn't
+                            // wait on the write; flickering Save→Done would only
+                            // advertise a round trip the user shouldn't have to think
+                            // about.
+                            Text(generated == nil ? "Generate" : "Done")
+                                .font(.body.weight(.semibold))
+                        }
+                    }
+                    .frame(height: 24)
+                    .padding(.horizontal, 8)
                 }
-                .frame(height: 24)
-                .padding(.horizontal, 8)
+                .buttonStyle(.glassProminent)
+                .tint(Color(.royalBlue600))
+                .controlSize(.large)
+                .disabled(!hasText || recorder.isRecording || isSaving || isGenerating)
+                .transition(.opacity)
             }
-            .buttonStyle(.glassProminent)
-            .tint(Color(.royalBlue600))
-            .controlSize(.large)
-            .disabled(!hasText || recorder.isRecording || isSaving || isGenerating)
         }
+        .animation(.easeInOut(duration: 0.2), value: focus)
     }
 }
