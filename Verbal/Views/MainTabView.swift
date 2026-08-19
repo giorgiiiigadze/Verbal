@@ -84,6 +84,10 @@ struct MainTabView: View {
             // instead of switching tabs. The mic glyph is force-tinted blue
             // (always-original) since this tab is never "selected", so the
             // TabView tint would otherwise leave it in the default color.
+            //
+            // Kept in the bar rather than promoted to a floating button of its
+            // own: a button hovering over the list covers a row wherever it is
+            // put, and the one it covers is always the newest quote.
             Tab(value: TabItem.record, role: .search) {
                 Color.clear
             } label: {
@@ -119,19 +123,33 @@ struct MainTabView: View {
     /// its color regardless of selection state. Royal blue reads well on the light
     /// tab bar, but it's near-black on the dark one, so dark mode gets white.
     /// Computed (not a stored static) so it re-resolves when the scheme changes.
+    ///
+    /// Drawn a couple of points smaller than the bar's default and given a
+    /// margin of its own. The mic sits in a separate container beside the tab
+    /// pill, and at full size the glyph ran to the edge of that container, so
+    /// the two touched and read as one run-on control. Insetting the artwork
+    /// puts air between them without shrinking the button — the tap target is
+    /// the container, not the image.
     private var micIcon: UIImage {
-        let base = UIImage(systemName: "mic.fill") ?? UIImage()
+        let config = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+        let base = UIImage(systemName: "mic.fill", withConfiguration: config) ?? UIImage()
         let tint: UIColor = colorScheme == .dark ? .white : UIColor(resource: .royalBlue600)
-        return base.withTintColor(tint, renderingMode: .alwaysOriginal)
+        return base
+            .withTintColor(tint, renderingMode: .alwaysOriginal)
+            .withAlignmentRectInsets(UIEdgeInsets(top: -4, left: -4, bottom: -4, right: -4))
     }
 
+    /// The user's own face where there is one, and otherwise a filled person —
+    /// the same weight as the filled pair next to it on the Clients tab. The
+    /// outline version read as a different family of icon from its neighbours,
+    /// and at tab-bar size an outlined circle with a head in it is a globe.
     @ViewBuilder
     private var profileIcon: some View {
         if let uiImage = session.avatarUIImage,
            let circular = Self.circularIcon(from: uiImage, size: 26) {
             Image(uiImage: circular)
         } else {
-            Image(systemName: "person.crop.circle")
+            Image(systemName: "person.crop.circle.fill")
         }
     }
 
