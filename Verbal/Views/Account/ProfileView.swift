@@ -158,9 +158,18 @@ struct ProfileView: View {
                     .accessibilityLabel("Settings")
                 }
             }
+            // The glyph rather than "Done", which iOS draws as a round glass
+            // button in the corner above the keyboard. It says what it does —
+            // put the keyboard away — where "Done" reads as a commitment, and
+            // on this screen the thing that commits is Save, up in the bar.
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") { focus = nil }.fontWeight(.semibold)
+                Button {
+                    focus = nil
+                } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                }
+                .accessibilityLabel("Hide keyboard")
             }
         }
         .toast($toast)
