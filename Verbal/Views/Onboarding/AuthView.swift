@@ -111,36 +111,29 @@ struct AuthView: View {
         }
     }
 
+    private let authButtonHeight: CGFloat = 56
+    private let authButtonHorizontalPadding: CGFloat = 22
+    private let authButtonIconSize: CGFloat = 20
+
     /// Google's own mark, from the SDK's resources, on the app's own button —
     /// the SDK's stock control can't take the shape the rest of the app uses.
-    /// The logo sits at the leading edge with the label centred in the full
-    /// width, so a second provider added later stacks under it and lines up.
+    /// Both provider buttons go through the same shell so their width, height,
+    /// padding and icon slot stay identical.
     private var googleButton: some View {
         Button(action: signInWithGoogle) {
-            ZStack {
-                Text("Continue with Google")
-                    .font(.body.weight(.semibold))
-                    // The button is white in both appearances, so the label and
-                    // spinner are pinned dark rather than following the scheme.
-                    .foregroundStyle(.black)
-                    .opacity(isChoosingAccount ? 0.35 : 1)
-                HStack {
-                    Image(.googleLogo)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
-                        .opacity(isChoosingAccount ? 0.35 : 1)
-                    Spacer(minLength: 0)
-                    if isChoosingAccount {
-                        ProgressView().tint(.black)
-                    }
-                }
+            authButtonLabel(
+                title: "Continue with Google",
+                foreground: .black,
+                background: .white,
+                border: Color.black.opacity(0.12),
+                isDimmed: isChoosingAccount,
+                trailing: isChoosingAccount ? AnyView(ProgressView().tint(.black)) : nil
+            ) {
+                Image(.googleLogo)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: authButtonIconSize, height: authButtonIconSize)
             }
-            .padding(.horizontal, 22)
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .background(.white, in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.black.opacity(0.12), lineWidth: 0.5))
         }
         .buttonStyle(.plain)
     }
@@ -149,25 +142,49 @@ struct AuthView: View {
         Button {
             showAppleComingSoon = true
         } label: {
-            ZStack {
-                Text("Continue with Apple")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
-                HStack {
-                    Image(systemName: "apple.logo")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(.white)
-                    Spacer(minLength: 0)
-                }
+            authButtonLabel(
+                title: "Continue with Apple",
+                foreground: .white,
+                background: .black,
+                border: .white.opacity(0.12)
+            ) {
+                Image(systemName: "apple.logo")
+                    .font(.system(size: authButtonIconSize, weight: .medium))
             }
-            .padding(.horizontal, 22)
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .background(.black, in: Capsule())
-            .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Continue with Apple, coming soon")
+    }
+
+    private func authButtonLabel<Icon: View>(
+        title: String,
+        foreground: Color,
+        background: Color,
+        border: Color,
+        isDimmed: Bool = false,
+        trailing: AnyView? = nil,
+        @ViewBuilder icon: () -> Icon
+    ) -> some View {
+        ZStack {
+            Text(title)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(foreground)
+                .opacity(isDimmed ? 0.35 : 1)
+
+            HStack {
+                icon()
+                    .foregroundStyle(foreground)
+                    .frame(width: authButtonIconSize, height: authButtonIconSize)
+                    .opacity(isDimmed ? 0.35 : 1)
+                Spacer(minLength: 0)
+                if let trailing { trailing }
+            }
+        }
+        .padding(.horizontal, authButtonHorizontalPadding)
+        .frame(maxWidth: .infinity)
+        .frame(height: authButtonHeight)
+        .background(background, in: Capsule())
+        .overlay(Capsule().strokeBorder(border, lineWidth: 0.5))
     }
 
     /// Full-screen overlay shown while signing in and setting up the account.
