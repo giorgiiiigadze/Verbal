@@ -436,67 +436,59 @@ struct HomeView: View {
         let acceptedQuotes = visibleQuotes.filter { $0.effectiveStatus == "accepted" }.count
         let days = recentCalendarDays(endingAt: today)
 
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 14) {
-                VStack(spacing: 2) {
-                    Text(today.formatted(.dateTime.weekday(.abbreviated)))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color(.blueAccentText))
-                        .textCase(.uppercase)
-
-                    Text(today.formatted(.dateTime.day()))
-                        .font(.system(size: 30, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color(.mainText))
-                        .monospacedDigit()
-                }
-                .frame(width: 64, height: 68)
-                .background(Color(.royalBlue25), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color(.blueAccentText).opacity(0.16), lineWidth: 1)
-                }
-
-                VStack(alignment: .leading, spacing: 5) {
+        return VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 7) {
                     Text(today.formatted(.dateTime.month(.wide).year()))
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(Color(.mainText))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
 
                     Text(calendarSummaryText(monthCount: monthQuotes.count, totalCount: visibleQuotes.count))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Color(.mainText))
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 0)
+
+                Image(systemName: "calendar")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Color(.blueAccentText))
+                    .frame(width: 42, height: 42)
+                    .glassEffect(.regular, in: Circle())
             }
 
-            HStack(spacing: 8) {
-                calendarMetric("Visible", visibleQuotes.count, tint: Color(.statusSentText))
-                calendarMetric("Open", openQuotes, tint: Color(.statusWarningText))
-                calendarMetric("Won", acceptedQuotes, tint: Color(.statusAcceptedText))
+            HStack(spacing: 10) {
+                calendarStat("Visible", visibleQuotes.count)
+                Divider()
+                calendarStat("Awaiting", openQuotes)
+                Divider()
+                calendarStat("Won", acceptedQuotes)
             }
+            .frame(height: 44)
 
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 ForEach(days, id: \.self) { day in
                     calendarDay(day, count: quoteCount(on: day, in: visibleQuotes))
                 }
             }
+            .padding(.top, 2)
         }
-        .padding(16)
-        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(18)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.55), lineWidth: 0.5)
         }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 12, trailing: 20))
     }
 
-    private func calendarMetric(_ label: String, _ value: Int, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+    private func calendarStat(_ label: String, _ value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
             Text("\(value)")
-                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .font(.headline.weight(.semibold).monospacedDigit())
                 .foregroundStyle(Color(.mainText))
 
             Text(label)
@@ -504,34 +496,41 @@ struct HomeView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func calendarDay(_ day: Date, count: Int) -> some View {
         let isToday = Calendar.current.isDateInToday(day)
+        let hasQuotes = count > 0
 
-        return VStack(spacing: 6) {
+        return VStack(spacing: 7) {
             Text(day.formatted(.dateTime.weekday(.narrow)))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(isToday ? Color(.blueAccentText) : .secondary)
 
-            Text(day.formatted(.dateTime.day()))
-                .font(.caption.weight(.semibold).monospacedDigit())
-                .foregroundStyle(isToday ? .white : Color(.mainText))
-                .frame(width: 28, height: 28)
-                .background(
-                    isToday ? Color(.blueAccentText) : Color(.homeBackground),
-                    in: Circle()
-                )
+            ZStack(alignment: .topTrailing) {
+                Text(day.formatted(.dateTime.day()))
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(isToday ? .white : Color(.mainText))
+                    .frame(width: 32, height: 32)
+                    .background(
+                        isToday ? Color(.blueAccentText) : Color(.homeBackground).opacity(0.72),
+                        in: Circle()
+                    )
 
-            Circle()
-                .fill(count > 0 ? Color(.blueAccentText) : Color(.separator))
-                .frame(width: count > 0 ? 5 : 3, height: count > 0 ? 5 : 3)
-                .opacity(count > 0 ? 1 : 0.65)
+                if hasQuotes {
+                    Circle()
+                        .fill(isToday ? .white : Color(.blueAccentText))
+                        .frame(width: 6, height: 6)
+                        .offset(x: -3, y: 3)
+                }
+            }
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(
+            isToday ? Color(.blueAccentText).opacity(0.10) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
         .accessibilityLabel(calendarAccessibilityLabel(for: day, count: count))
     }
 

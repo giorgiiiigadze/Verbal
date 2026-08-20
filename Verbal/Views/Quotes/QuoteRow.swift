@@ -78,11 +78,9 @@ struct QuoteRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
-        // 15, not the 18 it was. The list is read to find a quote, and finding
-        // is helped more by seeing another row than by the air around any one.
-        // Horizontal stays at 16 on purpose: taking that in narrows the text
-        // column and truncates long job titles, which costs more than it buys.
-        .padding(.vertical, 15)
+        // A little more vertical air than the dense list version had, so each
+        // quote reads as its own tappable card without widening the text column.
+        .padding(.vertical, 18)
         // One fill for every row, pinned or not. A pinned quote already sits
         // under its own heading at the top of the list, which says where it is
         // better than a colour can — and royalBlue25 is the tint the app uses
@@ -189,7 +187,7 @@ struct QuoteRowSkeleton: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 15)
+        .padding(.vertical, 18)
         .background(Color(.cardSurface),
                     in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(

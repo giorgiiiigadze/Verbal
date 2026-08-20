@@ -76,21 +76,6 @@ struct RateCardView: View {
         // standing places, and leaving the bar under it invites a sideways jump
         // out of a job half-done. The back button is the way out.
         .toolbar(.hidden, for: .tabBar)
-        // The one thing this screen is for, as a native bar button — but only
-        // once there are rates for it to sit above. The empty states carry their
-        // own "Add a rate", so a second one in the bar is the same offer twice.
-        .toolbar {
-            if !items.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showAdd = true
-                    } label: {
-                        Label("New rate", systemImage: "plus")
-                    }
-                    .labelStyle(.titleAndIcon)
-                }
-            }
-        }
         .sheet(isPresented: $showAdd, onDismiss: { Task { await load() } }) {
             AddRateItemView(existing: items)
         }
@@ -186,16 +171,31 @@ struct RateCardView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        // The search field, pinned to the bottom so the list scrolls under it
-        // and the keyboard lifts it when tapped. Adding a rate is the bar
-        // button up in the header now.
+        // Search and creation live at the bottom, like Notes: the list scrolls
+        // under them and the keyboard lifts the search field when tapped.
         .safeAreaInset(edge: .bottom) { footer }
     }
 
-    /// The search field, low on the screen where the thumb reaches it without
-    /// moving. Adding a rate is the native bar button in the header.
+    /// Search and creation, low on the screen where the thumb reaches them
+    /// without moving. The separate create button follows Notes' compose control
+    /// instead of competing with the navigation title.
     private var footer: some View {
-        searchField
+        HStack(spacing: 12) {
+            searchField
+
+            Button {
+                showAdd = true
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color(.mainText))
+                    .frame(width: 58, height: 50)
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: Capsule())
+            .accessibilityLabel("New rate")
+        }
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .padding(.bottom, 6)
@@ -227,9 +227,9 @@ struct RateCardView: View {
         }
     }
 
-    /// A search field on the same glass, full width. Its own field rather than
-    /// `.searchable` because the system puts that at the top of the screen, and
-    /// the footer is where the thumb already is.
+    /// A search field on the same glass. Its own field rather than `.searchable`
+    /// because the system puts that at the top of the screen, and the footer is
+    /// where the thumb already is.
     private var searchField: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")

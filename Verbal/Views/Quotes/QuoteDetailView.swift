@@ -30,6 +30,8 @@ struct QuoteDetailView: View {
     /// transcript can't be reached rather than that it doesn't exist.
     @State private var transcriptUnreachable = false
     @State private var showTranscript = false
+    @State private var showPDFPreview = false
+    @State private var pdfPreviewURL: URL?
     /// Renaming, and the field's contents while the alert is up. Seeded from
     /// the current name each time it opens, so an abandoned edit doesn't come
     /// back the next time.
@@ -461,6 +463,16 @@ struct QuoteDetailView: View {
         }
     }
 
+    @MainActor
+    private func previewPDF() {
+        do {
+            pdfPreviewURL = try QuotePDF.write(pdfDocument)
+            showPDFPreview = true
+        } catch {
+            toast = Toast(style: .error, message: "Couldn't open the PDF")
+        }
+    }
+
     /// Optimistic like the rest, and reported back so the card moves into the
     /// Pinned section on the list behind this screen.
     private func togglePin() {
@@ -630,6 +642,12 @@ struct QuoteDetailView: View {
         }
         .sheet(isPresented: $showTranscript) {
             TranscriptSheet(text: transcriptText, unreachable: transcriptUnreachable)
+        }
+        .sheet(isPresented: $showPDFPreview) {
+            if let pdfPreviewURL {
+                QuickLookPreview(url: pdfPreviewURL)
+                    .ignoresSafeArea()
+            }
         }
         .sheet(isPresented: $showEdit) {
             EditQuoteView(quoteId: quote.id,
@@ -806,6 +824,11 @@ struct QuoteDetailView: View {
                         showEdit = true
                     } label: {
                         Label("Edit quote", systemImage: "pencil")
+                    }
+                    Button {
+                        previewPDF()
+                    } label: {
+                        Label("View PDF", systemImage: "doc.richtext")
                     }
                     Button {
                         showTranscript = true

@@ -2,35 +2,42 @@
 //  OfflineBanner.swift
 //  Verbal
 //
-//  Native liquid-glass banner shown at the top of the screen while the device
-//  has no network connection. The app stays fully usable underneath it.
+//  Native liquid-glass toast shown briefly at the top of the signed-in app when
+//  the device loses its network connection.
 //
 
 import SwiftUI
 
 struct OfflineBanner: View {
+    var onDismiss: () -> Void
+
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             Image(systemName: "wifi.slash")
-                .font(.system(size: 22, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color(.mainText))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("You're Offline")
-                    .font(.headline)
-                    .foregroundStyle(Color(.mainText))
-                Text("Network connection lost. Please try again.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            Text("No internet connection")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color(.mainText))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
 
-            Spacer(minLength: 0)
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .glassEffect(in: .capsule)
+        .padding(.leading, 18)
+        .padding(.trailing, 8)
+        .padding(.vertical, 10)
+        .glassEffect(.regular.interactive(), in: Capsule())
         .padding(.horizontal, 16)
-        // Float just above the tab bar rather than overlapping it.
-        .padding(.bottom, 60)
+        .accessibilityElement(children: .contain)
     }
 }

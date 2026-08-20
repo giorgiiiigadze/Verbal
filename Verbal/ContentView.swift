@@ -67,36 +67,30 @@ struct ContentView: View {
             }
 
             if showsOfflineBanner {
-                OfflineBanner()
-                    // Arrives from below, but doesn't leave the same way — a
-                    // banner sliding back down reads as being dropped. Going
-                    // out it eases off: shrinks a little, drifts down a touch,
-                    // and fades, so it settles away instead of vanishing.
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity),
-                        removal: .scale(scale: 0.94)
-                            .combined(with: .offset(y: 14))
-                            .combined(with: .opacity)
-                    ))
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-                    // Says its piece and leaves. Being told you're offline is
-                    // worth knowing once; sitting over the app for as long as
-                    // the signal is gone is just a thing in the way, and the
-                    // app is built to keep working without a connection.
-                    //
-                    // Tied to the banner's own lifetime, so coming back online
-                    // cancels it rather than leaving a timer to fire into
-                    // nothing.
-                    .task {
-                        try? await Task.sleep(for: .seconds(4))
-                        guard !Task.isCancelled else { return }
-                        // Slower going than coming, and no bounce: a spring
-                        // would draw the eye back to something that is on its
-                        // way out.
-                        withAnimation(.smooth(duration: 0.45)) {
-                            offlineBannerDismissed = true
-                        }
+                OfflineBanner {
+                    withAnimation(.smooth(duration: 0.3)) {
+                        offlineBannerDismissed = true
                     }
+                }
+                .padding(.top, 28)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .scale(scale: 0.96)
+                        .combined(with: .offset(y: -10))
+                        .combined(with: .opacity)
+                ))
+                .frame(maxHeight: .infinity, alignment: .top)
+                // Says its piece and leaves. Being told you're offline is worth
+                // knowing once; sitting over the app for as long as the signal
+                // is gone is just a thing in the way, and the app is built to
+                // keep working without a connection.
+                .task {
+                    try? await Task.sleep(for: .seconds(5))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.smooth(duration: 0.45)) {
+                        offlineBannerDismissed = true
+                    }
+                }
             }
         }
         .animation(.easeInOut(duration: 0.35), value: showSplash)
