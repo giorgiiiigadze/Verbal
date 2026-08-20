@@ -526,6 +526,9 @@ final class SessionStore {
         // Same reason: left behind, the next user's avatar is judged
         // "unchanged" against the last one's URL and never downloaded.
         UserDefaults.standard.removeObject(forKey: Self.avatarURLKey)
+        // Booked visits are client names with dates on them. They belong to the
+        // account, not the handset — the same leak the quote cache is wiped for.
+        ScheduledVisit.clear()
         quotes = []
         rateCard = []
         spokenPrices = []

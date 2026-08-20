@@ -52,6 +52,30 @@ struct HomeView: View {
     /// Someone who deletes every quote still isn't a beginner, and the teaching
     /// card would greet them by explaining their own job back to them.
     @AppStorage("hasEverHadQuotes") private var hasEverHadQuotes = false
+    /// Visits booked but not quoted yet, soonest first. Held on the device —
+    /// see `ScheduledVisit`.
+    @State private var visits: [ScheduledVisit] = []
+    /// Non-nil while the booking sheet is up, carrying what it opened on.
+    @State private var visitEditor: VisitEditor?
+    /// The upcoming list shows the next few and hides the rest, so a busy week
+    /// doesn't push the quotes off the screen. Set once the user asks for them.
+    @State private var showsAllVisits = false
+
+    /// What the booking sheet opened on: nothing, or a visit already made.
+    private enum VisitEditor: Identifiable {
+        case new
+        case existing(ScheduledVisit)
+
+        var id: String {
+            switch self {
+            case .new: return "new"
+            case .existing(let visit): return visit.id.uuidString
+            }
+        }
+    }
+
+    /// How many visits are listed before the rest are folded away.
+    private static let visitPreviewCount = 3
 
     var body: some View {
         NavigationStack {
@@ -62,12 +86,15 @@ struct HomeView: View {
                 } else if quotes.isEmpty && loadFailed {
                     // Don't claim the account is empty when the fetch failed.
                     errorState
-                } else if quotes.isEmpty {
+                } else if quotes.isEmpty && visits.isEmpty {
                     emptyState
-                } else if sections.isEmpty {
+                } else if !quotes.isEmpty && sections.isEmpty {
                     // Quotes exist, but the search or filter excluded them all.
                     noMatchesState
                 } else {
+                    // Also the no-quotes-but-visits-booked case: the list is
+                    // the only screen the upcoming section lives on, and a
+                    // visit that can't be seen is a visit that's been lost.
                     quotesList
                 }
             }
@@ -246,6 +273,10 @@ struct HomeView: View {
                     quotes = session.quotes
                     hasLoaded = session.listsLoaded
                 }
+                // Read here rather than at init: `ScheduledVisit.load()` drops
+                // the days that have already been and gone, and a phone left
+                // open overnight would otherwise still be offering yesterday.
+                visits = ScheduledVisit.load()
                 await load()
             }
             .modifier(SessionSync(quotes: session.quotes,
@@ -290,6 +321,19 @@ struct HomeView: View {
             QuoteRecordingView()
                 .environment(session)
         }
+        // Outside the stack for the same reason the recorder is: a sheet
+        // attached inside it, alongside the minimizing `.searchable` toolbar,
+        // leaves the navigation bar broken once it closes.
+        .sheet(item: $visitEditor) { editor in
+            switch editor {
+            case .new:
+                ScheduleVisitSheet(onSave: addOrUpdate)
+            case .existing(let visit):
+                ScheduleVisitSheet(editing: visit,
+                                   onSave: addOrUpdate,
+                                   onDelete: remove)
+            }
+        }
     }
 
     // MARK: - List
@@ -317,7 +361,7 @@ struct HomeView: View {
             List {
                 pageTitle
 
-                calendarContainer
+                upcomingSection
 
                 ForEach(sections, id: \.title) { section in
                     // Header as a normal row (not a Section header) so it scrolls
@@ -423,148 +467,231 @@ struct HomeView: View {
         }
     }
 
-    private var calendarContainer: some View {
-        let calendar = Calendar.current
-        let today = Date()
-        let visibleQuotes = sections.flatMap(\.quotes)
-        let monthQuotes = visibleQuotes.filter {
-            calendar.isDate($0.createdAt, equalTo: today, toGranularity: .month)
+    // MARK: - Upcoming
+
+    /// Visits booked in but not quoted yet, sitting above the quotes themselves.
+    ///
+    /// This is where the month calendar used to be. That one counted what had
+    /// already happened — quotes made this month, a dot under each day one
+    /// landed — which is exactly what the list underneath was already showing,
+    /// row by row and in more detail. The top of this screen is worth more
+    /// pointed the other way: the next job to walk into is the thing that isn't
+    /// written down anywhere else in the app, and every line here is one tap
+    /// from the recorder that turns it into a quote.
+    ///
+    /// A `Group` of plain rows rather than one packed card, so each visit is a
+    /// real list row with its own swipe actions — the same way the day headings
+    /// below are rows rather than pinned section headers.
+    @ViewBuilder
+    private var upcomingSection: some View {
+        upcomingHeader
+
+        if visits.isEmpty {
+            upcomingEmpty
+        } else {
+            ForEach(shownVisits) { visit in
+                visitRow(visit)
+            }
+
+            if visits.count > Self.visitPreviewCount {
+                moreVisitsButton
+            }
         }
-        let openQuotes = visibleQuotes.filter {
-            $0.effectiveStatus == "sent" || $0.effectiveStatus == "viewed"
-        }.count
-        let acceptedQuotes = visibleQuotes.filter { $0.effectiveStatus == "accepted" }.count
-        let days = recentCalendarDays(endingAt: today)
+    }
 
-        return VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(today.formatted(.dateTime.month(.wide).year()))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
+    /// The next few. A tradesperson with a full fortnight booked shouldn't have
+    /// to scroll past all of it to reach the quote they came here for.
+    private var shownVisits: [ScheduledVisit] {
+        showsAllVisits ? visits : Array(visits.prefix(Self.visitPreviewCount))
+    }
 
-                    Text(calendarSummaryText(monthCount: monthQuotes.count, totalCount: visibleQuotes.count))
-                        .font(.title3.weight(.semibold))
+    /// Same weight and colour as the day headings below, because it is the same
+    /// kind of thing: a heading over a run of rows, scrolling away with them.
+    private var upcomingHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text("Upcoming")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+
+            // Only once there is a list to add to. Empty, the card below is
+            // already offering this in its own words, and two invitations to
+            // do one thing read as two different things.
+            if !visits.isEmpty {
+                Button {
+                    visitEditor = .new
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                            .font(.caption.weight(.semibold))
+                        Text("Book a visit")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .foregroundStyle(Color(.blueAccentText))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+    }
+
+    /// One booked visit, drawn as the quote rows are drawn: the list has one
+    /// row language, and a visit is a quote that hasn't been spoken yet.
+    private func visitRow(_ visit: ScheduledVisit) -> some View {
+        Button {
+            // The whole point of the row. Tapping opens the recorder, which is
+            // the one thing this visit exists to lead to.
+            showCreate = true
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(visit.title)
+                        .font(.headline)
                         .foregroundStyle(Color(.mainText))
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(1)
+
+                    // Today's visit is the only one that changes what the user
+                    // does next, so it is the only one that takes the accent.
+                    Text(visit.whenText)
+                        .font(.subheadline)
+                        .foregroundStyle(visit.isToday ? Color(.blueAccentText) : Color.secondary)
+
+                    if let note = visit.note, !note.isEmpty {
+                        Text(note)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .padding(.top, 1)
+                    }
                 }
 
                 Spacer(minLength: 0)
 
-                Image(systemName: "calendar")
-                    .font(.system(size: 20, weight: .semibold))
+                // `royalBlue25` is the tint this app puts on things asking to
+                // be tapped, and the mic says which tap it is — this row does
+                // not open a screen, it starts a recording.
+                Image(systemName: "mic.fill")
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(Color(.blueAccentText))
-                    .frame(width: 42, height: 42)
-                    .glassEffect(.regular, in: Circle())
+                    .frame(width: 36, height: 36)
+                    .background(Color(.royalBlue25), in: Circle())
             }
-
-            HStack(spacing: 10) {
-                calendarStat("Visible", visibleQuotes.count)
-                Divider()
-                calendarStat("Awaiting", openQuotes)
-                Divider()
-                calendarStat("Won", acceptedQuotes)
-            }
-            .frame(height: 44)
-
-            HStack(spacing: 6) {
-                ForEach(days, id: \.self) { day in
-                    calendarDay(day, count: quoteCount(on: day, in: visibleQuotes))
-                }
-            }
-            .padding(.top, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+            // Tall enough for iOS to draw the swipe actions as icon-above-label,
+            // matching the quote rows below — see the same frame on `QuoteRow`.
+            .frame(minHeight: 78)
+            .background(Color(.cardSurface),
+                        in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+            .contentShape(.contextMenuPreview,
+                          RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
-        .padding(18)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.55), lineWidth: 0.5)
-        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(visit.accessibilityText). Record a quote")
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 12, trailing: 20))
-    }
+        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // No confirmation: a booking is a note to self, and putting it back
+            // costs one sentence.
+            Button {
+                remove(visit)
+            } label: {
+                Label("Remove", systemImage: "trash")
+            }
+            .tint(.red)
 
-    private func calendarStat(_ label: String, _ value: Int) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("\(value)")
-                .font(.headline.weight(.semibold).monospacedDigit())
-                .foregroundStyle(Color(.mainText))
-
-            Text(label)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+            Button {
+                visitEditor = .existing(visit)
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .tint(Color(.statusMutedText))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func calendarDay(_ day: Date, count: Int) -> some View {
-        let isToday = Calendar.current.isDateInToday(day)
-        let hasQuotes = count > 0
-
-        return VStack(spacing: 7) {
-            Text(day.formatted(.dateTime.weekday(.narrow)))
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(isToday ? Color(.blueAccentText) : .secondary)
-
-            ZStack(alignment: .topTrailing) {
-                Text(day.formatted(.dateTime.day()))
-                    .font(.caption.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(isToday ? .white : Color(.mainText))
-                    .frame(width: 32, height: 32)
-                    .background(
-                        isToday ? Color(.blueAccentText) : Color(.homeBackground).opacity(0.72),
-                        in: Circle()
-                    )
-
-                if hasQuotes {
-                    Circle()
-                        .fill(isToday ? .white : Color(.blueAccentText))
-                        .frame(width: 6, height: 6)
-                        .offset(x: -3, y: 3)
-                }
+        .contextMenu {
+            Button {
+                visitEditor = .existing(visit)
+            } label: {
+                Label("Edit visit", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                remove(visit)
+            } label: {
+                Label("Remove visit", systemImage: "trash")
             }
         }
+    }
+
+    private var moreVisitsButton: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.22)) { showsAllVisits.toggle() }
+        } label: {
+            Text(showsAllVisits
+                 ? "Show fewer"
+                 : "\(visits.count - Self.visitPreviewCount) more booked in")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(Color(.blueAccentText))
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 3, leading: 24, bottom: 6, trailing: 20))
+    }
+
+    /// Nothing booked in. The same sentence the rate card says when it has been
+    /// emptied, in the same component so the two can't drift into two dialects
+    /// — set on a card the size of the row it is standing in for, because here
+    /// it is one empty section rather than an empty screen.
+    private var upcomingEmpty: some View {
+        EmptyStateMessage(
+            icon: "calendar",
+            title: "Nothing booked in",
+            message: "Put the visits you've got coming up here and each one is a tap from a quote."
+        ) {
+            EmptyStatePill(title: "Book a visit", icon: "plus") { visitEditor = .new }
+        }
+        .padding(.vertical, 26)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(
-            isToday ? Color(.blueAccentText).opacity(0.10) : Color.clear,
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
-        .accessibilityLabel(calendarAccessibilityLabel(for: day, count: count))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
     }
 
-    private func recentCalendarDays(endingAt date: Date) -> [Date] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: date)
-        return (0..<7).reversed().compactMap {
-            calendar.date(byAdding: .day, value: -$0, to: today)
+    /// New booking, or a correction to one. Sorted on the way in so the list
+    /// and the stored copy are always in the order they're read in.
+    private func addOrUpdate(_ visit: ScheduledVisit) {
+        withAnimation(Self.rowInsert) {
+            if let index = visits.firstIndex(where: { $0.id == visit.id }) {
+                visits[index] = visit
+            } else {
+                visits.append(visit)
+            }
+            visits.sort { $0.date < $1.date }
         }
+        ScheduledVisit.save(visits)
     }
 
-    private func quoteCount(on day: Date, in quotes: [QuoteSummary]) -> Int {
-        quotes.filter {
-            Calendar.current.isDate($0.createdAt, inSameDayAs: day)
-        }.count
-    }
-
-    private func calendarSummaryText(monthCount: Int, totalCount: Int) -> String {
-        if searchQuery.isEmpty && filter == .all {
-            return monthCount == 1
-                ? "1 quote created this month"
-                : "\(monthCount) quotes created this month"
+    private func remove(_ visit: ScheduledVisit) {
+        withAnimation(Self.rowRemoval) {
+            visits.removeAll { $0.id == visit.id }
+            if visits.count <= Self.visitPreviewCount { showsAllVisits = false }
         }
-
-        return totalCount == 1
-            ? "1 quote matches the current view"
-            : "\(totalCount) quotes match the current view"
-    }
-
-    private func calendarAccessibilityLabel(for day: Date, count: Int) -> String {
-        let date = day.formatted(.dateTime.weekday(.wide).month(.wide).day())
-        return count == 1
-            ? "\(date), 1 quote"
-            : "\(date), \(count) quotes"
+        ScheduledVisit.save(visits)
+        toast = Toast(style: .success, message: "Visit removed")
     }
 
     /// Long-press context menu for a quote card.
