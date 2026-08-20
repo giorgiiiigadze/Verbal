@@ -4,8 +4,13 @@
 //
 //  Books a visit in, or corrects one already booked.
 //
-//  Written to be finishable one-handed on a doorstep: one thing to type, a date
-//  that already has a sensible answer in it, and everything else optional.
+//  Three steps rather than one form: what the job is, which day, what time.
+//  A visit is written in the ten seconds after a phone call, usually one-handed
+//  on a doorstep, and a single screen asking four things at once is four
+//  decisions to hold at the same time. One question a screen means the answer
+//  is always the only thing under the thumb — and it buys each question the
+//  room for the control it actually wants, a full month on the day step and a
+//  wheel on the time one, neither of which fits a stacked form.
 //
 
 import SwiftUI
@@ -17,11 +22,35 @@ struct ScheduleVisitSheet: View {
     var onDelete: ((ScheduledVisit) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
+    @State private var step: Step = .details
+    /// Which way the last move went, so the steps slide in from the side they
+    /// came from rather than always from the right.
+    @State private var isAdvancing = true
     @State private var title = ""
-    @State private var date = ScheduleVisitSheet.defaultDate
     @State private var note = ""
+    @State private var date = ScheduleVisitSheet.defaultDate
     @State private var recent: [String] = []
+    /// True while the removal alert is up.
+    @State private var confirmingRemoval = false
     @FocusState private var titleFocused: Bool
+
+    private enum Step: Int, CaseIterable, Identifiable, Comparable {
+        case details, day, time
+
+        var id: Int { rawValue }
+
+        static func < (lhs: Step, rhs: Step) -> Bool { lhs.rawValue < rhs.rawValue }
+
+        /// The question, asked in the title bar. The screen underneath is then
+        /// only the answer, and needs no heading of its own.
+        var heading: String {
+            switch self {
+            case .details: return "What's the job?"
+            case .day: return "Which day?"
+            case .time: return "What time?"
+            }
+        }
+    }
 
     /// Tomorrow morning. A visit booked on the phone is nearly always "in the
     /// next few days", and a picker that opens on this minute makes the user
@@ -36,110 +65,90 @@ struct ScheduleVisitSheet: View {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var canSave: Bool { !trimmedTitle.isEmpty }
+    /// The name is the only thing required, and only the step that asks for it
+    /// can be blocked — a day and a time always have an answer in them.
+    private var canContinue: Bool {
+        step != .details || !trimmedTitle.isEmpty
+    }
 
     /// Names quoted before, offered only while the field is empty. Once there
-    /// is something typed they'd be guessing at a sentence that is already
-    /// being written.
+    /// is something typed they'd be guessing at a sentence already being
+    /// written.
     private var suggestions: [String] {
         trimmedTitle.isEmpty ? Array(recent.prefix(6)) : []
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    TextField("Who's it for? (e.g. Mrs. Patel — bathroom)", text: $title)
-                        .textFieldStyle(.plain)
-                        .font(.body)
-                        .foregroundStyle(Color(.mainText))
-                        .textInputAutocapitalization(.sentences)
-                        .submitLabel(.done)
-                        .focused($titleFocused)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                        .background(Color(.fieldFill),
-                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(Color(.royalBlue600).opacity(0.18), lineWidth: 1)
-                        )
+            VStack(alignment: .leading, spacing: 20) {
+                progressBar
 
-                    if !suggestions.isEmpty { recentNames }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("When")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        // The system's compact picker, unwrapped. It draws its
-                        // own tinted capsules, and a field box around them
-                        // would be a box inside a box saying the same thing.
-                        DatePicker("",
-                                   selection: $date,
-                                   in: Date.distantPast...,
-                                   displayedComponents: [.date, .hourAndMinute])
-                            .labelsHidden()
-                            .datePickerStyle(.compact)
-                            .tint(Color(.royalBlue600))
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Note (optional)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TextField("Gate code, what to measure…", text: $note, axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .font(.body)
-                            .foregroundStyle(Color(.mainText))
-                            .lineLimit(1...3)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
-                            .background(Color(.fieldFill),
-                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-                            )
-                    }
-
-                    if let editing, let onDelete {
-                        Button(role: .destructive) {
-                            onDelete(editing)
-                            dismiss()
-                        } label: {
-                            Text("Remove this visit")
-                                .font(.subheadline)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                        }
-                        .padding(.top, 2)
+                Group {
+                    switch step {
+                    case .details: detailsStep
+                    case .day: dayStep
+                    case .time: timeStep
                     }
                 }
-                .padding(.top, 16)
-                .padding(.horizontal, 24)
+                .transition(.asymmetric(
+                    insertion: .move(edge: isAdvancing ? .trailing : .leading).combined(with: .opacity),
+                    removal: .move(edge: isAdvancing ? .leading : .trailing).combined(with: .opacity)
+                ))
+
+                Spacer(minLength: 0)
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .padding(.top, 16)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.systemBackground))
-            .navigationTitle(editing == nil ? "Book a visit" : "Edit visit")
+            .navigationTitle(step.heading)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close) { dismiss() }
+                    // Back once there is somewhere to go back to. Closing is
+                    // still a swipe down from anywhere, so the way out isn't
+                    // lost with the button.
+                    if step == .details {
+                        Button(role: .close) { dismiss() }
+                    } else {
+                        Button {
+                            move(to: Step(rawValue: step.rawValue - 1) ?? .details)
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .accessibilityLabel("Back")
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                // A form being committed, so the flat 16pt rectangle rather
-                // than a capsule — same shape as the client and rate sheets.
-                Button(action: save) {
-                    Text(editing == nil ? "Save visit" : "Update visit")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(canSave ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
-                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                VStack(spacing: 10) {
+                    // Directly above the button that ends the step, where the
+                    // thumb already is. In the scrolling content it sat below
+                    // the description as a third thing to read; down here the
+                    // two ways out of the sheet are side by side, and which one
+                    // is which is obvious from the colour.
+                    //
+                    // Only on the first step. The visit is identified there —
+                    // and stacking it under a month grid would spend the room
+                    // that grid needs.
+                    if step == .details, let editing, let onDelete {
+                        removeButton(editing, onDelete: onDelete)
+                    }
+
+                    // A form being committed, so the flat 16pt rectangle rather
+                    // than a capsule — same shape as the client and rate sheets.
+                    Button(action: primaryAction) {
+                        Text(primaryTitle)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(canContinue ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
+                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canContinue)
                 }
-                .buttonStyle(.plain)
-                .disabled(!canSave)
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
@@ -147,8 +156,27 @@ struct ScheduleVisitSheet: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: suggestions)
-        .presentationDetents([.height(520)])
+        // Sized for the month grid, which is the tallest of the three. A detent
+        // that changed with the step would resize the sheet under the thumb
+        // between one question and the next.
+        .presentationDetents([.height(580)])
         .presentationBackground(Color(.systemBackground))
+        // Same shape as the delete confirmations on Home: a question, the
+        // action named plainly, and Cancel. The swipe on the row itself still
+        // goes straight through — a swipe is already a deliberate gesture,
+        // where this is a button sitting under the thumb that was about to
+        // press Next.
+        .alert("Remove this visit?", isPresented: $confirmingRemoval) {
+            Button("Remove", role: .destructive) {
+                if let editing, let onDelete {
+                    onDelete(editing)
+                    dismiss()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("“\(trimmedTitle.isEmpty ? (editing?.title ?? "This visit") : trimmedTitle)” comes off your upcoming list. Any quotes you've already made are untouched.")
+        }
         .task {
             if let editing {
                 title = editing.title
@@ -160,6 +188,166 @@ struct ScheduleVisitSheet: View {
                 titleFocused = true
             }
         }
+    }
+
+    // MARK: - Steps
+
+    /// Name and description. Both belong to the same question — what is this
+    /// visit — so they are asked together and nothing else is on the screen.
+    private var detailsStep: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                TextField("Who's it for? (e.g. Mrs. Patel — bathroom)", text: $title)
+                    .textFieldStyle(.plain)
+                    .font(.body)
+                    .foregroundStyle(Color(.mainText))
+                    .textInputAutocapitalization(.sentences)
+                    .submitLabel(.next)
+                    .focused($titleFocused)
+                    .onSubmit { if canContinue { move(to: .day) } }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    // Tinted, not white. The sheet behind it is white, so a
+                    // white field was a hairline outline around nothing.
+                    .background(Color(.fieldFill),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color(.royalBlue600).opacity(0.18), lineWidth: 1)
+                    )
+
+                if !suggestions.isEmpty { recentNames }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Description (optional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Gate code, what to measure…", text: $note, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.body)
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1...3)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(Color(.fieldFill),
+                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(Color(.separator), lineWidth: 0.5)
+                        )
+                }
+            }
+            // Room for the keyboard, which covers the lower half of the sheet
+            // while this step is the one on screen.
+            .padding(.bottom, 12)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    /// Removing the visit, drawn as a control rather than as a line of red type.
+    ///
+    /// It was a bare red `Text` under the description field, which read as part
+    /// of the form — the eye ran down field, field, red words, and the words
+    /// were the only thing on the sheet that did something when touched without
+    /// looking like it could be. So it gets a shape, and a hairline the same
+    /// weight the name field above it has.
+    ///
+    /// The colours are the app's own declined pair rather than system red: that
+    /// one is tuned for iOS controls and shouts over a warm off-white sheet.
+    /// Muted ink on a muted ground still reads as the one destructive thing
+    /// here, without competing with the blue button that ends the flow.
+    private func removeButton(_ visit: ScheduledVisit,
+                              onDelete: @escaping (ScheduledVisit) -> Void) -> some View {
+        Button {
+            confirmingRemoval = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "trash")
+                    .font(.footnote.weight(.semibold))
+                Text("Remove visit")
+                    .font(.subheadline.weight(.medium))
+            }
+            .foregroundStyle(Color(.statusDeclinedText))
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(Color(.statusDeclinedFill),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color(.statusDeclinedText).opacity(0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// A whole month, because "which day" is a question about where a date sits
+    /// in the week — the compact field answers it as text and makes the user do
+    /// that conversion themselves.
+    private var dayStep: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            DatePicker("",
+                       selection: $date,
+                       in: Calendar.current.startOfDay(for: Date())...,
+                       displayedComponents: [.date])
+                .labelsHidden()
+                .datePickerStyle(.graphical)
+                .tint(Color(.royalBlue600))
+                // Its own inset would sit the grid a step in from everything
+                // else on the sheet.
+                .padding(.horizontal, -8)
+        }
+    }
+
+    /// The wheel rather than the compact field: this step has the screen to
+    /// itself, and a wheel is a thumb-drag where the field is a tap, a popover
+    /// and then a drag.
+    private var timeStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // What has been answered so far, so the last step isn't a bare
+            // wheel with no idea what it belongs to.
+            Text("\(trimmedTitle) · \(date.formatted(.dateTime.weekday(.wide).day().month(.wide)))")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            DatePicker("",
+                       selection: $date,
+                       displayedComponents: [.hourAndMinute])
+                .labelsHidden()
+                .datePickerStyle(.wheel)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: - Chrome
+
+    /// Three marks for three questions: where this is, and how much is left.
+    /// A step already answered is tappable, so going back doesn't have to be
+    /// done one chevron at a time — and a visit being corrected can be jumped
+    /// through in either direction, since every answer is already in it.
+    private var progressBar: some View {
+        HStack(spacing: 6) {
+            ForEach(Step.allCases) { candidate in
+                Capsule()
+                    .fill(candidate <= step ? Color(.royalBlue600) : Color(.separator))
+                    .frame(height: 3)
+                    // Expanded past the hairline it draws — 3pt is a mark, not
+                    // a target.
+                    .contentShape(Rectangle().inset(by: -14))
+                    .onTapGesture {
+                        guard canJump(to: candidate) else { return }
+                        move(to: candidate)
+                    }
+                    .accessibilityLabel("Step \(candidate.rawValue + 1): \(candidate.heading)")
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: step)
+    }
+
+    private func canJump(to candidate: Step) -> Bool {
+        if candidate == step { return false }
+        // Forward only where the questions in between are already answered.
+        return candidate < step || (editing != nil && !trimmedTitle.isEmpty)
     }
 
     /// The same offer the client sheet makes, in the same shape: people quoted
@@ -193,8 +381,34 @@ struct ScheduleVisitSheet: View {
         .transition(.opacity)
     }
 
+    private var primaryTitle: String {
+        switch step {
+        case .details, .day: return "Next"
+        case .time: return editing == nil ? "Book visit" : "Update visit"
+        }
+    }
+
+    // MARK: - Moving
+
+    private func primaryAction() {
+        guard canContinue else { return }
+        switch step {
+        case .details: move(to: .day)
+        case .day: move(to: .time)
+        case .time: save()
+        }
+    }
+
+    private func move(to next: Step) {
+        isAdvancing = next > step
+        // The keyboard belongs to the first step only, and left up it would
+        // cover half of the month grid the next one draws.
+        titleFocused = false
+        withAnimation(.snappy(duration: 0.25)) { step = next }
+    }
+
     private func save() {
-        guard canSave else { return }
+        guard !trimmedTitle.isEmpty else { return }
         let cleanNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         onSave(ScheduledVisit(id: editing?.id ?? UUID(),
                               title: trimmedTitle,
