@@ -116,16 +116,6 @@ struct ClientsView: View {
     private var feed: some View {
         ScrollView {
             LazyVStack(spacing: 14) {
-                // Money in play, at the top of the tab it is about. Hidden while
-                // a search is running: it reports the whole account, and above a
-                // narrowed list it would be describing something else.
-                //
-                // Scrolls away with the threads rather than sitting pinned —
-                // the quotes are the point of the screen.
-                if !isSearching {
-                    OutstandingBand(quotes: session.quotes)
-                }
-
                 ForEach(filtered) { client in
                     clientThread(client)
                 }

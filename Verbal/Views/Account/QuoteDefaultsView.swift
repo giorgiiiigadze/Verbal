@@ -127,126 +127,164 @@ struct QuoteDefaultsView: View {
             Color(.homeBackground)
                 .ignoresSafeArea()
 
-            Form {
-                Section {
-                    VStack(spacing: 12) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Letterhead")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color(.mainText))
+
                         letterheadPreview
                         logoControls
+
+                        Text("The top of every quote you send. Your business name and contact details come from Profile.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(
-                        EdgeInsets(
-                            top: 0,
-                            leading: 0,
-                            bottom: 8,
-                            trailing: 0
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Quote numbers")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color(.mainText))
+
+                        field(
+                            "Prefix",
+                            placeholder: "None",
+                            text: $numberPrefix,
+                            focus: .numberPrefix
                         )
-                    )
-                } header: {
-                    Text("Letterhead")
-                } footer: {
-                    Text(
-                        "The top of every quote you send. Your business name and contact details come from Profile."
-                    )
-                }
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
 
-                Section {
-                    LabeledContent("Prefix") {
-                        TextField("None", text: $numberPrefix)
-                            .multilineTextAlignment(.trailing)
-                            .textInputAutocapitalization(.characters)
-                            .autocorrectionDisabled()
-                            .focused($focus, equals: .numberPrefix)
-                    }
+                        field(
+                            "Start at",
+                            placeholder: "1",
+                            text: $numberStart,
+                            focus: .numberStart
+                        )
+                        .keyboardType(.numberPad)
+                        .font(.body.monospacedDigit())
 
-                    LabeledContent("Start at") {
-                        TextField("1", text: $numberStart)
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.numberPad)
-                            .font(.body.monospacedDigit())
-                            .focused($focus, equals: .numberStart)
-                    }
-
-                    LabeledContent("Next quote", value: numberPreview)
-                        .foregroundStyle(.secondary)
-
-                    if let numberStartError {
-                        Text(numberStartError)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-                } header: {
-                    Text("Quote numbers")
-                } footer: {
-                    Text(
-                        "Start only applies while your numbering is still below it. Quotes already issued keep their numbers. Changing the prefix relabels every quote that uses the shared prefix."
-                    )
-                }
-                .listRowBackground(Color(.cardSurface))
-
-                Section {
-                    Stepper(
-                        "Valid for \(validityDays) day\(validityDays == 1 ? "" : "s")",
-                        value: $validityDays,
-                        in: 1...365
-                    )
-                } footer: {
-                    Text("How long a new quote stays valid for.")
-                }
-                .listRowBackground(Color(.cardSurface))
-
-                Section {
-                    LabeledContent("Tax rate") {
-                        HStack(spacing: 4) {
-                            TextField("0", text: $taxRate)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .focused($focus, equals: .taxRate)
-
-                            Text("%")
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text("Next quote")
+                                .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
+
+                            Text(numberPreview)
+                                .font(.body.monospacedDigit())
+                                .foregroundStyle(Color(.mainText))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                                .background(Color(.cardSurface))
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(Color(.separator), lineWidth: 1)
+                                }
                         }
+
+                        if let numberStartError {
+                            Text(numberStartError)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+
+                        Text("Start only applies while your numbering is still below it. Quotes already issued keep their numbers. Changing the prefix relabels every quote that uses the shared prefix.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    if let taxRateError {
-                        Text(taxRateError)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Validity")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color(.mainText))
+
+                        Stepper(
+                            "Valid for \(validityDays) day\(validityDays == 1 ? "" : "s")",
+                            value: $validityDays,
+                            in: 1...365
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                        .background(Color(.cardSurface))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(Color(.separator), lineWidth: 1)
+                        }
+
+                        Text("How long a new quote stays valid for.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                } header: {
-                    Text("Tax")
-                } footer: {
-                    Text(
-                        "Added to new quotes and shown as a separate line on the PDF. Leave blank or 0 if you're not tax registered."
-                    )
-                }
-                .listRowBackground(Color(.cardSurface))
 
-                Section("Terms & conditions") {
-                    TextField(
-                        "Standard terms shown on every quote",
-                        text: $terms,
-                        axis: .vertical
-                    )
-                    .lineLimit(3...8)
-                    .focused($focus, equals: .terms)
-                }
-                .listRowBackground(Color(.cardSurface))
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Tax")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color(.mainText))
 
-                Section("Notes / footer") {
-                    TextField(
-                        "A note added to the bottom of each quote",
-                        text: $notes,
-                        axis: .vertical
-                    )
-                    .lineLimit(2...6)
-                    .focused($focus, equals: .notes)
+                        percentField(
+                            "Tax rate",
+                            placeholder: "0",
+                            text: $taxRate,
+                            focus: .taxRate
+                        )
+                        .keyboardType(.decimalPad)
+
+                        if let taxRateError {
+                            Text(taxRateError)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+
+                        Text("Added to new quotes and shown as a separate line on the PDF. Leave blank or 0 if you're not tax registered.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Terms & conditions")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color(.mainText))
+
+                        field(
+                            "Terms",
+                            placeholder: "Standard terms shown on every quote",
+                            text: $terms,
+                            focus: .terms,
+                            axis: .vertical,
+                            lineLimit: 3...8
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Notes / footer")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color(.mainText))
+
+                        field(
+                            "Note",
+                            placeholder: "A note added to the bottom of each quote",
+                            text: $notes,
+                            focus: .notes,
+                            axis: .vertical,
+                            lineLimit: 2...6
+                        )
+                    }
                 }
-                .listRowBackground(Color(.cardSurface))
+                .padding(.horizontal, 24)
+                .padding(.top, 18)
+                .padding(.bottom, 40)
             }
-            .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Quote defaults")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .disabled(isLoading)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -308,6 +346,79 @@ struct QuoteDefaultsView: View {
         }
     }
 
+    private func field(
+        _ label: String,
+        placeholder: String,
+        text: Binding<String>,
+        focus field: Field,
+        axis: Axis = .horizontal,
+        lineLimit: ClosedRange<Int> = 1...1
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(label)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(focus == field ? Color(.blueAccentText) : .secondary)
+
+            TextField(placeholder, text: text, axis: axis)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .foregroundStyle(Color(.mainText))
+                .tint(Color(.blueAccentText))
+                .lineLimit(lineLimit)
+                .focused($focus, equals: field)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .background(Color(.cardSurface))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(
+                            focus == field ? Color(.blueAccentText) : Color(.separator),
+                            lineWidth: 1
+                        )
+                }
+        }
+    }
+
+    private func percentField(
+        _ label: String,
+        placeholder: String,
+        text: Binding<String>,
+        focus field: Field
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(label)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(focus == field ? Color(.blueAccentText) : .secondary)
+
+            HStack(spacing: 6) {
+                TextField(placeholder, text: text)
+                    .textFieldStyle(.plain)
+                    .font(.body)
+                    .foregroundStyle(Color(.mainText))
+                    .tint(Color(.blueAccentText))
+                    .focused($focus, equals: field)
+
+                Text("%")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .background(Color(.cardSurface))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(
+                        focus == field ? Color(.blueAccentText) : Color(.separator),
+                        lineWidth: 1
+                    )
+            }
+        }
+    }
+
     // MARK: - Letterhead
 
     private var logoControls: some View {
@@ -340,7 +451,6 @@ struct QuoteDefaultsView: View {
                 .disabled(isUploadingLogo)
             }
         }
-        .padding(.horizontal, 16)
     }
 
     private func glassLabel(
@@ -450,7 +560,6 @@ struct QuoteDefaultsView: View {
                 style: .continuous
             )
         )
-        .padding(.horizontal, 16)
         .overlay {
             if isUploadingLogo {
                 ProgressView()
@@ -465,7 +574,6 @@ struct QuoteDefaultsView: View {
                 Color(.separator),
                 lineWidth: 0.5
             )
-            .padding(.horizontal, 16)
         }
     }
 

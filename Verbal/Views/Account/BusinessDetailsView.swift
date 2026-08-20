@@ -6,11 +6,7 @@
 //  reads your jobs against. Pushed from the Account tab; it was that tab itself
 //  until the settings behind its gear came up to the surface.
 //
-//  Stock sections, in the app's own card colour on the app's own ground. The
-//  rows inside them are not stock: each field keeps its name above the value
-//  rather than beside it, because two of these are addresses, and a wrapped
-//  address right-aligned against a left-aligned label reads as a column of
-//  ragged fragments.
+//  A simple form with labelled rounded fields and quiet section headings.
 //
 
 import SwiftUI
@@ -30,11 +26,6 @@ struct BusinessDetailsView: View {
     @State private var isLoading = true
     @State private var isSaving = false
 
-    /// Which field holds the keyboard.
-    ///
-    /// Named rather than a single bool because the whole row is tappable: a
-    /// label and the space beside it should reach the field underneath them
-    /// instead of being dead ground around a one-line target.
     private enum Field: Hashable {
         case businessName, trade, phone, email, address, taxNumber
     }
@@ -46,98 +37,122 @@ struct BusinessDetailsView: View {
         [businessName, trade, phone, email, address, taxNumber] != loadedIdentity
     }
 
+    private var canSave: Bool {
+        !isLoading && !isSaving && isDirty
+    }
+
     private var loadedIdentity: [String] {
         [loaded.businessName ?? "", loaded.trade ?? "", loaded.phone ?? "",
          loaded.email ?? "", loaded.address ?? "", loaded.taxNumber ?? ""]
     }
 
     var body: some View {
-        List {
-            // No section header over the first group: the bar above it already
-            // says "Business details", and a heading repeating the word an inch
-            // below it is the screen introducing itself twice.
-            Section {
-                fieldRow("Business name", placeholder: "Your business name",
-                         text: $businessName, field: .businessName)
-                    .textInputAutocapitalization(.words)
-                fieldRow("Phone", placeholder: "Phone number",
-                         text: $phone, field: .phone)
-                    .keyboardType(.phonePad)
-                // Placeholder is the account address, because that is what
-                // gets used when this is blank — leaving it empty should
-                // not be a mystery about what the customer will see.
-                fieldRow("Email", placeholder: session.email ?? "Email",
-                         text: $email, field: .email)
-                    .keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                fieldRow("Address", placeholder: "Street, town, postcode",
-                         text: $address, field: .address, multiline: true)
-                    .textInputAutocapitalization(.words)
-                fieldRow("Tax / VAT number", placeholder: "None",
-                         text: $taxNumber, field: .taxNumber)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-            } footer: {
-                Text("Printed at the top of every quote you send, and how a client reaches you to say yes. Leave the email blank to use the one you signed in with.")
-            }
-            .listRowBackground(Color(.cardSurface))
+        ZStack {
+            Color(.homeBackground)
+                .ignoresSafeArea()
 
-            // Its own section rather than a sixth row above: the trade is
-            // the only thing on this screen the customer never sees, and
-            // filing it under a group that promises "printed on every quote"
-            // would be a lie about where it goes. It was asked for once at
-            // onboarding and then had nowhere to be corrected — a typo
-            // there quietly mislead every extraction since.
-            Section {
-                // No row label: the section holds one field and the heading
-                // above it already names that field. Labelling it again would
-                // print "Trade" twice, two lines apart.
-                fieldRow(nil, placeholder: "Electrician, plumber, builder…",
-                         text: $trade, field: .trade)
-                    .textInputAutocapitalization(.words)
-            } header: {
-                Text("Trade")
-            } footer: {
-                Text("What you do, in a word. Verbal reads it to make sense of the jobs you describe out loud. It isn't printed on your quotes.")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    Text("These details appear on every quote you send and help Verbal understand your work.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Your business information")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color(.mainText))
+
+                        field(
+                            "Business name",
+                            placeholder: "Your business name",
+                            text: $businessName,
+                            focus: .businessName,
+                            isRequired: true
+                        )
+                        .textInputAutocapitalization(.words)
+
+                        field(
+                            "Phone",
+                            placeholder: "Phone number",
+                            text: $phone,
+                            focus: .phone
+                        )
+                        .keyboardType(.phonePad)
+
+                        field(
+                            "Email",
+                            placeholder: session.email ?? "Email",
+                            text: $email,
+                            focus: .email
+                        )
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                        field(
+                            "Address",
+                            placeholder: "Street, town, postcode",
+                            text: $address,
+                            focus: .address,
+                            axis: .vertical,
+                            lineLimit: 2...4
+                        )
+                        .textInputAutocapitalization(.words)
+
+                        field(
+                            "Tax / VAT number",
+                            placeholder: "None",
+                            text: $taxNumber,
+                            focus: .taxNumber
+                        )
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                    }
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Quote intelligence")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color(.mainText))
+
+                        field(
+                            "Trade",
+                            placeholder: "Electrician, plumber, builder...",
+                            text: $trade,
+                            focus: .trade
+                        )
+                        .textInputAutocapitalization(.words)
+
+                        Text("Used to help Verbal understand the jobs you describe. It isn't printed on your quotes.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 18)
+                .padding(.bottom, 40)
             }
-            .listRowBackground(Color(.cardSurface))
+            .scrollDismissesKeyboard(.interactively)
+            .disabled(isLoading)
         }
-        .disabled(isLoading)
-        // A list opens with room for a large title, and this one is titled in
-        // the bar; the stock inset left the first field floating.
-        .contentMargins(.top, 6, for: .scrollContent)
-        .scrollContentBackground(.hidden)
-        .scrollDismissesKeyboard(.interactively)
-        .background(Color(.homeBackground))
         .navigationTitle("Business details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if isSaving {
                     ProgressView()
-                } else if isDirty {
-                    // The same button the quote screen uses to send work out:
-                    // this is the one action on the screen that matters, and it
-                    // should look like it does elsewhere.
-                    Button {
+                } else if canSave {
+                    Button("Save") {
                         save()
-                    } label: {
-                        Text("Save")
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.white)
                     }
-                    .buttonStyle(.glassProminent)
-                    .tint(Color(.royalBlue600))
-                    .disabled(isLoading)
+                    .fontWeight(.semibold)
                 }
             }
-            // The glyph rather than "Done", which iOS draws as a round glass
-            // button in the corner above the keyboard. It says what it does —
-            // put the keyboard away — where "Done" reads as a commitment, and
-            // on this screen the thing that commits is Save, up in the bar.
+
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
+
                 Button {
                     focus = nil
                 } label: {
@@ -150,43 +165,40 @@ struct BusinessDetailsView: View {
         .task { await load() }
     }
 
-    // MARK: - Rows
+    private func field(
+        _ label: String,
+        placeholder: String,
+        text: Binding<String>,
+        focus field: Field,
+        isRequired: Bool = false,
+        axis: Axis = .horizontal,
+        lineLimit: ClosedRange<Int> = 1...1
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(label + (isRequired ? " *" : ""))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(focus == field ? Color(.blueAccentText) : .secondary)
 
-    /// One editable detail: its name above, the value in it below.
-    ///
-    /// Stacked rather than the label-left / value-right of a settings row,
-    /// because two of these are addresses. Right-aligned multi-line text under
-    /// a left-aligned label reads as a column of ragged fragments, and the
-    /// address is the field most often wrong on a quote.
-    ///
-    /// The label carries the focus: it turns blue while the keyboard is in the
-    /// field beneath it, which is enough to mark where you are typing without
-    /// drawing a box inside a box. It is optional — a section holding a single
-    /// field is already named by its heading.
-    private func fieldRow(_ label: String?,
-                          placeholder: String,
-                          text: Binding<String>,
-                          field: Field,
-                          multiline: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            if let label {
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(focus == field ? Color(.blueAccentText) : Color.secondary)
-            }
-            TextField(placeholder, text: text, axis: multiline ? .vertical : .horizontal)
+            TextField(placeholder, text: text, axis: axis)
                 .textFieldStyle(.plain)
-                .font(.callout)
-                .lineLimit(multiline ? 4 : 1)
+                .font(.body)
                 .foregroundStyle(Color(.mainText))
+                .tint(Color(.blueAccentText))
+                .lineLimit(lineLimit)
                 .focused($focus, equals: field)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .background(Color(.cardSurface))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(
+                            focus == field ? Color(.blueAccentText) : Color(.separator),
+                            lineWidth: 1
+                        )
+                }
         }
-        .padding(.vertical, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // The whole row, not just the line of text, puts the keyboard in it.
-        .contentShape(.rect)
-        .onTapGesture { focus = field }
-        .animation(.easeOut(duration: 0.16), value: focus)
     }
 
     // MARK: - Data
@@ -213,6 +225,9 @@ struct BusinessDetailsView: View {
     /// with it — on the one screen where a silent failure means the next quote
     /// goes out with no business name on it.
     private func save() {
+        guard canSave else { return }
+
+        focus = nil
         isSaving = true
         var profile = loaded
         profile.businessName = businessName.trimmedOrNil

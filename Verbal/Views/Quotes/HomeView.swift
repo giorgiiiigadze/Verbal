@@ -317,7 +317,9 @@ struct HomeView: View {
             List {
                 pageTitle
 
-                    ForEach(sections, id: \.title) { section in
+                calendarContainer
+
+                ForEach(sections, id: \.title) { section in
                     // Header as a normal row (not a Section header) so it scrolls
                     // away with the content instead of pinning to the top.
                     Text(section.title)
@@ -419,6 +421,151 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    private var calendarContainer: some View {
+        let calendar = Calendar.current
+        let today = Date()
+        let visibleQuotes = sections.flatMap(\.quotes)
+        let monthQuotes = visibleQuotes.filter {
+            calendar.isDate($0.createdAt, equalTo: today, toGranularity: .month)
+        }
+        let openQuotes = visibleQuotes.filter {
+            $0.effectiveStatus == "sent" || $0.effectiveStatus == "viewed"
+        }.count
+        let acceptedQuotes = visibleQuotes.filter { $0.effectiveStatus == "accepted" }.count
+        let days = recentCalendarDays(endingAt: today)
+
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 2) {
+                    Text(today.formatted(.dateTime.weekday(.abbreviated)))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color(.blueAccentText))
+                        .textCase(.uppercase)
+
+                    Text(today.formatted(.dateTime.day()))
+                        .font(.system(size: 30, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(.mainText))
+                        .monospacedDigit()
+                }
+                .frame(width: 64, height: 68)
+                .background(Color(.royalBlue25), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color(.blueAccentText).opacity(0.16), lineWidth: 1)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(today.formatted(.dateTime.month(.wide).year()))
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color(.mainText))
+
+                    Text(calendarSummaryText(monthCount: monthQuotes.count, totalCount: visibleQuotes.count))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 8) {
+                calendarMetric("Visible", visibleQuotes.count, tint: Color(.statusSentText))
+                calendarMetric("Open", openQuotes, tint: Color(.statusWarningText))
+                calendarMetric("Won", acceptedQuotes, tint: Color(.statusAcceptedText))
+            }
+
+            HStack(spacing: 7) {
+                ForEach(days, id: \.self) { day in
+                    calendarDay(day, count: quoteCount(on: day, in: visibleQuotes))
+                }
+            }
+        }
+        .padding(16)
+        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        }
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 12, trailing: 20))
+    }
+
+    private func calendarMetric(_ label: String, _ value: Int, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("\(value)")
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(Color(.mainText))
+
+            Text(label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func calendarDay(_ day: Date, count: Int) -> some View {
+        let isToday = Calendar.current.isDateInToday(day)
+
+        return VStack(spacing: 6) {
+            Text(day.formatted(.dateTime.weekday(.narrow)))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(isToday ? Color(.blueAccentText) : .secondary)
+
+            Text(day.formatted(.dateTime.day()))
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(isToday ? .white : Color(.mainText))
+                .frame(width: 28, height: 28)
+                .background(
+                    isToday ? Color(.blueAccentText) : Color(.homeBackground),
+                    in: Circle()
+                )
+
+            Circle()
+                .fill(count > 0 ? Color(.blueAccentText) : Color(.separator))
+                .frame(width: count > 0 ? 5 : 3, height: count > 0 ? 5 : 3)
+                .opacity(count > 0 ? 1 : 0.65)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel(calendarAccessibilityLabel(for: day, count: count))
+    }
+
+    private func recentCalendarDays(endingAt date: Date) -> [Date] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: date)
+        return (0..<7).reversed().compactMap {
+            calendar.date(byAdding: .day, value: -$0, to: today)
+        }
+    }
+
+    private func quoteCount(on day: Date, in quotes: [QuoteSummary]) -> Int {
+        quotes.filter {
+            Calendar.current.isDate($0.createdAt, inSameDayAs: day)
+        }.count
+    }
+
+    private func calendarSummaryText(monthCount: Int, totalCount: Int) -> String {
+        if searchQuery.isEmpty && filter == .all {
+            return monthCount == 1
+                ? "1 quote created this month"
+                : "\(monthCount) quotes created this month"
+        }
+
+        return totalCount == 1
+            ? "1 quote matches the current view"
+            : "\(totalCount) quotes match the current view"
+    }
+
+    private func calendarAccessibilityLabel(for day: Date, count: Int) -> String {
+        let date = day.formatted(.dateTime.weekday(.wide).month(.wide).day())
+        return count == 1
+            ? "\(date), 1 quote"
+            : "\(date), \(count) quotes"
     }
 
     /// Long-press context menu for a quote card.
