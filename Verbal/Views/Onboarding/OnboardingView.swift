@@ -40,9 +40,19 @@ struct OnboardingView: View {
     /// sake: the answers just given are being turned into something, and a card
     /// that snaps in fully formed reads as one that was always there.
     @State private var revealed = false
+    @State private var setupProgressValue = 0.0
+    @State private var setupMessageIndex = 0
+    @FocusState private var focusedField: Field?
 
     private enum Step: Hashable {
         case trade, jobs, prices, business, reveal, video
+    }
+
+    private enum Field: Hashable {
+        case customTrade
+        case price(String)
+        case businessName
+        case taxRate
     }
 
     /// The steps this particular user will see. A trade with no preset list
@@ -107,8 +117,14 @@ struct OnboardingView: View {
     /// another to an electrician. So it is the one question that is asked
     /// rather than offered. Everything else here has a default worth keeping.
     private var canContinue: Bool {
-        guard current == .trade else { return true }
-        return !pendingTrade.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        switch current {
+        case .trade:
+            return !pendingTrade.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .reveal:
+            return revealed
+        default:
+            return true
+        }
     }
 
     var body: some View {
@@ -157,6 +173,15 @@ struct OnboardingView: View {
                     // Two glass capsules either side of the mark read as a pair
                     // of equal choices, and skipping isn't one of those.
                     .sharedBackgroundVisibility(.hidden)
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button {
+                            focusedField = nil
+                        } label: {
+                            Image(systemName: "keyboard.chevron.compact.down")
+                        }
+                        .accessibilityLabel("Dismiss keyboard")
+                    }
                 }
                 .navigationBarTitleDisplayMode(.inline)
         }
@@ -192,7 +217,9 @@ struct OnboardingView: View {
                 ))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-                footer
+                if current != .reveal || revealed {
+                    footer
+                }
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
@@ -264,6 +291,7 @@ struct OnboardingView: View {
     /// the two feel interchangeable.
     private func goBack() {
         guard step > 0 else { return }
+        focusedField = nil
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         withAnimation { step -= 1 }
     }
@@ -271,6 +299,7 @@ struct OnboardingView: View {
     /// Both buttons come through here, so the feedback lives here too rather
     /// than being attached to each of them separately.
     private func advance() {
+        focusedField = nil
         guard !isLastStep else {
             // The end of the questions, not another step through them — the
             // heavier notification marks it as arriving somewhere.
@@ -358,6 +387,7 @@ struct OnboardingView: View {
                 TextField("Locksmith, glazier, welder…", text: $pendingTrade)
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled()
+                    .focused($focusedField, equals: .customTrade)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                     .background(Color(.cardSurface),
@@ -486,6 +516,7 @@ struct OnboardingView: View {
                                 ))
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
+                                .focused($focusedField, equals: .price(job.name))
                                 .frame(width: 72)
                             }
                             .font(.callout.monospacedDigit())
@@ -523,6 +554,7 @@ struct OnboardingView: View {
 
             TextField("e.g. Kapanadze Plumbing", text: $businessName)
                 .textInputAutocapitalization(.words)
+                .focused($focusedField, equals: .businessName)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
                 .background(Color(.cardSurface),
@@ -548,6 +580,7 @@ struct OnboardingView: View {
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                         .font(.callout.monospacedDigit())
+                        .focused($focusedField, equals: .taxRate)
                         .frame(width: 60)
                     Text("%").foregroundStyle(.secondary)
                     Spacer()
@@ -579,7 +612,13 @@ struct OnboardingView: View {
                 .font(.robotoSlab(32, relativeTo: .largeTitle))
                 .foregroundStyle(Color(.mainText))
                 .fixedSize(horizontal: false, vertical: true)
+                .id(revealed ? "revealed-\(revealTitle)" : "setup-\(setupMessageIndex)")
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .offset(y: -16)),
+                    removal: .opacity.combined(with: .offset(y: 16))
+                ))
                 .animation(.easeInOut(duration: 0.3), value: revealed)
+                .animation(.easeInOut(duration: 0.35), value: setupMessageIndex)
 
             if revealed {
                 VStack(alignment: .leading, spacing: 12) {
@@ -613,16 +652,34 @@ struct OnboardingView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-            } else {
-                ProgressView()
-                    .padding(.top, 8)
-            }
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            } else {
+                Spacer(minLength: 0)
+
+                setupProgress
+            }
         }
         .task {
             guard !revealed else { return }
-            try? await Task.sleep(for: .seconds(1.1))
+            let duration = 3.4
+            let messageStep = 1.7
+            setupMessageIndex = 0
+            setupProgressValue = 0
+            withAnimation(.linear(duration: duration)) {
+                setupProgressValue = 1
+            }
+
+            for index in setupMessages.indices.dropFirst() {
+                try? await Task.sleep(for: .seconds(messageStep))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    setupMessageIndex = index
+                }
+            }
+
+            try? await Task.sleep(for: .seconds(duration - messageStep * Double(setupMessages.count - 1)))
+            guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.35)) { revealed = true }
         }
     }
@@ -674,9 +731,10 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             
-            Text("Some text will go in here")
+            Text("Turn a spoken job into a clean quote you can send before you leave the site.")
                 .font(.subheadline)
-                .foregroundStyle(Color(.mainText))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 28)
         }
@@ -689,11 +747,52 @@ struct OnboardingView: View {
     /// worth knowing before signing in.
     private var revealTitle: String {
         if !revealed {
-            return draftRates.isEmpty ? "Getting things\nready…" : "Setting up\nyour rate card…"
+            return setupTitle
         }
         return draftRates.isEmpty
             ? "This is what a job\nturns into."
             : "Your first quote is\nhalf-written already."
+    }
+
+    private var setupTitle: String {
+        let messages = setupMessages
+        return messages[min(setupMessageIndex, messages.count - 1)]
+    }
+
+    private var setupMessages: [String] {
+        let name = businessName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty {
+            return [
+                "Setting up\n\(name)…",
+                "Getting your\nfirst quote ready…"
+            ]
+        }
+
+        let trade = pendingTrade.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trade.isEmpty {
+            return [
+                "Setting up your\n\(trade.lowercased()) workspace…",
+                "Getting your\nfirst quote ready…"
+            ]
+        }
+
+        return [
+            "Setting up your\nquote workspace…",
+            "Getting your\nfirst quote ready…"
+        ]
+    }
+
+    private var setupProgress: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(draftRates.isEmpty ? "Preparing your first quote preview" : "Saving your starter rate card")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            ProgressView(value: setupProgressValue)
+                .progressViewStyle(.linear)
+                .tint(Color(.royalBlue600))
+        }
+        .padding(.bottom, 10)
     }
 
     /// Two of their own rates and one they didn't price, so the sample shows

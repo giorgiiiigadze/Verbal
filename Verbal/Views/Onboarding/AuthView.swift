@@ -17,6 +17,7 @@ struct AuthView: View {
     /// covering the screen for.
     @State private var isFinishing = false
     @State private var headlineIndex = 0
+    @State private var showAppleComingSoon = false
 
     var body: some View {
         ZStack {
@@ -66,6 +67,9 @@ struct AuthView: View {
                 googleButton
                     .disabled(isChoosingAccount)
 
+                appleButton
+                    .disabled(isChoosingAccount)
+
                 Spacer().frame(height: 8)
             }
             .padding(24)
@@ -76,6 +80,11 @@ struct AuthView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: isFinishing)
+        .alert("Apple sign-in coming soon", isPresented: $showAppleComingSoon) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Use Google for now.")
+        }
     }
 
     /// One promise, said four ways. Not a carousel of different claims — a
@@ -136,6 +145,31 @@ struct AuthView: View {
         .buttonStyle(.plain)
     }
 
+    private var appleButton: some View {
+        Button {
+            showAppleComingSoon = true
+        } label: {
+            ZStack {
+                Text("Continue with Apple")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white)
+                HStack {
+                    Image(systemName: "apple.logo")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(.white)
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(.horizontal, 22)
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .background(.black, in: Capsule())
+            .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Continue with Apple, coming soon")
+    }
+
     /// Full-screen overlay shown while signing in and setting up the account.
     /// Uses the brand mark rather than a spinner, so this reads as a
     /// continuation of the splash instead of a system wait.
@@ -181,4 +215,11 @@ struct AuthView: View {
             }
         }
     }
+}
+
+#Preview("Auth") {
+    let network = NetworkMonitor()
+    return AuthView()
+        .environment(SessionStore(network: network))
+        .environment(network)
 }

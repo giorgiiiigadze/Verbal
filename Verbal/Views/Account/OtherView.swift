@@ -18,6 +18,19 @@ struct OtherView: View {
 
     var body: some View {
         List {
+#if DEBUG
+            Section {
+                Button {
+                    showOnboardingAgain()
+                } label: {
+                    Label("Show onboarding again", systemImage: "arrow.counterclockwise")
+                }
+            } footer: {
+                Text("Debug only. Clears the local onboarding flag and signs out so the next screen is the first-run flow.")
+            }
+            .listRowBackground(Color(.cardSurface))
+#endif
+
             Section {
                 // Deletion is a round trip to the edge function followed by a
                 // sign-out. Left as a merely disabled button it reads as a tap
@@ -69,4 +82,19 @@ struct OtherView: View {
             }
         }
     }
+
+#if DEBUG
+    private func showOnboardingAgain() {
+        OnboardingMemory.erase()
+        OnboardingDraft.clear()
+        UserDefaults.standard.removeObject(forKey: "pendingTrade")
+        Task {
+            do {
+                try await session.signOut()
+            } catch {
+                toast = Toast(style: .error, message: "Couldn't sign out")
+            }
+        }
+    }
+#endif
 }
