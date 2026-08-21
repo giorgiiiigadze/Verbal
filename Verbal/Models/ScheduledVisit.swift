@@ -26,14 +26,41 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
     /// after a phone call and a form asks more than that.
     var title: String
     var date: Date
+    var address: String?
     /// Anything to remember on the way — a gate code, a measurement to take.
     var note: String?
+    var recordedQuoteId: UUID?
+    var didPromptForMissedVisit: Bool
 
-    init(id: UUID = UUID(), title: String, date: Date, note: String? = nil) {
+    private enum CodingKeys: String, CodingKey {
+        case id, title, date, address, note, recordedQuoteId, didPromptForMissedVisit
+    }
+
+    init(id: UUID = UUID(),
+         title: String,
+         date: Date,
+         address: String? = nil,
+         note: String? = nil,
+         recordedQuoteId: UUID? = nil,
+         didPromptForMissedVisit: Bool = false) {
         self.id = id
         self.title = title
         self.date = date
+        self.address = address
         self.note = note
+        self.recordedQuoteId = recordedQuoteId
+        self.didPromptForMissedVisit = didPromptForMissedVisit
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        title = try values.decode(String.self, forKey: .title)
+        date = try values.decode(Date.self, forKey: .date)
+        address = try values.decodeIfPresent(String.self, forKey: .address)
+        note = try values.decodeIfPresent(String.self, forKey: .note)
+        recordedQuoteId = try values.decodeIfPresent(UUID.self, forKey: .recordedQuoteId)
+        didPromptForMissedVisit = try values.decodeIfPresent(Bool.self, forKey: .didPromptForMissedVisit) ?? false
     }
 
     var isToday: Bool { Calendar.current.isDateInToday(date) }
@@ -68,17 +95,23 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
 
     private static let key = "scheduledVisits"
 
-    /// Everything still ahead, soonest first. Anything whose day has passed is
-    /// dropped on the way out and written back gone: a visit is a plan, and a
-    /// plan the day after is clutter, not history.
+    /// Everything still active, soonest first. Recorded visits stay through
+    /// their booked day. Missed visits stay until the user answers the one-time
+    /// follow-up prompt.
     static func load() -> [ScheduledVisit] {
         guard let data = UserDefaults.standard.data(forKey: key),
               let stored = try? JSONDecoder().decode([ScheduledVisit].self, from: data)
         else { return [] }
 
-        let today = Calendar.current.startOfDay(for: Date())
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
         let upcoming = stored
-            .filter { Calendar.current.startOfDay(for: $0.date) >= today }
+            .filter { visit in
+                if visit.recordedQuoteId != nil {
+                    return calendar.startOfDay(for: visit.date) >= today
+                }
+                return !visit.didPromptForMissedVisit
+            }
             .sorted { $0.date < $1.date }
 
         // Only rewrite when the prune actually removed something, so a plain

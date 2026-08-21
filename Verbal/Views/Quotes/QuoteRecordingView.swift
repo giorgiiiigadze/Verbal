@@ -64,12 +64,21 @@ struct QuoteRecordingView: View {
     @State private var savedTitle = ""
     @State private var savedClient = ""
 
+    private let scheduledVisit: ScheduledVisit?
+    private let onSavedQuote: ((UUID) -> Void)?
+
     private enum Field: Hashable { case title, transcript }
     /// Which field the keyboard belongs to, if any. Both fields are vertical,
     /// so Return makes a new line and can't put the keyboard away — the bottom
     /// bar does that instead, see `bottomBar`.
     @FocusState private var focus: Field?
 
+    init(scheduledVisit: ScheduledVisit? = nil, onSavedQuote: ((UUID) -> Void)? = nil) {
+        self.scheduledVisit = scheduledVisit
+        self.onSavedQuote = onSavedQuote
+        _title = State(initialValue: scheduledVisit?.title ?? "")
+        _clientName = State(initialValue: scheduledVisit?.title ?? "")
+    }
 
     private var hasText: Bool {
         !transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -437,7 +446,10 @@ struct QuoteRecordingView: View {
             // refresh this when the sheet closed, but closing doesn't wait for
             // the insert — so the count was read before the ledger had the
             // quote in it, and stayed one short for the rest of the session.
-            if id != nil { await session.refreshQuoteUsage() }
+            if let id {
+                await session.refreshQuoteUsage()
+                await MainActor.run { onSavedQuote?(id) }
+            }
             return id
         }
     }
@@ -541,14 +553,16 @@ struct QuoteRecordingView: View {
             // on Done while it is still in flight would otherwise save a second copy.
             if let id = await bankTask?.value {
                 await applyEdits(to: id)
+                onSavedQuote?(id)
                 dismiss()
                 return
             }
             // The bank didn't land, usually because the phone was offline. This
             // is the retry, and it keeps the old confirm-then-leave behaviour.
             do {
-                _ = try await QuoteService.save(generated, transcript: transcriptText, title: title,
-                                                currency: currency, clientName: clientName)
+                let id = try await QuoteService.save(generated, transcript: transcriptText, title: title,
+                                                     currency: currency, clientName: clientName)
+                onSavedQuote?(id)
                 toast = Toast(style: .success, message: "Quote saved")
                 try? await Task.sleep(for: .seconds(1.0))
                 dismiss()

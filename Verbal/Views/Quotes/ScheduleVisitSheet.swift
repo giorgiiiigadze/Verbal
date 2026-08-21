@@ -27,6 +27,7 @@ struct ScheduleVisitSheet: View {
     /// came from rather than always from the right.
     @State private var isAdvancing = true
     @State private var title = ""
+    @State private var address = ""
     @State private var note = ""
     @State private var date = ScheduleVisitSheet.defaultDate
     @State private var recent: [String] = []
@@ -181,6 +182,7 @@ struct ScheduleVisitSheet: View {
             if let editing {
                 title = editing.title
                 date = editing.date
+                address = editing.address ?? ""
                 note = editing.note ?? ""
             } else {
                 recent = (try? await QuoteService.customerNames()) ?? []
@@ -217,6 +219,26 @@ struct ScheduleVisitSheet: View {
                     )
 
                 if !suggestions.isEmpty { recentNames }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Address (optional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Street, town, or postcode", text: $address, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.body)
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1...2)
+                        .textInputAutocapitalization(.words)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(Color(.fieldFill),
+                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(Color(.separator), lineWidth: 0.5)
+                        )
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Description (optional)")
@@ -409,11 +431,15 @@ struct ScheduleVisitSheet: View {
 
     private func save() {
         guard !trimmedTitle.isEmpty else { return }
+        let cleanAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         onSave(ScheduledVisit(id: editing?.id ?? UUID(),
                               title: trimmedTitle,
                               date: date,
-                              note: cleanNote.isEmpty ? nil : cleanNote))
+                              address: cleanAddress.isEmpty ? nil : cleanAddress,
+                              note: cleanNote.isEmpty ? nil : cleanNote,
+                              recordedQuoteId: editing?.recordedQuoteId,
+                              didPromptForMissedVisit: editing?.didPromptForMissedVisit ?? false))
         dismiss()
     }
 }
