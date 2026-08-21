@@ -202,8 +202,13 @@ struct HomeView: View {
                     visits: visits,
                     statusColor: { visit in visitStatusColor(for: visit) },
                     statusLabel: { visit in visitStatusLabel(for: visit) },
+                    isRecorded: { visit in hasRecordedQuote(for: visit) },
                     onSelect: { selectedVisit = $0 },
-                    onAdd: { visitEditor = .new }
+                    onAdd: { visitEditor = .new },
+                    onRecord: { visit in beginRecording(for: visit) },
+                    onOpenQuote: { visit in openRecordedQuote(for: visit) },
+                    onReschedule: { visit in visitEditor = .existing(visit) },
+                    onDelete: { visit in visitToDelete = visit }
                 )
             }
             // Continue pushes once the sheet is gone, rather than sliding a
@@ -312,15 +317,15 @@ struct HomeView: View {
             } message: { quote in
                 Text("This creates a copy of “\(quote.displayTitle)” as a new draft.")
             }
-            .modifier(VisitDeleteConfirmation(visit: $visitToDelete, onDelete: remove))
-            .modifier(MissedVisitConfirmation(visit: $missedVisitPrompt,
-                                               onRecord: { visit in
-                markPromptedAndClear(visit)
-                beginRecording(for: visit)
-            },
-                                               onDidNotHappen: markPromptedAndClear))
             .toast($toast)
         }
+        .modifier(VisitDeleteConfirmation(visit: $visitToDelete, onDelete: remove))
+        .modifier(MissedVisitConfirmation(visit: $missedVisitPrompt,
+                                           onRecord: { visit in
+            markPromptedAndClear(visit)
+            beginRecording(for: visit)
+        },
+                                           onDidNotHappen: markPromptedAndClear))
         // Presented from outside the NavigationStack: attaching this sheet to
         // the content inside the stack (which also owns a minimizing
         // .searchable toolbar) corrupts the navigation bar after dismissal —
@@ -350,7 +355,7 @@ struct HomeView: View {
                 onCall: { toast = Toast(style: .error, message: "No phone number saved") },
                 onReschedule: { visitEditor = .existing(currentVisit) },
                 onCancel: { visitToDelete = currentVisit },
-                onDidNotHappen: { markPromptedAndClear(currentVisit) },
+                onDidNotHappen: { missedVisitPrompt = currentVisit },
                 onOpenQuote: { openRecordedQuote(for: currentVisit) }
             )
         }
@@ -564,6 +569,12 @@ struct HomeView: View {
                         visitEditor = .new
                     } label: {
                         Label("Book a visit", systemImage: "plus")
+                    }
+
+                    Button {
+                        showUpcomingVisits = true
+                    } label: {
+                        Label("Upcoming visits", systemImage: "calendar")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -1600,8 +1611,13 @@ private struct UpcomingVisitsListView: View {
     let visits: [ScheduledVisit]
     let statusColor: (ScheduledVisit) -> Color
     let statusLabel: (ScheduledVisit) -> String
+    let isRecorded: (ScheduledVisit) -> Bool
     let onSelect: (ScheduledVisit) -> Void
     let onAdd: () -> Void
+    let onRecord: (ScheduledVisit) -> Void
+    let onOpenQuote: (ScheduledVisit) -> Void
+    let onReschedule: (ScheduledVisit) -> Void
+    let onDelete: (ScheduledVisit) -> Void
 
     var body: some View {
         List {
@@ -1623,6 +1639,38 @@ private struct UpcomingVisitsListView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        if isRecorded(visit) {
+                            Button {
+                                onOpenQuote(visit)
+                            } label: {
+                                Label("Open quote", systemImage: "doc.text")
+                            }
+                            .tint(Color(.statusAcceptedText))
+                        } else {
+                            Button {
+                                onRecord(visit)
+                            } label: {
+                                Label("Record", systemImage: "mic.fill")
+                            }
+                            .tint(Color(.royalBlue300))
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button {
+                            onDelete(visit)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .tint(.red)
+
+                        Button {
+                            onReschedule(visit)
+                        } label: {
+                            Label("Reschedule", systemImage: "calendar")
+                        }
+                        .tint(Color(.statusMutedText))
+                    }
                 }
             }
         }
