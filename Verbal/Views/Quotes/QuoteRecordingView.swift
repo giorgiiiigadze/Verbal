@@ -76,7 +76,7 @@ struct QuoteRecordingView: View {
     init(scheduledVisit: ScheduledVisit? = nil, onSavedQuote: ((UUID) -> Void)? = nil) {
         self.scheduledVisit = scheduledVisit
         self.onSavedQuote = onSavedQuote
-        _title = State(initialValue: scheduledVisit?.title ?? "")
+        _title = State(initialValue: "")
         _clientName = State(initialValue: scheduledVisit?.title ?? "")
     }
 

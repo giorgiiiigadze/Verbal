@@ -672,7 +672,7 @@ struct HomeView: View {
     }
 
     private func visitStatusColor(for visit: ScheduledVisit) -> Color {
-        if hasRecordedQuote(for: visit) { return Color(.blueAccentText) }
+        if hasRecordedQuote(for: visit) { return Color(.statusAcceptedText) }
         if Date() >= visit.date.addingTimeInterval(2 * 60 * 60) { return Color(.statusDeclinedText) }
         return Color(.statusWarningText)
     }
@@ -1652,18 +1652,24 @@ private struct VisitActionSheet: View {
     }
 
     private var primaryButton: some View {
-        Button {
-            closeThen(onPrimary)
-        } label: {
-            Text(primaryTitle)
-                .font(.headline)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(Color(.royalBlue600),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        Group {
+            if case .future = action {
+                borderedBlueButton(primaryTitle, action: onPrimary)
+            } else {
+                Button {
+                    closeThen(onPrimary)
+                } label: {
+                    Text(primaryTitle)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Color(.royalBlue600),
+                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -1672,9 +1678,9 @@ private struct VisitActionSheet: View {
         case .future:
             secondaryButton("Call client", action: onCall)
             secondaryButton("Reschedule", action: onReschedule)
-            secondaryButton("Cancel", role: .destructive, action: onCancel)
+            borderedDestructiveButton("Cancel", action: onCancel)
         case .happeningNow:
-            secondaryButton("Directions", action: onDirections)
+            borderedBlueButton("Directions", action: onDirections)
             secondaryButton("Call client", action: onCall)
         case .passed:
             EmptyView()
@@ -1736,6 +1742,25 @@ private struct VisitActionSheet: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .strokeBorder(Color(.statusDeclinedText).opacity(0.18), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func borderedBlueButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button {
+            closeThen(action)
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color(.blueAccentText))
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(Color(.royalBlue25),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color(.blueAccentText).opacity(0.18), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
