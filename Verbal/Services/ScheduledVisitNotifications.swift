@@ -66,7 +66,7 @@ enum ScheduledVisitNotifications {
         guard notificationDate > Date() else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = visit.title
+        content.title = notificationTitle(for: visit)
         content.body = notificationBody(for: visit)
         content.sound = .default
         content.threadIdentifier = "scheduled-visits"
@@ -129,6 +129,12 @@ enum ScheduledVisitNotifications {
 
     nonisolated private static func identifier(for visit: ScheduledVisit) -> String {
         identifierPrefix + visit.id.uuidString
+    }
+
+    nonisolated private static func notificationTitle(for visit: ScheduledVisit) -> String {
+        let title = visit.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return "Your upcoming quote is waiting for you" }
+        return "\(title) is waiting for you"
     }
 
     nonisolated private static func notificationBody(for visit: ScheduledVisit) -> String {

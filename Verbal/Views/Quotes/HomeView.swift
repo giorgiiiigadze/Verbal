@@ -59,6 +59,8 @@ struct HomeView: View {
     @State private var visitEditor: VisitEditor?
     /// Held while the user confirms removing a booked visit.
     @State private var visitToDelete: ScheduledVisit?
+    /// True while the calendar sheet is showing the full upcoming schedule.
+    @State private var showUpcomingCalendar = false
     /// The upcoming list shows the next few and hides the rest, so a busy week
     /// doesn't push the quotes off the screen. Set once the user asks for them.
     @State private var showsAllVisits = false
@@ -324,6 +326,26 @@ struct HomeView: View {
             QuoteRecordingView()
                 .environment(session)
         }
+        .sheet(isPresented: $showUpcomingCalendar) {
+            UpcomingVisitsSheet(
+                visits: visits,
+                statusColor: visitStatusColor,
+                onAdd: {
+                    showUpcomingCalendar = false
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.35))
+                        visitEditor = .new
+                    }
+                },
+                onRecord: {
+                    showUpcomingCalendar = false
+                    Task {
+                        try? await Task.sleep(for: .seconds(0.35))
+                        showCreate = true
+                    }
+                }
+            )
+        }
         // Outside the stack for the same reason the recorder is: a sheet
         // attached inside it, alongside the minimizing `.searchable` toolbar,
         // leaves the navigation bar broken once it closes.
@@ -485,13 +507,7 @@ struct HomeView: View {
         if visits.isEmpty {
             upcomingEmpty
         } else {
-            ForEach(shownVisits) { visit in
-                visitRow(visit)
-            }
-
-            if visits.count > Self.visitPreviewCount {
-                moreVisitsButton
-            }
+            upcomingVisitsCard
         }
     }
 
@@ -532,6 +548,119 @@ struct HomeView: View {
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+    }
+
+    private var upcomingVisitsCard: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(visitGroups.enumerated()), id: \.element.day) { groupIndex, group in
+                if groupIndex > 0 { Divider().padding(.vertical, 4) }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(dayHeaderText(for: group.day))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                    .padding(.horizontal, 14)
+                    .padding(.top, groupIndex == 0 ? 12 : 6)
+
+                    ForEach(group.visits) { visit in
+                        compactVisitRow(visit, isNext: visit.id == shownVisits.first?.id)
+                    }
+                }
+            }
+
+            if visits.count > Self.visitPreviewCount {
+                Divider().padding(.top, 6)
+                Button {
+                    withAnimation(.snappy(duration: 0.22)) { showsAllVisits.toggle() }
+                } label: {
+                    Text(showsAllVisits
+                         ? "Show fewer"
+                         : "\(visits.count - Self.visitPreviewCount) more booked in")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Color(.blueAccentText))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.bottom, 8)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .onTapGesture { showUpcomingCalendar = true }
+        .accessibilityAddTraits(.isButton)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
+    }
+
+    private var visitGroups: [(day: Date, visits: [ScheduledVisit])] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: shownVisits) { calendar.startOfDay(for: $0.date) }
+        return grouped.keys.sorted().map { day in
+            (day: day, visits: grouped[day, default: []].sorted { $0.date < $1.date })
+        }
+    }
+
+    private func dayHeaderText(for day: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(day) { return "Today" }
+        if calendar.isDateInTomorrow(day) { return "Tomorrow" }
+
+        let weekday = day.formatted(.dateTime.weekday(.wide))
+        let monthDay = day.formatted(.dateTime.month(.abbreviated).day())
+        return "\(weekday), \(monthDay)"
+    }
+
+    private func compactVisitRow(_ visit: ScheduledVisit, isNext: Bool) -> some View {
+        let statusColor = visitStatusColor(for: visit)
+        let rowShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
+        return HStack(spacing: 10) {
+            Capsule()
+                .fill(statusColor)
+                .frame(width: 3, height: 24)
+
+            Text(visit.title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color(.mainText))
+                .lineLimit(1)
+
+            Spacer(minLength: 10)
+
+            Text(visit.date.formatted(date: .omitted, time: .shortened))
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(statusColor)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(isNext ? statusColor.opacity(0.08) : Color.clear, in: rowShape)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(visit.accessibilityText)
+        .padding(.horizontal, 8)
+    }
+
+    private func visitStatusColor(for visit: ScheduledVisit) -> Color {
+        if hasRecordedQuote(for: visit) { return Color(.blueAccentText) }
+        if visit.date < Date() { return Color(.statusDeclinedText) }
+        return Color(.statusWarningText)
+    }
+
+    private func hasRecordedQuote(for visit: ScheduledVisit) -> Bool {
+        let visitTitle = visit.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !visitTitle.isEmpty else { return false }
+        return quotes.contains { quote in
+            Calendar.current.isDate(quote.createdAt, inSameDayAs: visit.date)
+                && (quote.displayTitle.lowercased() == visitTitle
+                    || quote.clientName?.lowercased() == visitTitle)
+        }
     }
 
     /// One booked visit, drawn as the quote rows are drawn: the list has one
@@ -610,18 +739,6 @@ struct HomeView: View {
             }
             .tint(Color(.statusMutedText))
         }
-        .contextMenu {
-            Button {
-                visitEditor = .existing(visit)
-            } label: {
-                Label("Edit visit", systemImage: "pencil")
-            }
-            Button(role: .destructive) {
-                visitToDelete = visit
-            } label: {
-                Label("Delete visit", systemImage: "trash")
-            }
-        }
     }
 
     private var moreVisitsButton: some View {
@@ -660,6 +777,9 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .onTapGesture { showUpcomingCalendar = true }
+        .accessibilityAddTraits(.isButton)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
@@ -1322,6 +1442,143 @@ struct HomeView: View {
             // silence read as success.
             toast = Toast(style: .error, message: "Couldn't duplicate this quote")
         }
+    }
+}
+
+// MARK: - Upcoming Sheet
+
+private struct UpcomingVisitsSheet: View {
+    let visits: [ScheduledVisit]
+    let statusColor: (ScheduledVisit) -> Color
+    let onAdd: () -> Void
+    let onRecord: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var groupedVisits: [(day: Date, visits: [ScheduledVisit])] {
+        let calendar = Calendar.current
+        let grouped = Dictionary(grouping: visits) { calendar.startOfDay(for: $0.date) }
+        return grouped.keys.sorted().map { day in
+            (day: day, visits: grouped[day, default: []].sorted { $0.date < $1.date })
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if visits.isEmpty {
+                    emptyState
+                } else {
+                    visitsList
+                }
+            }
+            .background(Color(.homeBackground))
+            .navigationTitle("Upcoming quotes")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        dismiss()
+                        onAdd()
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Book a visit")
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationBackground(Color(.homeBackground))
+    }
+
+    private var visitsList: some View {
+        List {
+            ForEach(groupedVisits, id: \.day) { group in
+                Text(dayHeaderText(for: group.day))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 2, trailing: 20))
+
+                ForEach(group.visits) { visit in
+                    Button {
+                        dismiss()
+                        onRecord()
+                    } label: {
+                        sheetVisitRow(visit)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 18) {
+            Spacer(minLength: 0)
+            EmptyStateMessage(
+                icon: "calendar",
+                title: "Nothing booked in",
+                message: "Put upcoming visits here and open one when it is time to quote."
+            ) {
+                EmptyStatePill(title: "Book a visit", icon: "plus") {
+                    dismiss()
+                    onAdd()
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private func sheetVisitRow(_ visit: ScheduledVisit) -> some View {
+        let color = statusColor(visit)
+        return HStack(spacing: 10) {
+            Capsule()
+                .fill(color)
+                .frame(width: 3, height: 24)
+
+            Text(visit.title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color(.mainText))
+                .lineLimit(1)
+
+            Spacer(minLength: 10)
+
+            Text(visit.date.formatted(date: .omitted, time: .shortened))
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(color)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(visit.accessibilityText)
+    }
+
+    private func dayHeaderText(for day: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(day) { return "Today" }
+        if calendar.isDateInTomorrow(day) { return "Tomorrow" }
+
+        let weekday = day.formatted(.dateTime.weekday(.wide))
+        let monthDay = day.formatted(.dateTime.month(.abbreviated).day())
+        return "\(weekday), \(monthDay)"
     }
 }
 

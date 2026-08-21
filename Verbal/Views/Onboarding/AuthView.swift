@@ -64,10 +64,10 @@ struct AuthView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                googleButton
+                appleButton
                     .disabled(isChoosingAccount)
 
-                appleButton
+                googleButton
                     .disabled(isChoosingAccount)
 
                 Spacer().frame(height: 8)
