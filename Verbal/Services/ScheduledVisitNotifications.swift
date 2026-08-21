@@ -8,15 +8,62 @@
 import Foundation
 import UserNotifications
 
+enum ScheduledVisitReminderLeadTime: String, CaseIterable, Identifiable {
+    case atTime
+    case fifteenMinutes
+    case oneHour
+    case morningOf
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .atTime: return "At the visit time"
+        case .fifteenMinutes: return "15 minutes before"
+        case .oneHour: return "1 hour before"
+        case .morningOf: return "Morning of the visit"
+        }
+    }
+
+    func reminderDate(for visitDate: Date) -> Date {
+        let calendar = Calendar.current
+        switch self {
+        case .atTime:
+            return visitDate
+        case .fifteenMinutes:
+            return calendar.date(byAdding: .minute, value: -15, to: visitDate) ?? visitDate
+        case .oneHour:
+            return calendar.date(byAdding: .hour, value: -1, to: visitDate) ?? visitDate
+        case .morningOf:
+            return calendar.date(bySettingHour: 8, minute: 0, second: 0, of: visitDate) ?? visitDate
+        }
+    }
+}
+
 enum ScheduledVisitNotifications {
+    static let enabledKey = "scheduledVisitNotificationsEnabled"
+    static let leadTimeKey = "scheduledVisitNotificationLeadTime"
+
     nonisolated private static let identifierPrefix = "scheduled-visit-"
+
+    static var remindersEnabled: Bool {
+        UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
+    }
+
+    static var leadTime: ScheduledVisitReminderLeadTime {
+        let raw = UserDefaults.standard.string(forKey: leadTimeKey)
+        return raw.flatMap(ScheduledVisitReminderLeadTime.init(rawValue:)) ?? .atTime
+    }
 
     static func schedule(_ visit: ScheduledVisit) async {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [identifier(for: visit)])
 
-        guard visit.date > Date() else { return }
+        guard remindersEnabled, visit.date > Date() else { return }
         guard await notificationsAllowed(center: center) else { return }
+
+        let notificationDate = effectiveReminderDate(for: visit)
+        guard notificationDate > Date() else { return }
 
         let content = UNMutableNotificationContent()
         content.title = visit.title
@@ -25,12 +72,20 @@ enum ScheduledVisitNotifications {
         content.threadIdentifier = "scheduled-visits"
 
         let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute],
-                                                         from: visit.date)
+                                                         from: notificationDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         let request = UNNotificationRequest(identifier: identifier(for: visit),
                                             content: content,
                                             trigger: trigger)
         try? await center.add(request)
+    }
+
+    static func rescheduleAll(visits: [ScheduledVisit]) async {
+        cancelAll(visits: visits)
+        guard remindersEnabled else { return }
+        for visit in visits {
+            await schedule(visit)
+        }
     }
 
     static func cancel(_ visit: ScheduledVisit) {
@@ -42,6 +97,10 @@ enum ScheduledVisitNotifications {
         let identifiers = visits.map(identifier(for:))
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    static func authorizationStatus() async -> UNAuthorizationStatus {
+        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
     private static func notificationsAllowed(center: UNUserNotificationCenter) async -> Bool {
@@ -56,6 +115,16 @@ enum ScheduledVisitNotifications {
         @unknown default:
             return false
         }
+    }
+
+    private static func effectiveReminderDate(for visit: ScheduledVisit) -> Date {
+        let preferred = leadTime.reminderDate(for: visit.date)
+        // If the chosen lead time has already passed for a near-term visit, still
+        // remind at the visit time rather than scheduling nothing.
+        if preferred <= Date(), visit.date > Date() {
+            return visit.date
+        }
+        return preferred
     }
 
     nonisolated private static func identifier(for visit: ScheduledVisit) -> String {

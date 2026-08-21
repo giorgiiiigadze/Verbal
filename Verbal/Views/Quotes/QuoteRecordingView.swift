@@ -50,6 +50,7 @@ struct QuoteRecordingView: View {
     /// Currency for the quote being built — always the user's Settings default.
     /// Changing a quote's currency happens later, on the detail page.
     @State private var currency = AppCurrency.current.rawValue
+    @AppStorage(RecordingPreferences.hapticsEnabledKey) private var recordingHapticsEnabled = true
 
     /// Editable transcript — mirrors live transcription, editable by hand when stopped.
     @State private var transcriptText = ""
@@ -513,11 +514,11 @@ struct QuoteRecordingView: View {
         }
         // Resume from whatever is currently shown (incl. hand-edits).
         recorder.seed(transcriptText)
-        let recordingFeedback = UIImpactFeedbackGenerator(style: .medium)
-        recordingFeedback.prepare()
+        let recordingFeedback = recordingHapticsEnabled ? UIImpactFeedbackGenerator(style: .medium) : nil
+        recordingFeedback?.prepare()
         await recorder.start()
         if recorder.isRecording {
-            recordingFeedback.impactOccurred()
+            recordingFeedback?.impactOccurred()
         }
     }
 
