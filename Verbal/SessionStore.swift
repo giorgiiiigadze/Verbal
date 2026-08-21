@@ -528,6 +528,7 @@ final class SessionStore {
         UserDefaults.standard.removeObject(forKey: Self.avatarURLKey)
         // Booked visits are client names with dates on them. They belong to the
         // account, not the handset — the same leak the quote cache is wiped for.
+        ScheduledVisitNotifications.cancelAll(visits: ScheduledVisit.load())
         ScheduledVisit.clear()
         quotes = []
         rateCard = []

@@ -57,6 +57,8 @@ struct HomeView: View {
     @State private var visits: [ScheduledVisit] = []
     /// Non-nil while the booking sheet is up, carrying what it opened on.
     @State private var visitEditor: VisitEditor?
+    /// Held while the user confirms removing a booked visit.
+    @State private var visitToDelete: ScheduledVisit?
     /// The upcoming list shows the next few and hides the rest, so a busy week
     /// doesn't push the quotes off the screen. Set once the user asks for them.
     @State private var showsAllVisits = false
@@ -308,6 +310,7 @@ struct HomeView: View {
             } message: { quote in
                 Text("This creates a copy of “\(quote.displayTitle)” as a new draft.")
             }
+            .modifier(VisitDeleteConfirmation(visit: $visitToDelete, onDelete: remove))
             .toast($toast)
         }
         // Presented from outside the NavigationStack: attaching this sheet to
@@ -431,13 +434,6 @@ struct HomeView: View {
                                 Label("Delete", systemImage: "trash")
                             }
                             .tint(.red)
-
-                            Button {
-                                quoteToDuplicate = quote
-                            } label: {
-                                Label("Duplicate", systemImage: "plus.square.on.square")
-                            }
-                            .tint(Color(.statusMutedText))
 
                             Button {
                                 share(quote)
@@ -600,12 +596,10 @@ struct HomeView: View {
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            // No confirmation: a booking is a note to self, and putting it back
-            // costs one sentence.
             Button {
-                remove(visit)
+                visitToDelete = visit
             } label: {
-                Label("Remove", systemImage: "trash")
+                Label("Delete", systemImage: "trash")
             }
             .tint(.red)
 
@@ -623,9 +617,9 @@ struct HomeView: View {
                 Label("Edit visit", systemImage: "pencil")
             }
             Button(role: .destructive) {
-                remove(visit)
+                visitToDelete = visit
             } label: {
-                Label("Remove visit", systemImage: "trash")
+                Label("Delete visit", systemImage: "trash")
             }
         }
     }
@@ -683,6 +677,7 @@ struct HomeView: View {
             visits.sort { $0.date < $1.date }
         }
         ScheduledVisit.save(visits)
+        Task { await ScheduledVisitNotifications.schedule(visit) }
     }
 
     private func remove(_ visit: ScheduledVisit) {
@@ -691,6 +686,7 @@ struct HomeView: View {
             if visits.count <= Self.visitPreviewCount { showsAllVisits = false }
         }
         ScheduledVisit.save(visits)
+        ScheduledVisitNotifications.cancel(visit)
         toast = Toast(style: .success, message: "Visit removed")
     }
 
@@ -1325,6 +1321,28 @@ struct HomeView: View {
             // Leave the list unchanged if the copy failed, but say so — the
             // silence read as success.
             toast = Toast(style: .error, message: "Couldn't duplicate this quote")
+        }
+    }
+}
+
+// MARK: - Visit Deletion
+
+private struct VisitDeleteConfirmation: ViewModifier {
+    @Binding var visit: ScheduledVisit?
+    let onDelete: (ScheduledVisit) -> Void
+
+    func body(content: Content) -> some View {
+        content.alert("Delete upcoming quote?", isPresented: Binding(
+            get: { visit != nil },
+            set: { if !$0 { visit = nil } }
+        ), presenting: visit) { visit in
+            Button("Delete", role: .destructive) {
+                onDelete(visit)
+                self.visit = nil
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { visit in
+            Text("This removes “\(visit.title)” from Upcoming. This can't be undone.")
         }
     }
 }

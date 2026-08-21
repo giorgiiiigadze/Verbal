@@ -20,7 +20,7 @@ enum QuoteStatusStyle {
         // a warning, and spending the app's one warm colour on it left nothing
         // to say when something actually is wrong.
         case "draft": return Color(.statusMutedText)
-        case "viewed": return Color(.statusSentText)
+        case "viewed": return .white
         case "accepted": return Color(.statusAcceptedText)
         case "declined": return Color(.statusDeclinedText)
         case "expired": return Color(.statusMutedText)
@@ -32,12 +32,10 @@ enum QuoteStatusStyle {
     static func fill(_ status: String) -> Color {
         switch status {
         case "draft": return Color(.statusMutedFill)
-        // A tint like the rest of them, where it used to be solid navy. Being
-        // read is news, but it is news about something the customer did and
-        // nothing the user can act on — and set as the loudest thing on the
-        // screen it outshouted the quotes that actually wanted a decision. The
-        // eye glyph on the pill is what still tells it apart from "Sent".
-        case "viewed": return Color(.statusSentFill)
+        // Dark blue, separate from Sent. Viewed is the moment the customer has
+        // actually opened the quote, and it needs to be distinguishable at a
+        // glance without relying only on the eye glyph.
+        case "viewed": return Color(.blueAccentText)
         case "accepted": return Color(.statusAcceptedFill)
         case "declined": return Color(.statusDeclinedFill)
         case "expired": return Color(.statusMutedFill)

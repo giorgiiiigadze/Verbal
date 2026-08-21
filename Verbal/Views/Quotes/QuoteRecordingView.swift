@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct QuoteRecordingView: View {
     @Environment(\.dismiss) private var dismiss
@@ -167,10 +168,6 @@ struct QuoteRecordingView: View {
                         .padding(.bottom, 8)
                 }
                 .toast($toast)
-                // Record button: firm press-down feel on start, gentle release on stop.
-                .sensoryFeedback(trigger: recorder.isRecording) { _, isRecording in
-                    isRecording ? .impact(weight: .medium) : .impact(weight: .light)
-                }
                 // The magic moment — the spoken job became a quote.
                 .sensoryFeedback(.success, trigger: generated != nil) { wasGenerated, isGenerated in
                     !wasGenerated && isGenerated
@@ -516,7 +513,12 @@ struct QuoteRecordingView: View {
         }
         // Resume from whatever is currently shown (incl. hand-edits).
         recorder.seed(transcriptText)
+        let recordingFeedback = UIImpactFeedbackGenerator(style: .medium)
+        recordingFeedback.prepare()
         await recorder.start()
+        if recorder.isRecording {
+            recordingFeedback.impactOccurred()
+        }
     }
 
     /// Removes the trailing word (plus its separating whitespace) — powers word-by-word undo.
