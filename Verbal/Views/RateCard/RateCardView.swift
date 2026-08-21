@@ -33,8 +33,6 @@ struct RateCardView: View {
     /// about the feature once more, which is the harmless way to be wrong.
     @AppStorage("hasSavedRates") private var hasSavedRates = false
     @State private var showCandidates = false
-    /// Drives the footer search field. Empty is the whole card.
-    @State private var searchText = ""
 
     /// Prices spoken into recent quotes that aren't saved here yet. Read from
     /// the session rather than held here: preloaded with the lists so the offer
@@ -71,6 +69,16 @@ struct RateCardView: View {
         // means it is there in every state, including the two empty ones where
         // a collapsing title has nothing to collapse against.
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showAdd = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("Add rate")
+            }
+        }
         // Pushed onto Home's stack, so it inherits Home's tab bar. Hidden here:
         // this is a screen you went into to do one thing, not one of the app's
         // standing places, and leaving the bar under it invites a sideways jump
@@ -136,20 +144,11 @@ struct RateCardView: View {
 
     private var list: some View {
         List {
-            // Only when nothing is being searched: the "ready to add" card is a
-            // prompt about the whole card, not a search result.
-            if !candidates.isEmpty, searchText.isEmpty {
+            if !candidates.isEmpty {
                 readyToAddCard
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 18, trailing: 20))
-            }
-
-            if groups.isEmpty {
-                noMatchesRow
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 24, leading: 20, bottom: 0, trailing: 20))
             }
 
             ForEach(groups, id: \.label) { group in
@@ -171,90 +170,6 @@ struct RateCardView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        // Search and creation live at the bottom, like Notes: the list scrolls
-        // under them and the keyboard lifts the search field when tapped.
-        .safeAreaInset(edge: .bottom) { footer }
-    }
-
-    /// Search and creation, low on the screen where the thumb reaches them
-    /// without moving. The separate create button follows Notes' compose control
-    /// instead of competing with the navigation title.
-    private var footer: some View {
-        HStack(spacing: 12) {
-            searchField
-
-            Button {
-                showAdd = true
-            } label: {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Color(.mainText))
-                    .frame(width: 58, height: 50)
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: Capsule())
-            .accessibilityLabel("New rate")
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
-        .padding(.bottom, 6)
-        // A blur behind the whole footer, so the rows that scroll under it read
-        // as being behind frosted glass rather than colliding with the buttons.
-        // Faded in from the top rather than a hard bar edge: the material is
-        // masked to nothing where the footer meets the list and to full over
-        // the controls, so the list dissolves into the blur instead of hitting
-        // a line. Extended past the safe area so the frost runs to the very
-        // bottom of the screen, under the home indicator.
-        .background {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                // Held below full strength: over a near-white page even the
-                // thinnest material frosts to almost solid, and the footer read
-                // as a white slab. At partial opacity the real rows bleed
-                // through, so it's a haze the list shows through rather than a
-                // sheet laid over it.
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black.opacity(0.55), location: 0.5),
-                            .init(color: .black.opacity(0.55), location: 1),
-                        ],
-                        startPoint: .top, endPoint: .bottom)
-                )
-                .ignoresSafeArea(edges: .bottom)
-        }
-    }
-
-    /// A search field on the same glass. Its own field rather than `.searchable`
-    /// because the system puts that at the top of the screen, and the footer is
-    /// where the thumb already is.
-    private var searchField: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-            TextField("Search rates", text: $searchText)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .foregroundStyle(Color(.mainText))
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .font(.callout)
-        .padding(.horizontal, 18)
-        .frame(height: 50)
-        .glassEffect(in: .capsule)
     }
 
     // MARK: - Grouping
@@ -267,15 +182,10 @@ struct RateCardView: View {
         typeLabels[type] ?? type.capitalized
     }
 
-    /// Rates by type, after the footer search, in the order the add form offers
-    /// them. Anything unrecognised sorts last so a rate can't go missing.
+    /// Rates by type, in the order the add form offers them. Anything
+    /// unrecognised sorts last so a rate can't go missing.
     private var groups: [(label: String, items: [RateCardItem])] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let matched = query.isEmpty ? items : items.filter { item in
-            item.name.lowercased().contains(query)
-                || (item.unit?.lowercased().contains(query) ?? false)
-        }
-        let byType = Dictionary(grouping: matched, by: \.type)
+        let byType = Dictionary(grouping: items, by: \.type)
         // Bare labels. The count went when Home's did — it counts what is
         // directly beneath it, which the eye does faster than it reads.
         let known = Self.typeOrder.compactMap { type in
@@ -285,16 +195,6 @@ struct RateCardView: View {
             (Self.label(for: type), byType[type] ?? [])
         }
         return known + rest
-    }
-
-    /// Shown when the search matches nothing. Items are non-empty here — the
-    /// truly empty card is caught before `list` — so this only ever means the
-    /// query, never an empty rate card.
-    private var noMatchesRow: some View {
-        Text("No rates match “\(searchText)”.")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     // MARK: - Rows

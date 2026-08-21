@@ -585,14 +585,19 @@ struct HomeView: View {
 
                     ForEach(group.visits) { visit in
                         compactVisitRow(visit, isNext: visit.id == shownVisits.first?.id)
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity.combined(with: .move(edge: .top))
+                            ))
                     }
                 }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             if visits.count > Self.visitPreviewCount {
                 Divider().padding(.top, 6)
                 Button {
-                    withAnimation(.snappy(duration: 0.22)) { showsAllVisits.toggle() }
+                    withAnimation(Self.visitExpansionAnimation) { showsAllVisits.toggle() }
                 } label: {
                     Text(showsAllVisits
                          ? "Show fewer"
@@ -615,6 +620,7 @@ struct HomeView: View {
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
+        .animation(Self.visitExpansionAnimation, value: showsAllVisits)
     }
 
     private var visitGroups: [(day: Date, visits: [ScheduledVisit])] {
@@ -1173,6 +1179,10 @@ struct HomeView: View {
     /// Arriving does get a little. A quote that has just been spoken into
     /// existence is the one thing on this screen worth a spring.
     private static let rowInsert = Animation.snappy(duration: 0.35)
+
+    /// The upcoming card grows inside another list row. A softer spring lets the
+    /// added visits settle without making the card feel like it jumped taller.
+    private static let visitExpansionAnimation = Animation.spring(response: 0.42, dampingFraction: 0.86)
 
     /// The row the list scrolls back to when a quote arrives.
     private static let topAnchor = "top"
