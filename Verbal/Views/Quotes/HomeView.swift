@@ -177,6 +177,7 @@ struct HomeView: View {
                         withAnimation(Self.rowRemoval) {
                             quotes.removeAll { $0.id == quote.id }
                         }
+                        unlinkVisits(fromDeletedQuote: quote.id)
                         // Delay so the toast animates in on the now-visible
                         // Home, after the detail view's pop finishes (setting it
                         // mid-dismiss shows it off-screen and it's effectively
@@ -205,7 +206,6 @@ struct HomeView: View {
                     isRecorded: { visit in hasRecordedQuote(for: visit) },
                     onSelect: { selectedVisit = $0 },
                     onAdd: { visitEditor = .new },
-                    onRecord: { visit in beginRecording(for: visit) },
                     onOpenQuote: { visit in openRecordedQuote(for: visit) },
                     onReschedule: { visit in visitEditor = .existing(visit) },
                     onDelete: { visit in visitToDelete = visit }
@@ -621,7 +621,9 @@ struct HomeView: View {
             }
 
             if visits.count > Self.visitPreviewCount {
-                Divider().padding(.top, 6)
+                Divider()
+                    .padding(.horizontal, 14)
+                    .padding(.top, 6)
                 Button {
                     showUpcomingVisits = true
                 } label: {
@@ -685,7 +687,9 @@ struct HomeView: View {
     }
 
     private func hasRecordedQuote(for visit: ScheduledVisit) -> Bool {
-        if visit.recordedQuoteId != nil { return true }
+        if let id = visit.recordedQuoteId {
+            return quotes.contains { $0.id == id } || session.quotes.contains { $0.id == id }
+        }
         let visitTitle = visit.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !visitTitle.isEmpty else { return false }
         return quotes.contains { quote in
@@ -883,6 +887,27 @@ struct HomeView: View {
         ScheduledVisit.save(visits)
         ScheduledVisitNotifications.cancel(visits[index])
         Task { await load() }
+    }
+
+    private func unlinkVisits(fromDeletedQuote quoteId: UUID) {
+        let linkedIndices = visits.indices.filter { visits[$0].recordedQuoteId == quoteId }
+        guard !linkedIndices.isEmpty else { return }
+        let visitsToReschedule = linkedIndices.map { visits[$0] }
+
+        withAnimation(Self.rowRemoval) {
+            for index in linkedIndices {
+                visits[index].recordedQuoteId = nil
+            }
+        }
+        ScheduledVisit.save(visits)
+
+        Task {
+            for visit in visitsToReschedule {
+                var unlinkedVisit = visit
+                unlinkedVisit.recordedQuoteId = nil
+                await ScheduledVisitNotifications.schedule(unlinkedVisit)
+            }
+        }
     }
 
     private func markPromptedAndClear(_ visit: ScheduledVisit) {
@@ -1462,6 +1487,7 @@ struct HomeView: View {
             // Also drop it from the shared list, so the Clients tab (drawn from
             // it) loses the quote too, not just this screen's own copy.
             session.removeQuote(id: quote.id)
+            unlinkVisits(fromDeletedQuote: quote.id)
             // Every other mutation here animates; a row that simply blinks out
             // makes the list look like it lost its place rather than obeyed.
             withAnimation(Self.rowRemoval) { quotes.removeAll { $0.id == quote.id } }
@@ -1614,7 +1640,6 @@ private struct UpcomingVisitsListView: View {
     let isRecorded: (ScheduledVisit) -> Bool
     let onSelect: (ScheduledVisit) -> Void
     let onAdd: () -> Void
-    let onRecord: (ScheduledVisit) -> Void
     let onOpenQuote: (ScheduledVisit) -> Void
     let onReschedule: (ScheduledVisit) -> Void
     let onDelete: (ScheduledVisit) -> Void
@@ -1647,13 +1672,6 @@ private struct UpcomingVisitsListView: View {
                                 Label("Open quote", systemImage: "doc.text")
                             }
                             .tint(Color(.statusAcceptedText))
-                        } else {
-                            Button {
-                                onRecord(visit)
-                            } label: {
-                                Label("Record", systemImage: "mic.fill")
-                            }
-                            .tint(Color(.royalBlue300))
                         }
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {

@@ -257,7 +257,10 @@ struct QuoteRecordingView: View {
                             // to the title or client with it.
                             if let pending = bankTask {
                                 Task {
-                                    if let id = await pending.value { await applyEdits(to: id) }
+                                    if let id = await pending.value {
+                                        await applyEdits(to: id)
+                                        await MainActor.run { onSavedQuote?(id) }
+                                    }
                                 }
                             }
                             dismiss()
@@ -446,9 +449,8 @@ struct QuoteRecordingView: View {
             // refresh this when the sheet closed, but closing doesn't wait for
             // the insert — so the count was read before the ledger had the
             // quote in it, and stayed one short for the rest of the session.
-            if let id {
+            if id != nil {
                 await session.refreshQuoteUsage()
-                await MainActor.run { onSavedQuote?(id) }
             }
             return id
         }
