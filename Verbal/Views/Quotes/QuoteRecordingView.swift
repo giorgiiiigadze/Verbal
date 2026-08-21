@@ -303,7 +303,12 @@ struct QuoteRecordingView: View {
                                 discardDraft()
                                 dismiss()
                             } label: {
-                                Label("Discard recording", systemImage: "trash")
+                                Label {
+                                    Text("Discard recording")
+                                } icon: {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(.red)
+                                }
                             }
                         } label: {
                             Image(systemName: "ellipsis")

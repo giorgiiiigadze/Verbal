@@ -839,7 +839,12 @@ struct QuoteDetailView: View {
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
-                        Label("Delete quote", systemImage: "trash")
+                        Label {
+                            Text("Delete quote")
+                        } icon: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(.red)
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis")

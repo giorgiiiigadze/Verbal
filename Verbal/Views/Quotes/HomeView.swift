@@ -987,7 +987,12 @@ struct HomeView: View {
         Button(role: .destructive) {
             quoteToDelete = quote
         } label: {
-            Label("Delete", systemImage: "trash")
+            Label {
+                Text("Delete")
+            } icon: {
+                Image(systemName: "trash")
+                    .foregroundStyle(.red)
+            }
         }
     }
 
