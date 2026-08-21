@@ -72,7 +72,7 @@ struct ContentView: View {
                         offlineBannerDismissed = true
                     }
                 }
-                .padding(.top, 28)
+                .padding(.top, 50)
                 .transition(.asymmetric(
                     insertion: .move(edge: .top).combined(with: .opacity),
                     removal: .scale(scale: 0.96)

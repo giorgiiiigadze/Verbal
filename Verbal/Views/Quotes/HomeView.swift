@@ -317,8 +317,8 @@ struct HomeView: View {
             } message: { quote in
                 Text("This creates a copy of “\(quote.displayTitle)” as a new draft.")
             }
-            .toast($toast)
         }
+        .toast($toast)
         .modifier(VisitDeleteConfirmation(visit: $visitToDelete, onDelete: remove))
         .modifier(MissedVisitConfirmation(visit: $missedVisitPrompt,
                                            onRecord: { visit in
