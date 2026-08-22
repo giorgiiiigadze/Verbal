@@ -1160,18 +1160,79 @@ struct HomeView: View {
     /// in, and what followed that was a blank page — which reads as an app that
     /// broke rather than one that is loading.
     private var loadingState: some View {
-        VStack(spacing: 10) {
-            ForEach(Array(Self.skeletonWidths.enumerated()), id: \.offset) { _, width in
-                QuoteRowSkeleton(titleWidth: width)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                skeletonBar(width: 178, height: 34)
+                    .padding(.top, 4)
+                    .padding(.bottom, 10)
+
+                skeletonSectionHeader(width: 82)
+
+                upcomingCardSkeleton
+                    .padding(.bottom, 8)
+
+                skeletonSectionHeader(width: 96)
+                    .padding(.top, 2)
+
+                ForEach(Array(Self.skeletonWidths.enumerated()), id: \.offset) { _, width in
+                    QuoteRowSkeleton(titleWidth: width)
+                }
             }
-            Spacer(minLength: 0)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 88)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
         // One sweep travelling across the whole stack, not four in step.
         .shimmer(active: true)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading your quotes")
+    }
+
+    private var upcomingCardSkeleton: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            skeletonBar(width: 74, height: 10)
+                .padding(.top, 2)
+
+            VStack(spacing: 10) {
+                upcomingVisitSkeleton(titleWidth: 166, detailWidth: 112)
+
+                Divider()
+
+                upcomingVisitSkeleton(titleWidth: 132, detailWidth: 148)
+            }
+        }
+        .padding(14)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
+    }
+
+    private func upcomingVisitSkeleton(titleWidth: CGFloat, detailWidth: CGFloat) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                skeletonBar(width: titleWidth, height: 14)
+                skeletonBar(width: detailWidth, height: 11)
+            }
+
+            Spacer(minLength: 0)
+
+            skeletonBar(width: 54, height: 20)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func skeletonSectionHeader(width: CGFloat) -> some View {
+        skeletonBar(width: width, height: 14)
+            .padding(.vertical, 6)
+    }
+
+    private func skeletonBar(width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+            .fill(Color(.separator))
+            .frame(width: width, height: height)
     }
 
     /// Varied so the placeholders read as quotes rather than as a repeated tile.

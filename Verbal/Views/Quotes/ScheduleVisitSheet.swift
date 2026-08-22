@@ -54,13 +54,18 @@ struct ScheduleVisitSheet: View {
         }
     }
 
-    /// Tomorrow morning. A visit booked on the phone is nearly always "in the
-    /// next few days", and a picker that opens on this minute makes the user
-    /// scroll past today every time.
+    /// Tomorrow at the current time. A visit booked on the phone is nearly
+    /// always "in the next few days", while the time wheel should begin where
+    /// the user already is instead of forcing them back to a fixed morning slot.
     private static var defaultDate: Date {
         let calendar = Calendar.current
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
+        let now = Date()
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now
+        let time = calendar.dateComponents([.hour, .minute], from: now)
+        return calendar.date(bySettingHour: time.hour ?? 9,
+                             minute: time.minute ?? 0,
+                             second: 0,
+                             of: tomorrow) ?? tomorrow
     }
 
     private var trimmedTitle: String {
@@ -198,7 +203,7 @@ struct ScheduleVisitSheet: View {
     /// Name and description. Both belong to the same question — what is this
     /// visit — so they are asked together and nothing else is on the screen.
     private var detailsStep: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
                 TextField("Who's it for? (e.g. Mrs. Patel — bathroom)", text: $title)
                     .textFieldStyle(.plain)
