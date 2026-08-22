@@ -46,6 +46,16 @@ struct BusinessDetailsView: View {
          loaded.email ?? "", loaded.address ?? "", loaded.taxNumber ?? ""]
     }
 
+    private var accountName: String {
+        if let name = session.profile?.fullName?.trimmedOrNil { return name }
+        if let username = session.profile?.username?.trimmedOrNil { return username }
+        return "Your profile"
+    }
+
+    private var accountEmail: String? {
+        session.email?.trimmedOrNil
+    }
+
     var body: some View {
         ZStack {
             Color(.homeBackground)
@@ -53,6 +63,8 @@ struct BusinessDetailsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
+                    accountProfile
+
                     Text("These details appear on every quote you send and help Verbal understand your work.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -163,6 +175,37 @@ struct BusinessDetailsView: View {
         }
         .toast($toast)
         .task { await load() }
+    }
+
+    private var accountProfile: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AvatarView(image: session.avatarImage,
+                       urlString: session.profile?.avatarUrl,
+                       size: 64)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(accountName)
+                    .font(.robotoSlab(22, relativeTo: .title3))
+                    .foregroundStyle(Color(.mainText))
+                    .lineLimit(1)
+
+                if let accountEmail {
+                    Text(accountEmail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        }
     }
 
     private func field(

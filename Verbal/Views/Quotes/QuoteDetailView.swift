@@ -415,6 +415,11 @@ struct QuoteDetailView: View {
         Task {
             do {
                 try await QuoteService.updateValidityDate(id: quote.id, date: newDate)
+                await QuoteExpiryNotifications.schedule(id: quote.id,
+                                                        title: displayTitle,
+                                                        status: status,
+                                                        validityDate: newDate)
+                onNeedsRefresh()
             } catch {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     validityDate = previousDate
@@ -439,6 +444,14 @@ struct QuoteDetailView: View {
         Task {
             do {
                 try await QuoteService.updateStatus(id: quote.id, status: newStatus)
+                if newStatus == "sent" || newStatus == "viewed" {
+                    await QuoteExpiryNotifications.schedule(id: quote.id,
+                                                            title: displayTitle,
+                                                            status: newStatus,
+                                                            validityDate: validityDate)
+                } else {
+                    QuoteExpiryNotifications.cancel(quote)
+                }
             } catch {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     status = previous
@@ -873,6 +886,7 @@ struct QuoteDetailView: View {
                         return
                     }
 
+                    QuoteExpiryNotifications.cancel(quote)
                     // Drop it from the shared list too, so the Clients tab — which
                     // is drawn from it — loses the quote and the client if it was
                     // their last. `onDeleted` only tells the screen we came from.

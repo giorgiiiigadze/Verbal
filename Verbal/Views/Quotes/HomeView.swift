@@ -457,29 +457,6 @@ struct HomeView: View {
                             Task { await session.prefetchLineItems(for: quote.id) }
                         }
                         .contextMenu { quoteMenu(for: quote) }
-                        // The two moves the list is actually read for: chase the
-                        // ones that have gone quiet, tick off the ones that came
-                        // back yes. Both were buried in a long-press menu, which
-                        // is where features go to be forgotten.
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            // "Nudge" is the share panel again — sending the
-                            // quote a second time is what a nudge is here, and
-                            // inventing a separate reminder would be a feature,
-                            // not a swipe.
-                            Button {
-                                share(quote)
-                            } label: {
-                                Label("Nudge", systemImage: "bell.fill")
-                            }
-                            .tint(Color(.royalBlue300))
-
-                            Button {
-                                Task { await changeStatus(quote, to: "accepted") }
-                            } label: {
-                                Label("Accepted", systemImage: "checkmark.circle.fill")
-                            }
-                            .tint(Color(.statusAcceptedText))
-                        }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             // No .destructive role: it would animate the row out
                             // on tap, before the confirmation alert is answered.
@@ -1427,6 +1404,7 @@ struct HomeView: View {
             quotes = fresh
             loadFailed = false
             promptForMissedVisitIfNeeded()
+            Task { await QuoteExpiryNotifications.rescheduleAll(quotes: quotes) }
             return
         }
         for updated in fresh {
@@ -1463,6 +1441,7 @@ struct HomeView: View {
             // drawn from it — shows a just-made quote (and its client) without
             // waiting for the next launch.
             session.setQuotes(quotes)
+            await QuoteExpiryNotifications.rescheduleAll(quotes: quotes)
         } catch {
             // A load that was cancelled did not fail. `.task` is cancelled the
             // moment this view goes away — tapping a quote, switching tab,
@@ -1508,6 +1487,7 @@ struct HomeView: View {
     private func delete(_ quote: QuoteSummary) async {
         do {
             try await QuoteService.deleteQuote(id: quote.id)
+            QuoteExpiryNotifications.cancel(quote)
             // Also drop it from the shared list, so the Clients tab (drawn from
             // it) loses the quote too, not just this screen's own copy.
             session.removeQuote(id: quote.id)
@@ -1587,6 +1567,14 @@ struct HomeView: View {
         withAnimation { quotes[index].status = newStatus }
         do {
             try await QuoteService.updateStatus(id: quote.id, status: newStatus)
+            if newStatus == "sent" || newStatus == "viewed" {
+                await QuoteExpiryNotifications.schedule(id: quote.id,
+                                                        title: quote.displayTitle,
+                                                        status: newStatus,
+                                                        validityDate: quote.validityDate)
+            } else {
+                QuoteExpiryNotifications.cancel(quote)
+            }
             // The user just won the job — make it land physically.
             if newStatus == "accepted" {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)

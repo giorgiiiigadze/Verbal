@@ -95,6 +95,11 @@ struct AccountView: View {
                 } label: {
                     header
                 }
+                NavigationLink {
+                    OtherView()
+                } label: {
+                    Label("Other", systemImage: "ellipsis.circle")
+                }
             } footer: {
                 Text("Your business name, number and address as a client sees them, and the trade Verbal reads your jobs against.")
             }
@@ -160,11 +165,6 @@ struct AccountView: View {
                     AboutView()
                 } label: {
                     Label("About", systemImage: "info.circle")
-                }
-                NavigationLink {
-                    OtherView()
-                } label: {
-                    Label("Other", systemImage: "ellipsis.circle")
                 }
             }
             .listRowBackground(Color(.cardSurface))

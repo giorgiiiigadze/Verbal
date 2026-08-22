@@ -121,22 +121,21 @@ struct ScheduleVisitSheet: View {
                         .accessibilityLabel("Back")
                     }
                 }
+
+                if editing != nil, onDelete != nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(role: .destructive) {
+                            confirmingRemoval = true
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .tint(Color(.statusDeclinedText))
+                        .accessibilityLabel("Remove visit")
+                    }
+                }
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
-                    // Directly above the button that ends the step, where the
-                    // thumb already is. In the scrolling content it sat below
-                    // the description as a third thing to read; down here the
-                    // two ways out of the sheet are side by side, and which one
-                    // is which is obvious from the colour.
-                    //
-                    // Only on the first step. The visit is identified there —
-                    // and stacking it under a month grid would spend the room
-                    // that grid needs.
-                    if step == .details, let editing, let onDelete {
-                        removeButton(editing, onDelete: onDelete)
-                    }
-
                     // A form being committed, so the flat 16pt rectangle rather
                     // than a capsule — same shape as the client and rate sheets.
                     Button(action: primaryAction) {
@@ -286,42 +285,6 @@ struct ScheduleVisitSheet: View {
             .padding(.bottom, 12)
         }
         .scrollBounceBehavior(.basedOnSize)
-    }
-
-    /// Removing the visit, drawn as a control rather than as a line of red type.
-    ///
-    /// It was a bare red `Text` under the description field, which read as part
-    /// of the form — the eye ran down field, field, red words, and the words
-    /// were the only thing on the sheet that did something when touched without
-    /// looking like it could be. So it gets a shape, and a hairline the same
-    /// weight the name field above it has.
-    ///
-    /// The colours are the app's own declined pair rather than system red: that
-    /// one is tuned for iOS controls and shouts over a warm off-white sheet.
-    /// Muted ink on a muted ground still reads as the one destructive thing
-    /// here, without competing with the blue button that ends the flow.
-    private func removeButton(_ visit: ScheduledVisit,
-                              onDelete: @escaping (ScheduledVisit) -> Void) -> some View {
-        Button {
-            confirmingRemoval = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "trash")
-                    .font(.footnote.weight(.semibold))
-                Text("Remove visit")
-                    .font(.subheadline.weight(.medium))
-            }
-            .foregroundStyle(Color(.statusDeclinedText))
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .background(Color(.statusDeclinedFill),
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color(.statusDeclinedText).opacity(0.18), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
     }
 
     /// A whole month, because "which day" is a question about where a date sits
