@@ -26,6 +26,7 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
     /// after a phone call and a form asks more than that.
     var title: String
     var date: Date
+    var phone: String?
     var address: String?
     /// Anything to remember on the way — a gate code, a measurement to take.
     var note: String?
@@ -33,12 +34,13 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
     var didPromptForMissedVisit: Bool
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, date, address, note, recordedQuoteId, didPromptForMissedVisit
+        case id, title, date, phone, address, note, recordedQuoteId, didPromptForMissedVisit
     }
 
     init(id: UUID = UUID(),
          title: String,
          date: Date,
+         phone: String? = nil,
          address: String? = nil,
          note: String? = nil,
          recordedQuoteId: UUID? = nil,
@@ -46,6 +48,7 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
         self.id = id
         self.title = title
         self.date = date
+        self.phone = phone
         self.address = address
         self.note = note
         self.recordedQuoteId = recordedQuoteId
@@ -57,6 +60,7 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
         id = try values.decode(UUID.self, forKey: .id)
         title = try values.decode(String.self, forKey: .title)
         date = try values.decode(Date.self, forKey: .date)
+        phone = try values.decodeIfPresent(String.self, forKey: .phone)
         address = try values.decodeIfPresent(String.self, forKey: .address)
         note = try values.decodeIfPresent(String.self, forKey: .note)
         recordedQuoteId = try values.decodeIfPresent(UUID.self, forKey: .recordedQuoteId)

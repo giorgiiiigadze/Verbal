@@ -352,7 +352,7 @@ struct HomeView: View {
                 action: visitAction(for: currentVisit),
                 onPrimary: { performPrimaryVisitAction(currentVisit) },
                 onDirections: { openDirections(for: currentVisit) },
-                onCall: { toast = Toast(style: .error, message: "No phone number saved") },
+                onCall: { callClient(for: currentVisit) },
                 onReschedule: { visitEditor = .existing(currentVisit) },
                 onCancel: { visitToDelete = currentVisit },
                 onDidNotHappen: { missedVisitPrompt = currentVisit },
@@ -621,9 +621,6 @@ struct HomeView: View {
             }
 
             if visits.count > Self.visitPreviewCount {
-                Divider()
-                    .padding(.horizontal, 14)
-                    .padding(.top, 6)
                 Button {
                     showUpcomingVisits = true
                 } label: {
@@ -823,6 +820,10 @@ struct HomeView: View {
         }
         ScheduledVisit.save(visits)
         ScheduledVisitNotifications.cancel(visit)
+        if visits.isEmpty {
+            showUpcomingVisits = false
+            selectedVisit = nil
+        }
         toast = Toast(style: .success, message: "Visit removed")
     }
 
@@ -950,6 +951,24 @@ struct HomeView: View {
             toast = Toast(style: .error, message: "No address saved")
             return
         }
+        openURL(url)
+    }
+
+    private func callClient(for visit: ScheduledVisit) {
+        guard let phone = visit.phone?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !phone.isEmpty else {
+            toast = Toast(style: .error, message: "No phone number saved")
+            return
+        }
+
+        let dialable = phone.filter { character in
+            character.isNumber || character == "+"
+        }
+        guard !dialable.isEmpty, let url = URL(string: "tel:\(dialable)") else {
+            toast = Toast(style: .error, message: "Couldn't call this number")
+            return
+        }
+
         openURL(url)
     }
 
@@ -1831,6 +1850,7 @@ private struct VisitActionSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
+                    detailRow(label: "Phone", value: visit.phone)
                     detailRow(label: "Address", value: visit.address)
                     detailRow(label: "Note", value: visit.note)
                 }
