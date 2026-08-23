@@ -577,31 +577,18 @@ struct HomeView: View {
 
     private var upcomingVisitsCard: some View {
         VStack(spacing: 0) {
-            ForEach(Array(visitGroups.enumerated()), id: \.element.day) { groupIndex, group in
-                if groupIndex > 0 {
-                    Divider()
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 4)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(dayHeaderText(for: group.day))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                    .padding(.horizontal, 14)
-                    .padding(.top, groupIndex == 0 ? 12 : 6)
-
-                    ForEach(group.visits) { visit in
-                        compactVisitRow(visit, isNext: visit.id == shownVisits.first?.id)
-                            .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .top)),
-                                removal: .opacity.combined(with: .move(edge: .top))
-                            ))
-                    }
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+            // One flat run of rows. Grouping by day earned its dividers and its
+            // headings back when the row said only a time; now that each row
+            // says which day it is, the grouping was drawing a structure the
+            // reader no longer had to be told.
+            ForEach(shownVisits) { visit in
+                compactVisitRow(visit, isNext: visit.id == shownVisits.first?.id)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity.combined(with: .move(edge: .top))
+                    ))
             }
+            .padding(.top, 4)
 
             if visits.count > Self.visitPreviewCount {
                 Button {
@@ -626,24 +613,6 @@ struct HomeView: View {
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
-    }
-
-    private var visitGroups: [(day: Date, visits: [ScheduledVisit])] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: shownVisits) { calendar.startOfDay(for: $0.date) }
-        return grouped.keys.sorted().map { day in
-            (day: day, visits: grouped[day, default: []].sorted { $0.date < $1.date })
-        }
-    }
-
-    private func dayHeaderText(for day: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(day) { return "Today" }
-        if calendar.isDateInTomorrow(day) { return "Tomorrow" }
-
-        let weekday = day.formatted(.dateTime.weekday(.wide))
-        let monthDay = day.formatted(.dateTime.month(.abbreviated).day())
-        return "\(weekday), \(monthDay)"
     }
 
     private func compactVisitRow(_ visit: ScheduledVisit, isNext: Bool) -> some View {
@@ -1720,10 +1689,20 @@ private struct UpcomingVisitRow: View {
 
                 Spacer(minLength: 10)
 
-                Text(visit.date.formatted(date: .omitted, time: .shortened))
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(statusColor)
-                    .lineLimit(1)
+                // The day and the time together, because they are one fact.
+                // The card used to say the day once in a heading above a run of
+                // rows, which cost a line of its own to carry a single word and
+                // left the time below it reading as a time with no date.
+                HStack(spacing: 6) {
+                    Text(visit.dayText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text(visit.timeText)
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(statusColor)
+                }
+                .lineLimit(1)
+                .layoutPriority(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)

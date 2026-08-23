@@ -69,26 +69,32 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
 
     var isToday: Bool { Calendar.current.isDateInToday(date) }
 
-    /// "Today · 09:30", "Tomorrow · 14:00", "Thursday · 08:00", "Tue 2 Sep · 08:00".
+    /// "Today", "Tomorrow", "Thursday", "Tue 2 Sep".
     ///
     /// Named days for the week the user can actually picture, a date beyond it.
     /// The same trade the quote rows make with "Sent 1w ago": say the thing the
     /// reader would otherwise have to work out.
-    var whenText: String {
+    ///
+    /// Split out from `whenText` so a row can set the day and the time
+    /// differently — Home draws the time in the visit's own colour and wants
+    /// the day quiet beside it, which one string can't express.
+    var dayText: String {
         let calendar = Calendar.current
-        let time = date.formatted(date: .omitted, time: .shortened)
-
-        if calendar.isDateInToday(date) { return "Today · \(time)" }
-        if calendar.isDateInTomorrow(date) { return "Tomorrow · \(time)" }
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
 
         let days = calendar.dateComponents([.day],
                                            from: calendar.startOfDay(for: Date()),
                                            to: calendar.startOfDay(for: date)).day ?? 0
-        let day = days < 7
+        return days < 7
             ? date.formatted(.dateTime.weekday(.wide))
             : date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
-        return "\(day) · \(time)"
     }
+
+    var timeText: String { date.formatted(date: .omitted, time: .shortened) }
+
+    /// "Today · 09:30", "Tomorrow · 14:00", "Thursday · 08:00", "Tue 2 Sep · 08:00".
+    var whenText: String { "\(dayText) · \(timeText)" }
 
     var accessibilityText: String {
         let when = date.formatted(.dateTime.weekday(.wide).month(.wide).day().hour().minute())
