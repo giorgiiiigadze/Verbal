@@ -497,21 +497,12 @@ struct ScheduleVisitSheet: View {
         }
 
         isResolvingAddress = true
-        try? await Task.sleep(for: .milliseconds(450))
+        try? await Task.sleep(for: AddressGeocoder.typingDelay)
         guard !Task.isCancelled, query == trimmedAddress else { return }
 
-        guard let request = MKGeocodingRequest(addressString: query) else {
-            resolvedAddress = query
-            resolvedCoordinate = nil
-            isResolvingAddress = false
-            return
-        }
-
-        do {
-            resolvedCoordinate = try await request.mapItems.first?.location.coordinate
-        } catch {
-            resolvedCoordinate = nil
-        }
+        // The same lookup the client map does — see `AddressGeocoder`, which is
+        // where this used to be written out by hand.
+        resolvedCoordinate = await AddressGeocoder.coordinate(for: query)
         resolvedAddress = query
         isResolvingAddress = false
     }

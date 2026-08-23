@@ -76,6 +76,54 @@ extension QuoteService {
         return rows.compactMap(\.name).filter { !$0.isEmpty }
     }
 
+    /// Where a client is, if they have ever been given an address.
+    ///
+    /// Matched on the name the same way `renameClient` matches, so the row
+    /// found here is the row a rename would move — the app has no client id to
+    /// ask with, because `Client` is derived from the quote list rather than
+    /// fetched.
+    static func customerAddress(named name: String) async throws -> String? {
+        guard let userID = client.auth.currentUser?.id else { return nil }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        struct Row: Decodable { let address: String? }
+        let response: PostgrestResponse<[Row]> = try await client
+            .from("customers")
+            .select("address")
+            .eq("user_id", value: userID)
+            .ilike("name", pattern: escapingLikeWildcards(trimmed))
+            .limit(1)
+            .execute()
+        let address = response.value.first?.address?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (address?.isEmpty ?? true) ? nil : address
+    }
+
+    /// Give a client an address, or take it away.
+    ///
+    /// Written to every row of theirs rather than the first: two rows can share
+    /// a name until the next rename merges them, and setting the address on
+    /// only one of those would make it appear and disappear depending on which
+    /// one the read happened to land on. An empty string clears it, so the
+    /// editor can be used to remove an address as well as correct one.
+    static func setCustomerAddress(_ address: String?, forClientNamed name: String) async throws {
+        guard let userID = client.auth.currentUser?.id else {
+            throw QuoteError.notSignedIn
+        }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        let trimmed = address?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        struct Payload: Encodable { let address: String? }
+        try await client
+            .from("customers")
+            .update(Payload(address: (trimmed?.isEmpty ?? true) ? nil : trimmed))
+            .eq("user_id", value: userID)
+            .ilike("name", pattern: escapingLikeWildcards(trimmedName))
+            .execute()
+    }
+
     /// Rename a client on every quote of theirs at once, merging them into an
     /// existing person when the new name is already taken.
     ///

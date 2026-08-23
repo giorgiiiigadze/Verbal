@@ -40,6 +40,14 @@ struct ClientDetailView: View {
     @State private var renameText = ""
     @State private var toast: Toast?
 
+    /// Where they are. Held by the page rather than by the sheet so the address
+    /// is fetched once, survives the map being closed, and is still the same
+    /// object when an edit lands on it.
+    @State private var location = ClientLocation()
+    @State private var showMap = false
+    @State private var showAddressEditor = false
+    @State private var addressText = ""
+
     /// This person as the session has them now.
     ///
     /// Matched case-insensitively on the name, the same rule `ClientsView`
@@ -114,6 +122,16 @@ struct ClientDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
+            // Left of the menu, and always there. Hiding it until an address
+            // loads would make the bar rearrange itself a moment after the page
+            // opens — and a client with no address is exactly who needs the
+            // button, because tapping it is how one gets added.
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showMap = true } label: {
+                    Image(systemName: "map")
+                }
+                .accessibilityLabel("Client location")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
@@ -121,6 +139,12 @@ struct ClientDetailView: View {
                         showRename = true
                     } label: {
                         Label("Rename client", systemImage: "character.cursor.ibeam")
+                    }
+                    Button {
+                        editAddress()
+                    } label: {
+                        Label(location.hasAddress ? "Edit address" : "Add address",
+                              systemImage: "mappin.and.ellipse")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -138,7 +162,26 @@ struct ClientDetailView: View {
         } message: {
             Text("Changes the name on every quote of theirs. If someone else already has this name, the two are merged.")
         }
+        .sheet(isPresented: $showMap) {
+            ClientMapSheet(clientName: client.name,
+                           location: location,
+                           onEditAddress: editAddress)
+        }
+        // The same one-field alert the rename uses. An address is a line of
+        // text, and a sheet for it would be a screen to dismiss for something
+        // that fits above the keyboard.
+        .alert("Client address", isPresented: $showAddressEditor) {
+            TextField("Street, town, or postcode", text: $addressText)
+                .textInputAutocapitalization(.words)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { saveAddress(addressText) }
+        } message: {
+            Text("Where the job is. Leave it empty to remove the address.")
+        }
         .toast($toast)
+        .task(id: activeKey.id) {
+            await location.load(name: client.name, key: activeKey.id)
+        }
         .task(id: signature) {
             points = await ClientQuotePoint.of(client.quotes, in: currencyCode)
             // A window that was on offer a moment ago may not be after an edit
@@ -175,8 +218,36 @@ struct ClientDetailView: View {
             // has to move with them or the page would show only the quotes it
             // arrived with.
             currentKey = ClientKey(id: trimmed.lowercased(), name: trimmed)
+            // A merge can fold this person into someone else's row, address and
+            // all, so what is on screen is no longer known to be theirs. The
+            // `.task` keyed on the id refetches as soon as the key moves.
+            location.invalidate()
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             toast = Toast(style: .success, message: "Renamed to \(trimmed)")
+        }
+    }
+
+    // MARK: - Address
+
+    /// Opens the editor on whatever the app already knows — their address, or
+    /// the one from a visit booked with them.
+    private func editAddress() {
+        addressText = location.editingText
+        showAddressEditor = true
+    }
+
+    /// Written the way the rename is: the page moves first and the round trip
+    /// follows, so the map is right under the thumb rather than a moment later.
+    private func saveAddress(_ newAddress: String) {
+        let name = client.name
+        Task {
+            do {
+                try await location.save(newAddress, name: name)
+            } catch {
+                toast = Toast(style: .error, message: "Couldn't save this address")
+                return
+            }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
     }
 
