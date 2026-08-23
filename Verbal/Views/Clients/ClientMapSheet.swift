@@ -10,9 +10,14 @@
 //  make bigger.
 //
 //  Drawn the way Apple Maps draws itself — the map edge to edge under the
-//  status bar, the controls floating on glass over it, and the detail on a card
-//  at the bottom where the thumb is — because that is the shape the user is
-//  already fluent in, and a map that looks like a map behaves like one.
+//  status bar, the controls floating on glass over it, and the detail on a
+//  card at the bottom where the thumb is — because that is the shape the user
+//  is already fluent in, and a map that looks like a map behaves like one.
+//
+//  That card is a sheet of its own rather than an inset view, which is what
+//  buys it the platform's Liquid Glass, its grabber, its detents, and a map
+//  that keeps panning underneath while it is up. Drawing a rounded rectangle
+//  that resembles one gets the picture and none of the behaviour.
 //
 
 import MapKit
@@ -23,9 +28,11 @@ struct ClientMapSheet: View {
     /// The client's address as the page has it. Owned above so it survives this
     /// sheet closing, and so an edit made here reaches the page behind it.
     let location: ClientLocation
-    /// Opens the address editor on the page underneath — the alert lives there
-    /// beside the rename it is modelled on, rather than being a second alert
-    /// this sheet has to keep in sync.
+    /// Closes this sheet and opens the address editor on the page underneath.
+    /// The alert lives there, beside the rename it is modelled on, rather than
+    /// being a second alert this sheet has to keep in sync — and dismissing is
+    /// the caller's job now that the card is a sheet inside a sheet, where the
+    /// local `dismiss` would only close the card.
     let onEditAddress: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -35,13 +42,56 @@ struct ClientMapSheet: View {
     private var address: String? { location.address }
 
     var body: some View {
-        ZStack(alignment: .top) {
+        NavigationStack {
             map
-            controls
+                .navigationTitle("")
+                .navigationBarTitleDisplayMode(.inline)
+                // The bar itself goes, the buttons stay. What is left is two
+                // pieces of Liquid Glass floating on the map — which is both
+                // what Apple Maps does and the only way a header works here:
+                // a solid bar would slice the top off the thing being looked at.
+                .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        // The system close button, not an `xmark` drawn to look
+                        // like one: the role is what gets it the platform's own
+                        // glass, its size, and its VoiceOver label.
+                        Button(role: .close) { dismiss() }
+                    }
+                    if location.coordinate != nil {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                withAnimation(.snappy(duration: 0.2)) { isHybrid.toggle() }
+                            } label: {
+                                Image(systemName: isHybrid ? "map.fill" : "globe.americas.fill")
+                            }
+                            .accessibilityLabel(isHybrid ? "Standard map" : "Satellite map")
+                        }
+                    }
+                }
+                // Always up, never dismissable: it is the sheet's content, not
+                // something the user opened on top of it. `.constant(true)` is
+                // what says so — there is no state that could close it.
+                .sheet(isPresented: .constant(true)) {
+                    card
+                        .presentationDetents([.height(cardHeight), .medium])
+                        // No `presentationBackground` on purpose. Overriding it
+                        // with a colour is exactly what would replace the
+                        // system's Liquid Glass with a flat panel.
+                        .presentationDragIndicator(.visible)
+                        .presentationCornerRadius(28)
+                        // The map is the thing being looked at, so it stays
+                        // live under the card rather than dimming behind it.
+                        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                        .interactiveDismissDisabled()
+                }
         }
-        .safeAreaInset(edge: .bottom) { card }
         .presentationBackground(Color(.systemBackground))
     }
+
+    /// Tall enough for the client, their address and the buttons, and no
+    /// taller — the resting detent should leave as much map showing as it can.
+    private var cardHeight: CGFloat { address == nil ? 150 : 205 }
 
     // MARK: - The map
 
@@ -110,49 +160,20 @@ struct ClientMapSheet: View {
         .ignoresSafeArea()
     }
 
-    // MARK: - Floating controls
-
-    private var controls: some View {
-        HStack {
-            circleButton("xmark", label: "Close") { dismiss() }
-            Spacer(minLength: 0)
-            if location.coordinate != nil {
-                circleButton(isHybrid ? "map.fill" : "globe.americas.fill",
-                             label: isHybrid ? "Standard map" : "Satellite map") {
-                    withAnimation(.snappy(duration: 0.2)) { isHybrid.toggle() }
-                }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-    }
-
-    private func circleButton(_ symbol: String,
-                              label: String,
-                              action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color(.mainText))
-                .frame(width: 38, height: 38)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(Circle().strokeBorder(Color(.separator), lineWidth: 0.5))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-    }
-
     // MARK: - The card
 
-    /// Who and where, then what to do about it. The same card shape the rest of
-    /// the client page is built from, so the sheet reads as part of it.
+    /// Who and where, then what to do about it.
+    ///
+    /// No background of its own: the sheet it lives in is already Liquid Glass,
+    /// and a filled card drawn inside would sit on the glass as a second
+    /// surface rather than being one.
     private var card: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 InitialsAvatar(name: clientName, size: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(clientName)
-                        .font(.robotoSlab(19, relativeTo: .headline))
+                        .font(.robotoSlab(20, relativeTo: .title3))
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(1)
                     Text(address ?? "No address yet")
@@ -165,66 +186,53 @@ struct ClientMapSheet: View {
 
             if let address {
                 HStack(spacing: 10) {
-                    primaryButton("Directions", symbol: "arrow.triangle.turn.up.right.diamond.fill") {
+                    Button {
                         open(address, directions: true)
+                    } label: {
+                        Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                            .font(.callout.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 22)
                     }
-                    secondaryButton("Open in Maps") { open(address, directions: false) }
+                    // The platform's own glass, prominent and tinted — the
+                    // hand-built royal-blue rectangle this replaces couldn't
+                    // pick up what was behind it, which on glass is the whole
+                    // point.
+                    .buttonStyle(.glassProminent)
+                    .tint(Color(.royalBlue600))
+
+                    Button {
+                        open(address, directions: false)
+                    } label: {
+                        Text("Open in Maps")
+                            .font(.callout.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 22)
+                    }
+                    .buttonStyle(.glass)
                 }
-                Button("Edit address") {
-                    dismiss()
-                    onEditAddress()
-                }
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(Color(.blueAccentText))
-                .frame(maxWidth: .infinity)
+                .controlSize(.large)
+
+                Button("Edit address", action: onEditAddress)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color(.blueAccentText))
+                    .frame(maxWidth: .infinity)
             } else {
-                primaryButton("Add address", symbol: "mappin.and.ellipse") {
-                    dismiss()
-                    onEditAddress()
+                Button(action: onEditAddress) {
+                    Label("Add address", systemImage: "mappin.and.ellipse")
+                        .font(.callout.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 22)
                 }
+                .buttonStyle(.glassProminent)
+                .tint(Color(.royalBlue600))
+                .controlSize(.large)
             }
-        }
-        .padding(16)
-        .background(Color(.cardSurface),
-                    in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        )
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-    }
 
-    private func primaryButton(_ title: String,
-                               symbol: String,
-                               action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(Color(.royalBlue600),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
-    }
-
-    private func secondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.callout.weight(.medium))
-                .foregroundStyle(Color(.mainText))
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(Color(.fieldFill),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
-        }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
     }
 
     /// Hands Apple Maps the place, not the sentence.

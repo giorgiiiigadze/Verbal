@@ -45,6 +45,11 @@ struct ClientDetailView: View {
     /// object when an edit lands on it.
     @State private var location = ClientLocation()
     @State private var showMap = false
+    /// Set when the map sheet is being closed *in order to* edit the address,
+    /// so the alert can wait for it to finish. Raising the alert in the same
+    /// pass that dismisses the sheet loses it — the dismissal is what is on
+    /// screen at that moment, and the alert never gets presented.
+    @State private var editAddressAfterMap = false
     @State private var showAddressEditor = false
     @State private var addressText = ""
 
@@ -162,10 +167,19 @@ struct ClientDetailView: View {
         } message: {
             Text("Changes the name on every quote of theirs. If someone else already has this name, the two are merged.")
         }
-        .sheet(isPresented: $showMap) {
+        .sheet(isPresented: $showMap, onDismiss: {
+            guard editAddressAfterMap else { return }
+            editAddressAfterMap = false
+            editAddress()
+        }) {
             ClientMapSheet(clientName: client.name,
-                           location: location,
-                           onEditAddress: editAddress)
+                           location: location) {
+                // Closed from here rather than from inside: the card is a sheet
+                // within that sheet, and its own dismiss would only close the
+                // card, leaving the map up with an alert behind it.
+                editAddressAfterMap = true
+                showMap = false
+            }
         }
         // The same one-field alert the rename uses. An address is a line of
         // text, and a sheet for it would be a screen to dismiss for something
