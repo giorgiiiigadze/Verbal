@@ -8,9 +8,12 @@
 import SwiftUI
 import UIKit
 import GoogleSignIn
+import UserNotifications
 
 @main
 struct VerbalApp: App {
+    private static let notificationDelegate = AppNotificationDelegate()
+
     @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
 
     private var preferredColorScheme: ColorScheme? {
@@ -19,6 +22,7 @@ struct VerbalApp: App {
 
     init() {
         GoogleAuth.configure()
+        UNUserNotificationCenter.current().delegate = Self.notificationDelegate
         configureNavigationTitleWeight()
     }
 
@@ -40,6 +44,7 @@ struct VerbalApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(AppNotificationRouter.shared)
                 .preferredColorScheme(preferredColorScheme)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)

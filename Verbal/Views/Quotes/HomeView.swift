@@ -11,6 +11,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(SessionStore.self) private var session
     @Environment(NetworkMonitor.self) private var network
+    @Environment(AppNotificationRouter.self) private var notificationRouter
     @Environment(\.openURL) private var openURL
     @Binding var showCreate: Bool
     @State private var path = NavigationPath()
@@ -284,6 +285,7 @@ struct HomeView: View {
                 visits = ScheduledVisit.load()
                 promptForMissedVisitIfNeeded()
                 await load()
+                await openPendingNotificationQuoteIfNeeded()
             }
             .modifier(SessionSync(quotes: session.quotes,
                                   listsLoaded: session.listsLoaded,
@@ -293,6 +295,10 @@ struct HomeView: View {
             }
             .onChange(of: visits) { _, _ in
                 promptForMissedVisitIfNeeded()
+            }
+            .onChange(of: notificationRouter.requestedQuoteId) { _, quoteId in
+                guard let quoteId else { return }
+                Task { await openQuoteFromNotification(id: quoteId) }
             }
             .refreshable { await load() }
             .alert("Delete this quote?", isPresented: Binding(
@@ -918,6 +924,32 @@ struct HomeView: View {
             try? await Task.sleep(for: .seconds(0.35))
             path.append(quote)
         }
+    }
+
+    private func openPendingNotificationQuoteIfNeeded() async {
+        guard let quoteId = notificationRouter.requestedQuoteId else { return }
+        await openQuoteFromNotification(id: quoteId)
+    }
+
+    private func openQuoteFromNotification(id quoteId: UUID) async {
+        var quote = quotes.first { $0.id == quoteId } ?? session.quotes.first { $0.id == quoteId }
+        if quote == nil {
+            await load()
+            quote = quotes.first { $0.id == quoteId } ?? session.quotes.first { $0.id == quoteId }
+        }
+
+        guard let quote else {
+            notificationRouter.clearQuoteRequest(id: quoteId)
+            toast = Toast(style: .error, message: "Couldn't find that quote")
+            return
+        }
+
+        await session.prefetchLineItems(for: quote.id)
+        showUpcomingVisits = false
+        selectedVisit = nil
+        path = NavigationPath()
+        path.append(quote)
+        notificationRouter.clearQuoteRequest(id: quoteId)
     }
 
     private func openDirections(for visit: ScheduledVisit) {

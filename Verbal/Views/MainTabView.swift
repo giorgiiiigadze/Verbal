@@ -17,6 +17,7 @@ struct MainTabView: View {
     private enum TabItem: Hashable { case home, clients, account, record }
 
     @Environment(SessionStore.self) private var session
+    @Environment(AppNotificationRouter.self) private var notificationRouter
     @Environment(\.colorScheme) private var colorScheme
     @State private var selection: TabItem = .home
     @State private var showCreate = false
@@ -120,6 +121,10 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $showShareLinkNews, onDismiss: { seenShareLinkNews = true }) {
             ShareLinkNewsSheet()
+        }
+        .onChange(of: notificationRouter.requestedQuoteId) { _, quoteId in
+            guard quoteId != nil else { return }
+            selection = .home
         }
     }
 

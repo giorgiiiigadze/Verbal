@@ -9,6 +9,7 @@ import Foundation
 import UserNotifications
 
 enum QuoteExpiryNotifications {
+    nonisolated static let notificationKind = "quoteExpiry"
     nonisolated private static let identifierPrefix = "quote-expiry-"
 
     static func schedule(_ quote: QuoteSummary) async {
@@ -33,6 +34,10 @@ enum QuoteExpiryNotifications {
         content.body = notificationBody(title: title, validityDate: validityDate)
         content.sound = .default
         content.threadIdentifier = "quote-expiry"
+        content.userInfo = [
+            "kind": notificationKind,
+            "quoteId": id.uuidString
+        ]
 
         let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute],
                                                          from: notificationDate)
