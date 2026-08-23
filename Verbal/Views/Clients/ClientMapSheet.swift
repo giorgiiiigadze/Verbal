@@ -34,10 +34,17 @@ struct ClientMapSheet: View {
     /// the caller's job now that the card is a sheet inside a sheet, where the
     /// local `dismiss` would only close the card.
     let onEditAddress: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
+    /// Closes the sheet. Also the caller's job, and for the same reason: with
+    /// the card presented on top of this view, the local `dismiss` is refused —
+    /// a sheet with a sheet of its own up cannot dismiss itself, so the X did
+    /// nothing at all until this replaced it.
+    let onClose: () -> Void
     @State private var camera: MapCameraPosition = .automatic
     @State private var isHybrid = false
+    /// Flips the copy glyph to a tick once the address has been taken.
+    @State private var copied = false
+    /// How tall the card's content measures — see `detents`.
+    @State private var expandedHeight: CGFloat = 0
 
     private var address: String? { location.address }
 
@@ -56,7 +63,7 @@ struct ClientMapSheet: View {
                         // The system close button, not an `xmark` drawn to look
                         // like one: the role is what gets it the platform's own
                         // glass, its size, and its VoiceOver label.
-                        Button(role: .close) { dismiss() }
+                        Button(role: .close, action: onClose)
                     }
                     if location.coordinate != nil {
                         ToolbarItem(placement: .topBarTrailing) {
@@ -74,24 +81,47 @@ struct ClientMapSheet: View {
                 // what says so — there is no state that could close it.
                 .sheet(isPresented: .constant(true)) {
                     card
-                        .presentationDetents([.height(cardHeight), .medium])
+                        .presentationDetents(detents)
                         // No `presentationBackground` on purpose. Overriding it
                         // with a colour is exactly what would replace the
                         // system's Liquid Glass with a flat panel.
                         .presentationDragIndicator(.visible)
-                        .presentationCornerRadius(28)
+                        // No `presentationCornerRadius`: the system's own is
+                        // rounder than anything worth guessing at, and it is
+                        // the radius every other sheet on the phone has.
                         // The map is the thing being looked at, so it stays
-                        // live under the card rather than dimming behind it.
-                        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                        // live under the card rather than dimming behind it —
+                        // and so do the toolbar buttons over it. Not
+                        // `upThrough: .medium`: that names a detent this sheet
+                        // no longer has, and with no match the interaction is
+                        // off at every height, which is what left the close
+                        // button ignoring taps.
+                        .presentationBackgroundInteraction(.enabled)
                         .interactiveDismissDisabled()
                 }
         }
         .presentationBackground(Color(.systemBackground))
     }
 
-    /// Tall enough for the client, their address and the buttons, and no
-    /// taller — the resting detent should leave as much map showing as it can.
-    private var cardHeight: CGFloat { address == nil ? 150 : 205 }
+    /// The resting height: who they are and the two actions, and nothing more.
+    /// The point of the sheet is the map behind it.
+    private let collapsedHeight: CGFloat = 148
+
+    /// Where the sheet stops when pulled up.
+    ///
+    /// Measured from the content rather than set to `.medium`, which is what
+    /// left half a screen of empty glass under the last row: how tall this card
+    /// wants to be depends on whether there is an address, a booked visit, or
+    /// neither, and only the content knows.
+    private var detents: Set<PresentationDetent> {
+        guard expandedHeight > 0 else { return [.height(collapsedHeight)] }
+        // Too close to the resting height to be worth dragging to — the whole
+        // card already fits, so offer the one height that shows all of it.
+        guard expandedHeight > collapsedHeight + 44 else {
+            return [.height(expandedHeight)]
+        }
+        return [.height(collapsedHeight), .height(expandedHeight)]
+    }
 
     // MARK: - The map
 
@@ -162,77 +192,171 @@ struct ClientMapSheet: View {
 
     // MARK: - The card
 
-    /// Who and where, then what to do about it.
+    /// Who and where, what to do about it, then the detail.
+    ///
+    /// Laid out the way a place card is: the identity and the two actions sit
+    /// above the fold at the resting detent, and everything else is reached by
+    /// pulling the sheet up. That is also what fixes the empty half — the
+    /// expanded sheet now has something to expand *to*, rather than growing a
+    /// blank area under three controls.
     ///
     /// No background of its own: the sheet it lives in is already Liquid Glass,
     /// and a filled card drawn inside would sit on the glass as a second
     /// surface rather than being one.
     private var card: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                InitialsAvatar(name: clientName, size: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(clientName)
-                        .font(.robotoSlab(20, relativeTo: .title3))
-                        .foregroundStyle(Color(.mainText))
-                        .lineLimit(1)
-                    Text(address ?? "No address yet")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    identity
+                    actions
+                    if address != nil { details }
                 }
-                Spacer(minLength: 0)
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 20)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    // The detent has to clear the home indicator too, and is
+                    // capped so a long address can't push the card over the map
+                    // it is describing.
+                    expandedHeight = min(height + proxy.safeAreaInsets.bottom, 620)
+                }
             }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+    }
 
-            if let address {
-                HStack(spacing: 10) {
-                    Button {
-                        open(address, directions: true)
-                    } label: {
-                        Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                            .font(.callout.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 22)
-                    }
-                    // The platform's own glass, prominent and tinted — the
-                    // hand-built royal-blue rectangle this replaces couldn't
-                    // pick up what was behind it, which on glass is the whole
-                    // point.
-                    .buttonStyle(.glassProminent)
-                    .tint(Color(.royalBlue600))
-
-                    Button {
-                        open(address, directions: false)
-                    } label: {
-                        Text("Open in Maps")
-                            .font(.callout.weight(.medium))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 22)
-                    }
-                    .buttonStyle(.glass)
-                }
-                .controlSize(.large)
-
-                Button("Edit address", action: onEditAddress)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(Color(.blueAccentText))
-                    .frame(maxWidth: .infinity)
-            } else {
-                Button(action: onEditAddress) {
-                    Label("Add address", systemImage: "mappin.and.ellipse")
-                        .font(.callout.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 22)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(Color(.royalBlue600))
-                .controlSize(.large)
+    private var identity: some View {
+        HStack(spacing: 12) {
+            InitialsAvatar(name: clientName, size: 46)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(clientName)
+                    .font(.robotoSlab(21, relativeTo: .title3))
+                    .foregroundStyle(Color(.mainText))
+                    .lineLimit(1)
+                Text(address ?? "No address yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        if let address {
+            HStack(spacing: 10) {
+                Button {
+                    open(address, directions: true)
+                } label: {
+                    Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                        .font(.callout.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 24)
+                }
+                // The platform's own glass, tinted — the hand-built rectangle
+                // this replaces couldn't pick up what was behind it, which on
+                // glass is the whole point.
+                .buttonStyle(.glassProminent)
+                .tint(Color(.mapAction))
+
+                Button {
+                    open(address, directions: false)
+                } label: {
+                    Text("Open in Maps")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(Color(.mapAction))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 24)
+                }
+                // The same blue at 16%, so the second action reads as the
+                // quieter half of a pair rather than as a different colour.
+                .buttonStyle(.glass)
+                .tint(Color(.mapAction).opacity(0.16))
+            }
+            .controlSize(.large)
+        } else {
+            Button(action: onEditAddress) {
+                Label("Add address", systemImage: "mappin.and.ellipse")
+                    .font(.callout.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 24)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(Color(.mapAction))
+            .controlSize(.large)
+        }
+    }
+
+    // MARK: - Details
+
+    /// The rows under the fold. Plain rows on hairlines rather than a filled
+    /// group: the glass is the surface, and a card inside it would be a second.
+    @ViewBuilder
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Details")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 10)
+
+            if let address {
+                detailRow("mappin", "Address", address) {
+                    UIPasteboard.general.string = address
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    copied = true
+                } trailing: {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(.mapAction))
+                        .contentTransition(.symbolEffect(.replace))
+                }
+            }
+
+            if let visit = location.nextVisit {
+                Divider()
+                detailRow("calendar", "Next visit", visit.whenText)
+            }
+
+            Divider()
+            detailRow("mappin.and.ellipse", "Edit address",
+                      location.hasAddress ? "Change where they are" : "Add one",
+                      action: onEditAddress)
+        }
+    }
+
+    private func detailRow<Trailing: View>(_ symbol: String,
+                                           _ label: String,
+                                           _ value: String,
+                                           action: (() -> Void)? = nil,
+                                           @ViewBuilder trailing: () -> Trailing = { EmptyView() })
+    -> some View {
+        Button {
+            action?()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color(.mapAction))
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(value)
+                        .font(.subheadline)
+                        .foregroundStyle(Color(.mainText))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                trailing()
+            }
+            .padding(.vertical, 12)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(action == nil)
     }
 
     /// Hands Apple Maps the place, not the sentence.

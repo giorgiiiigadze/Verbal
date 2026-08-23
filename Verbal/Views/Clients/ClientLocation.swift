@@ -81,6 +81,10 @@ final class ClientLocation {
     /// person, and inferring one from a job title is a guess.
     private(set) var suggestion: String?
     private(set) var coordinate: CLLocationCoordinate2D?
+    /// The soonest visit booked with this client, if any. Read at the same time
+    /// as the address and from the same list — the map is where "when am I next
+    /// due there" is worth answering, and the page behind it doesn't ask it.
+    private(set) var nextVisit: ScheduledVisit?
     /// True from the first fetch until there is something to draw, so the sheet
     /// can show a spinner instead of flashing its empty state at a client who
     /// does have an address.
@@ -101,7 +105,9 @@ final class ClientLocation {
         guard loadedKey != key else { return }
         loadedKey = key
         isLoading = true
-        suggestion = Self.bookedAddress(for: name)
+        let booked = Self.visits(for: name)
+        suggestion = Self.address(from: booked)
+        nextVisit = booked.first { $0.date >= Date() }
 
         let fetched = try? await QuoteService.customerAddress(named: name)
         // A rename mid-flight moves the page to somebody else; the answer to
@@ -135,6 +141,7 @@ final class ClientLocation {
         address = nil
         suggestion = nil
         coordinate = nil
+        nextVisit = nil
     }
 
     private func resolve() async {
@@ -149,24 +156,26 @@ final class ClientLocation {
         coordinate = found
     }
 
-    /// The address from the most recent visit booked with this client.
+    /// Visits booked with this client, soonest first.
     ///
     /// Visits carry one free-text title — "Mrs. Patel — bathroom" — so the
     /// match is a containment check on the name rather than a lookup. Loose on
     /// purpose: the worst case is that the editor opens pre-filled with an
     /// address the user then clears, and the best case is that they never type
     /// an address they already typed once.
-    private static func bookedAddress(for name: String) -> String? {
+    private static func visits(for name: String) -> [ScheduledVisit] {
         let needle = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !needle.isEmpty else { return nil }
+        guard !needle.isEmpty else { return [] }
         return ScheduledVisit.load()
             .filter { $0.title.lowercased().contains(needle) }
-            .compactMap { visit -> (Date, String)? in
-                guard let address = visit.address?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !address.isEmpty else { return nil }
-                return (visit.date, address)
-            }
-            .max { $0.0 < $1.0 }?
-            .1
+            .sorted { $0.date < $1.date }
+    }
+
+    /// The address off the most recently booked of them — the latest one is the
+    /// most likely to still be where they live.
+    private static func address(from visits: [ScheduledVisit]) -> String? {
+        visits
+            .compactMap { $0.address?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .last { !$0.isEmpty }
     }
 }

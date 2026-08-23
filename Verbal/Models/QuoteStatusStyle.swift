@@ -16,10 +16,16 @@ enum QuoteStatusStyle {
     /// Ink for the label.
     static func text(_ status: String) -> Color {
         switch status {
-        // Gray, not orange. Draft is the state every quote starts in — it isn't
-        // a warning, and spending the app's one warm colour on it left nothing
-        // to say when something actually is wrong.
-        case "draft": return Color(.statusMutedText)
+        // Violet, and specifically not orange: draft is the state every quote
+        // starts in, not a warning, and spending the app's one warm colour on
+        // it would leave nothing to say when something actually is wrong — the
+        // "2 unpriced" badge sits on the same rows.
+        //
+        // It was grey until it turned out grey was saying two things at once.
+        // Expired is grey, and an expired quote is over; a draft is the one
+        // status where something is still owed by the user, and reading as
+        // dead is exactly wrong for it.
+        case "draft": return Color(.statusDraftText)
         case "viewed": return .white
         case "accepted": return Color(.statusAcceptedText)
         case "declined": return Color(.statusDeclinedText)
@@ -31,7 +37,7 @@ enum QuoteStatusStyle {
     /// The ground it sits on.
     static func fill(_ status: String) -> Color {
         switch status {
-        case "draft": return Color(.statusMutedFill)
+        case "draft": return Color(.statusDraftFill)
         // Dark blue, separate from Sent. Viewed is the moment the customer has
         // actually opened the quote, and it needs to be distinguishable at a
         // glance without relying only on the eye glyph.

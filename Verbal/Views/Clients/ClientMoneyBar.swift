@@ -31,7 +31,7 @@ struct ClientMoneyBar: View {
             ("Waiting", Color(.statusSentText), { $0.status == "sent" || $0.status == "viewed" }),
             ("Declined", Color(.statusDeclinedText), { $0.status == "declined" }),
             ("Expired", Color(.statusMutedText), { $0.status == "expired" }),
-            ("Not sent", Color(.statusMutedText).opacity(0.45), { $0.status == "draft" })
+            ("Not sent", Color(.statusDraftText), { $0.status == "draft" })
         ]
         return groups.compactMap { label, color, match in
             let amount = points.filter(match).reduce(0) { $0 + $1.amount }

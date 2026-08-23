@@ -172,12 +172,14 @@ struct ClientDetailView: View {
             editAddressAfterMap = false
             editAddress()
         }) {
+            // Both closures close the sheet from here rather than from inside
+            // it: the card is a sheet presented on top of the map, and a sheet
+            // with one of those up cannot dismiss itself.
             ClientMapSheet(clientName: client.name,
                            location: location) {
-                // Closed from here rather than from inside: the card is a sheet
-                // within that sheet, and its own dismiss would only close the
-                // card, leaving the map up with an alert behind it.
                 editAddressAfterMap = true
+                showMap = false
+            } onClose: {
                 showMap = false
             }
         }
