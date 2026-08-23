@@ -588,7 +588,6 @@ struct HomeView: View {
                         removal: .opacity.combined(with: .move(edge: .top))
                     ))
             }
-            .padding(.top, 4)
 
             if visits.count > Self.visitPreviewCount {
                 Button {
@@ -603,7 +602,10 @@ struct HomeView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.bottom, 8)
+        // The same 8 the rows already hold off the card's sides, so a row sits
+        // the same distance from every edge. It was 4 above and 8 below, which
+        // on a card holding a single row reads as the row having slipped.
+        .padding(.vertical, 8)
         .background(Color(.cardSurface),
                     in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
@@ -1674,7 +1676,9 @@ private struct UpcomingVisitRow: View {
     let onTap: () -> Void
 
     var body: some View {
-        let rowShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        // Concentric with the card around it: its 22 less the 8 this sits in
+        // from the edge. At 12 the two curves were running at different rates.
+        let rowShape = RoundedRectangle(cornerRadius: 14, style: .continuous)
 
         Button(action: onTap) {
             HStack(spacing: 10) {
