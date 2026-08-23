@@ -4,15 +4,16 @@
 //
 //  Books a visit in, or corrects one already booked.
 //
-//  Three steps rather than one form: what the job is, which day, what time.
-//  A visit is written in the ten seconds after a phone call, usually one-handed
-//  on a doorstep, and a single screen asking four things at once is four
-//  decisions to hold at the same time. One question a screen means the answer
+//  Four steps rather than one form: what the job is, where it is, which day,
+//  what time. A visit is written in the ten seconds after a phone call, usually
+//  one-handed on a doorstep, and a single screen asking four things at once is
+//  four decisions to hold at the same time. One question a screen means the answer
 //  is always the only thing under the thumb — and it buys each question the
 //  room for the control it actually wants, a full month on the day step and a
 //  wheel on the time one, neither of which fits a stacked form.
 //
 
+import MapKit
 import SwiftUI
 
 struct ScheduleVisitSheet: View {
@@ -21,6 +22,7 @@ struct ScheduleVisitSheet: View {
     let onSave: (ScheduledVisit) -> Void
     var onDelete: ((ScheduledVisit) -> Void)?
 
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var step: Step = .details
     /// Which way the last move went, so the steps slide in from the side they
@@ -32,12 +34,16 @@ struct ScheduleVisitSheet: View {
     @State private var note = ""
     @State private var date = ScheduleVisitSheet.defaultDate
     @State private var recent: [String] = []
+    @State private var resolvedAddress = ""
+    @State private var resolvedCoordinate: CLLocationCoordinate2D?
+    @State private var isResolvingAddress = false
     /// True while the removal alert is up.
     @State private var confirmingRemoval = false
     @FocusState private var titleFocused: Bool
+    @FocusState private var addressFocused: Bool
 
     private enum Step: Int, CaseIterable, Identifiable, Comparable {
-        case details, day, time
+        case details, location, day, time
 
         var id: Int { rawValue }
 
@@ -48,6 +54,7 @@ struct ScheduleVisitSheet: View {
         var heading: String {
             switch self {
             case .details: return "What's the job?"
+            case .location: return "Where is it?"
             case .day: return "Which day?"
             case .time: return "What time?"
             }
@@ -72,6 +79,14 @@ struct ScheduleVisitSheet: View {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var trimmedAddress: String {
+        address.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var stepAccentColor: Color {
+        colorScheme == .dark ? .white : Color(.royalBlue600)
+    }
+
     /// The name is the only thing required, and only the step that asks for it
     /// can be blocked — a day and a time always have an answer in them.
     private var canContinue: Bool {
@@ -93,6 +108,7 @@ struct ScheduleVisitSheet: View {
                 Group {
                     switch step {
                     case .details: detailsStep
+                    case .location: locationStep
                     case .day: dayStep
                     case .time: timeStep
                     }
@@ -162,9 +178,9 @@ struct ScheduleVisitSheet: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: suggestions)
-        // Sized for the month grid, which is the tallest of the three. A detent
-        // that changed with the step would resize the sheet under the thumb
-        // between one question and the next.
+        // Sized for the month grid and location preview. A detent that changed
+        // with the step would resize the sheet under the thumb between one
+        // question and the next.
         .presentationDetents([.height(580)])
         .presentationBackground(Color(.systemBackground))
         // Same shape as the delete confirmations on Home: a question, the
@@ -212,7 +228,7 @@ struct ScheduleVisitSheet: View {
                     .textInputAutocapitalization(.sentences)
                     .submitLabel(.next)
                     .focused($titleFocused)
-                    .onSubmit { if canContinue { move(to: .day) } }
+                    .onSubmit { if canContinue { move(to: .location) } }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                     // Tinted, not white. The sheet behind it is white, so a
@@ -246,6 +262,17 @@ struct ScheduleVisitSheet: View {
                         )
                 }
 
+            }
+            // Room for the keyboard, which covers the lower half of the sheet
+            // while this step is the one on screen.
+            .padding(.bottom, 12)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private var locationStep: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Address (optional)")
                         .font(.caption)
@@ -256,6 +283,9 @@ struct ScheduleVisitSheet: View {
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(1...2)
                         .textInputAutocapitalization(.words)
+                        .submitLabel(.next)
+                        .focused($addressFocused)
+                        .onSubmit { move(to: .day) }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 14)
                         .background(Color(.fieldFill),
@@ -266,30 +296,61 @@ struct ScheduleVisitSheet: View {
                         )
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Description (optional)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField("Gate code, what to measure…", text: $note, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .font(.body)
-                        .foregroundStyle(Color(.mainText))
-                        .lineLimit(1...3)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                        .background(Color(.fieldFill),
-                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(Color(.separator), lineWidth: 0.5)
-                        )
-                }
+                locationPreview
             }
-            // Room for the keyboard, which covers the lower half of the sheet
-            // while this step is the one on screen.
             .padding(.bottom, 12)
         }
         .scrollBounceBehavior(.basedOnSize)
+        .task(id: trimmedAddress) {
+            await resolveAddressPreview()
+        }
+    }
+
+    @ViewBuilder
+    private var locationPreview: some View {
+        if trimmedAddress.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: "map")
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(Color(.blueAccentText))
+                Text("Skip this if you don't need directions yet.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        } else if isResolvingAddress {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Finding address...")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        } else if let resolvedCoordinate, resolvedAddress == trimmedAddress {
+            Map(initialPosition: .region(MKCoordinateRegion(
+                center: resolvedCoordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            ))) {
+                Marker(trimmedTitle.isEmpty ? "Visit" : trimmedTitle, coordinate: resolvedCoordinate)
+            }
+            .frame(height: 280)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+        } else {
+            Text("We'll save the address, but couldn't preview it on the map yet.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
     }
 
     /// A whole month, because "which day" is a question about where a date sits
@@ -303,7 +364,7 @@ struct ScheduleVisitSheet: View {
                        displayedComponents: [.date])
                 .labelsHidden()
                 .datePickerStyle(.graphical)
-                .tint(Color(.royalBlue600))
+                .tint(stepAccentColor)
                 // Its own inset would sit the grid a step in from everything
                 // else on the sheet.
                 .padding(.horizontal, -8)
@@ -341,7 +402,7 @@ struct ScheduleVisitSheet: View {
         HStack(spacing: 6) {
             ForEach(Step.allCases) { candidate in
                 Capsule()
-                    .fill(candidate <= step ? Color(.royalBlue600) : Color(.separator))
+                    .fill(candidate <= step ? stepAccentColor : Color(.separator))
                     .frame(height: 3)
                     // Expanded past the hairline it draws — 3pt is a mark, not
                     // a target.
@@ -395,8 +456,12 @@ struct ScheduleVisitSheet: View {
 
     private var primaryTitle: String {
         switch step {
-        case .details, .day: return "Next"
-        case .time: return editing == nil ? "Book visit" : "Update visit"
+        case .details, .day:
+            return "Next"
+        case .location:
+            return trimmedAddress.isEmpty ? "Skip" : "Next"
+        case .time:
+            return editing == nil ? "Book visit" : "Update visit"
         }
     }
 
@@ -405,7 +470,8 @@ struct ScheduleVisitSheet: View {
     private func primaryAction() {
         guard canContinue else { return }
         switch step {
-        case .details: move(to: .day)
+        case .details: move(to: .location)
+        case .location: move(to: .day)
         case .day: move(to: .time)
         case .time: save()
         }
@@ -413,10 +479,41 @@ struct ScheduleVisitSheet: View {
 
     private func move(to next: Step) {
         isAdvancing = next > step
-        // The keyboard belongs to the first step only, and left up it would
-        // cover half of the month grid the next one draws.
+        // Text-entry keyboards belong to the first two steps, and left up they
+        // would cover half of the month grid the next one draws.
         titleFocused = false
+        addressFocused = false
         withAnimation(.snappy(duration: 0.25)) { step = next }
+    }
+
+    @MainActor
+    private func resolveAddressPreview() async {
+        let query = trimmedAddress
+        guard !query.isEmpty else {
+            resolvedAddress = ""
+            resolvedCoordinate = nil
+            isResolvingAddress = false
+            return
+        }
+
+        isResolvingAddress = true
+        try? await Task.sleep(for: .milliseconds(450))
+        guard !Task.isCancelled, query == trimmedAddress else { return }
+
+        guard let request = MKGeocodingRequest(addressString: query) else {
+            resolvedAddress = query
+            resolvedCoordinate = nil
+            isResolvingAddress = false
+            return
+        }
+
+        do {
+            resolvedCoordinate = try await request.mapItems.first?.location.coordinate
+        } catch {
+            resolvedCoordinate = nil
+        }
+        resolvedAddress = query
+        isResolvingAddress = false
     }
 
     private func save() {

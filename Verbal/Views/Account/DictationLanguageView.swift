@@ -14,7 +14,12 @@ import Speech
 import Combine
 
 struct DictationLanguageView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage(DictationLanguage.defaultsKey) private var selected = ""
+
+    private var selectedIconColor: Color {
+        colorScheme == .dark ? .white : Color(.royalBlue600)
+    }
 
     @State private var supported: [Locale] = []
     @State private var installed: Set<String> = []
@@ -104,7 +109,7 @@ struct DictationLanguageView: View {
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(Color(.royalBlue600))
+                        .foregroundStyle(selectedIconColor)
                 }
             }
             .contentShape(.rect)

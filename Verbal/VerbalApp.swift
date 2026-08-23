@@ -11,6 +11,12 @@ import GoogleSignIn
 
 @main
 struct VerbalApp: App {
+    @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
+
+    private var preferredColorScheme: ColorScheme? {
+        (AppAppearance(rawValue: appearance) ?? .system).colorScheme
+    }
+
     init() {
         GoogleAuth.configure()
         configureNavigationTitleWeight()
@@ -34,6 +40,7 @@ struct VerbalApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .preferredColorScheme(preferredColorScheme)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }

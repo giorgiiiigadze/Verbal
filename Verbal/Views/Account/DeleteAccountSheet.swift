@@ -12,6 +12,7 @@ struct DeleteAccountSheet: View {
     /// Called with the chosen reason once confirmed.
     var onConfirm: (_ reason: String) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     @State private var reason: String?
     @State private var showFinalConfirmation = false
@@ -25,6 +26,10 @@ struct DeleteAccountSheet: View {
         "I was just trying it out",
         "Something else"
     ]
+
+    private var selectedIconColor: Color {
+        colorScheme == .dark ? .white : Color(.blueAccentText)
+    }
 
     var body: some View {
         NavigationStack {
@@ -96,7 +101,7 @@ struct DeleteAccountSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20))
-                    .foregroundStyle(selected ? Color(.blueAccentText) : Color(.separator))
+                    .foregroundStyle(selected ? selectedIconColor : Color(.separator))
                 Text(option)
                     .font(.callout)
                     .foregroundStyle(Color(.mainText))

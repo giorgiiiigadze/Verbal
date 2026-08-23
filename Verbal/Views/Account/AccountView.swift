@@ -30,6 +30,7 @@ struct AccountView: View {
     @AppStorage(ScheduledVisitNotifications.enabledKey) private var remindersEnabled = true
     @AppStorage(ScheduledVisitNotifications.leadTimeKey) private var reminderLeadTime = ScheduledVisitReminderLeadTime.atTime.rawValue
     @AppStorage(RecordingPreferences.hapticsEnabledKey) private var recordingHapticsEnabled = true
+    @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
     /// Read only to refresh the row's value when the picker writes it.
     @AppStorage(DictationLanguage.defaultsKey) private var dictationLocale = ""
 
@@ -73,6 +74,10 @@ struct AccountView: View {
     private var notificationSummary: String {
         guard remindersEnabled else { return "Off" }
         return ScheduledVisitReminderLeadTime(rawValue: reminderLeadTime)?.label ?? ScheduledVisitReminderLeadTime.atTime.label
+    }
+
+    private var appearanceLabel: String {
+        (AppAppearance(rawValue: appearance) ?? .system).label
     }
 
     /// The page's heading. Their name where the account has one, and otherwise
@@ -145,6 +150,11 @@ struct AccountView: View {
                     NotificationSettingsView()
                 } label: {
                     LabeledContent("Notifications", value: notificationSummary)
+                }
+                NavigationLink {
+                    AppearanceView()
+                } label: {
+                    LabeledContent("Appearance", value: appearanceLabel)
                 }
             } header: {
                 Text("Recording")
