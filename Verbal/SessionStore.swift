@@ -228,9 +228,30 @@ final class SessionStore {
 
     private let client = SupabaseManager.client
     private let network: NetworkMonitor
+    private var isExplicitlySigningOut = false
 
     init(network: NetworkMonitor) {
         self.network = network
+    }
+
+    /// Restore a stored session synchronously enough for launch decisions.
+    private func restoreStoredSessionForLaunch() -> Bool {
+        guard client.auth.currentSession != nil else { return false }
+
+        // Restore from disk here, synchronously, before anything renders.
+        // Home is built underneath the splash rather than after it, and it
+        // copies these lists into its own state the moment it appears.
+        if let userID = client.auth.currentUser?.id {
+            cachedUserID = userID
+            restoreFromDisk(userID: userID)
+        }
+
+        // Show the app immediately; don't block first paint on the network.
+        state = .ready
+        isBootstrapped = true
+        markOnboardingSeen()
+        Task { await bootstrap() }
+        return true
     }
 
     /// Resolve the initial state and preload first-paint data, then keep
@@ -242,27 +263,15 @@ final class SessionStore {
         // is NOT a sign-out. We only show sign-in when there is truly no stored
         // session. This avoids a flash of the auth page at cold launch,
         // especially offline where the network state isn't known yet.
-        if client.auth.currentSession != nil {
-            // Restore from disk here, synchronously, before anything renders.
-            // Home is built underneath the splash rather than after it, and it
-            // copies these lists into its own state the moment it appears — so
-            // a restore that lands even a beat later is one it never sees, and
-            // the user gets "Couldn't load your quotes" with the quotes sitting
-            // on disk. It is a file read; there is nothing to wait for.
-            if let userID = client.auth.currentUser?.id {
-                cachedUserID = userID
-                restoreFromDisk(userID: userID)
+        if !restoreStoredSessionForLaunch() {
+            // On some cold launches the Supabase client has not surfaced the
+            // Keychain session on the first synchronous read. Give it one short
+            // turn before deciding the user is actually signed out.
+            try? await Task.sleep(for: .milliseconds(350))
+            if !restoreStoredSessionForLaunch() {
+                state = .signedOut
+                isBootstrapped = true
             }
-            // Show the app immediately; don't block first paint on the network.
-            // The splash dismisses right away (even offline), and the
-            // first-paint data streams in via bootstrap() in the background.
-            state = .ready
-            isBootstrapped = true
-            markOnboardingSeen()
-            Task { await bootstrap() }
-        } else {
-            state = .signedOut
-            isBootstrapped = true
         }
 
         for await change in client.auth.authStateChanges {
@@ -274,10 +283,12 @@ final class SessionStore {
                     await bootstrap()
                 }
             case .signedOut:
-                // A real sign-out only happens online (user-initiated). A
-                // `signedOut` that arrives while offline is almost always a
-                // failed background token refresh — keep the user in the app.
-                if network.isOnline {
+                // Supabase can surface signed-out during launch or a token
+                // refresh before the stored session has settled. Only the app's
+                // own sign-out/delete flows should clear local state and send
+                // the user back to auth.
+                if isExplicitlySigningOut {
+                    isExplicitlySigningOut = false
                     clearSession()
                 }
             default:
@@ -592,7 +603,15 @@ final class SessionStore {
     // MARK: - Auth actions
 
     func signOut() async throws {
-        try await client.auth.signOut()
+        isExplicitlySigningOut = true
+        do {
+            try await client.auth.signOut()
+            clearSession()
+            isExplicitlySigningOut = false
+        } catch {
+            isExplicitlySigningOut = false
+            throw error
+        }
     }
 
     /// Record why someone is leaving, before the account goes. Best effort:
@@ -616,7 +635,10 @@ final class SessionStore {
         // is the one place someone says so outright, and whoever signs up on
         // this phone next is starting from nothing.
         OnboardingMemory.erase()
+        isExplicitlySigningOut = true
         try? await client.auth.signOut()
+        clearSession()
+        isExplicitlySigningOut = false
     }
 }
 

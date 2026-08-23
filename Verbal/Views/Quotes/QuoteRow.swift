@@ -23,6 +23,22 @@ struct QuoteRow: View {
     /// five times down one column. The timestamp stays — it is the only thing
     /// telling the quotes in a thread apart.
     var clientIsKnown: Bool = false
+    var cornerRadius: CGFloat = 22
+    var topCornerRadius: CGFloat? = nil
+    var bottomCornerRadius: CGFloat? = nil
+    var showsBorder: Bool = true
+
+    private var rowShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            cornerRadii: .init(
+                topLeading: topCornerRadius ?? cornerRadius,
+                bottomLeading: bottomCornerRadius ?? cornerRadius,
+                bottomTrailing: bottomCornerRadius ?? cornerRadius,
+                topTrailing: topCornerRadius ?? cornerRadius
+            ),
+            style: .continuous
+        )
+    }
 
     /// Drafts only, and it takes the status pill's place rather than adding to
     /// the row.
@@ -86,13 +102,13 @@ struct QuoteRow: View {
         // better than a colour can — and royalBlue25 is the tint the app uses
         // for things asking to be tapped (the outstanding band, the ready-to-add
         // card), so a pin read as more urgent than the money above it.
-        .background(Color(.cardSurface),
-                    in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        )
-        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(Color(.cardSurface), in: rowShape)
+        .overlay {
+            if showsBorder {
+                rowShape.strokeBorder(Color(.separator), lineWidth: 0.5)
+            }
+        }
+        .contentShape(.contextMenuPreview, rowShape)
     }
 
     /// Client name and how long ago the quote went out. The client leads where

@@ -51,7 +51,13 @@ struct ClientThread: View {
                 // Not the last node when there is more below: the rail has to
                 // carry on down into the "See all" row, or the thread would
                 // close itself and then something would hang under the end.
-                quoteReply(quote, isLast: !isTruncated && index == shown.count - 1)
+                quoteReply(quote,
+                           index: index,
+                           isLast: !isTruncated && index == shown.count - 1)
+                if index < shown.count - 1 {
+                    Divider()
+                        .padding(.leading, showsRail ? ThreadConnector.gutter : 0)
+                }
             }
             if isTruncated, let seeAll {
                 seeAllRow(seeAll)
@@ -100,7 +106,7 @@ struct ClientThread: View {
         }
     }
 
-    private func quoteReply(_ quote: QuoteSummary, isLast: Bool) -> some View {
+    private func quoteReply(_ quote: QuoteSummary, index: Int, isLast: Bool) -> some View {
         // By value, not by closure. The destination then belongs to the stack
         // rather than to this row — and this row is rebuilt every time the
         // session's copy of a quote changes, which is every time the screen it
@@ -117,13 +123,16 @@ struct ClientThread: View {
             // row drops it and keeps the timestamp.
             QuoteRow(quote: quote,
                      unpricedCount: unpricedCount(for: quote),
-                     clientIsKnown: true)
+                     clientIsKnown: true,
+                     cornerRadius: 0,
+                     topCornerRadius: index == 0 ? 18 : 0,
+                     bottomCornerRadius: index == shown.count - 1 ? 18 : 0,
+                     showsBorder: false)
         }
         .buttonStyle(.plain)
-        // The vertical padding is inside the connector's drawing area, so the
-        // rail carries straight through the gaps between cards rather than
-        // breaking at each one.
-        .padding(.vertical, 5)
+        // Client quote rows stack as one flat list; the divider between rows is
+        // enough separation here.
+        .padding(.vertical, 0)
         .padding(.leading, showsRail ? ThreadConnector.gutter : 0)
         .background(alignment: .leading) {
             if showsRail {
