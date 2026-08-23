@@ -114,8 +114,8 @@ final class ClientLocation {
         // the old question must not land on the new person.
         guard loadedKey == key else { return }
         address = fetched
-        isLoading = false
         await resolve()
+        isLoading = false
     }
 
     /// Write a new address, moving the page onto it first so the map redraws

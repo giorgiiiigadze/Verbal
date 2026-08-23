@@ -48,6 +48,11 @@ struct ClientMapSheet: View {
 
     private var address: String? { location.address }
 
+    private var coordinateKey: String? {
+        guard let coordinate = location.coordinate else { return nil }
+        return "\(coordinate.latitude),\(coordinate.longitude)"
+    }
+
     var body: some View {
         NavigationStack {
             map
@@ -135,7 +140,7 @@ struct ClientMapSheet: View {
             .mapStyle(isHybrid ? .hybrid(elevation: .realistic) : .standard(elevation: .realistic))
             .ignoresSafeArea()
             .onAppear { frame(on: coordinate) }
-            .onChange(of: location.coordinate?.latitude) {
+            .onChange(of: coordinateKey) {
                 if let coordinate = location.coordinate { frame(on: coordinate) }
             }
         } else {
@@ -160,34 +165,31 @@ struct ClientMapSheet: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 14) {
+        ZStack {
+            Color(.homeBackground)
+                .ignoresSafeArea()
+
             if location.isLoading {
-                ProgressView()
-                Text("Finding \(clientName)...")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                VStack(spacing: 14) {
+                    ProgressView()
+                    Text("Finding \(clientName)...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 40)
             } else {
-                Image(systemName: location.hasAddress ? "mappin.slash" : "map")
-                    .font(.system(size: 34, weight: .light))
-                    .foregroundStyle(Color(.blueAccentText))
-                Text(location.hasAddress
-                     ? "We couldn't place this address on the map."
-                     : "No address for \(clientName) yet.")
-                    .font(.headline)
-                    .foregroundStyle(Color(.mainText))
-                    .multilineTextAlignment(.center)
-                Text(location.hasAddress
-                     ? "Directions will still search for it."
-                     : "Add one and it'll be here on the morning of the visit.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                EmptyStateMessage(
+                    icon: location.hasAddress ? "mappin.slash" : "map",
+                    title: location.hasAddress ? "Address not found" : "No address yet",
+                    message: location.hasAddress
+                    ? "Directions will still search for it."
+                    : "Add one and it'll be here on the morning of the visit."
+                ) {
+                    EmptyView()
+                }
             }
         }
-        .padding(.horizontal, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.homeBackground))
-        .ignoresSafeArea()
     }
 
     // MARK: - The card
