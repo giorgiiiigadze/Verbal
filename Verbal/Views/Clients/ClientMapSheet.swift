@@ -138,6 +138,10 @@ struct ClientMapSheet: View {
                     .tint(Color(.royalBlue600))
             }
             .mapStyle(isHybrid ? .hybrid(elevation: .realistic) : .standard(elevation: .realistic))
+            // The system compass uses the same top-right corner as the map style
+            // toggle once the map is rotated, so keep this sheet's controls to
+            // the explicit chrome it draws itself.
+            .mapControlVisibility(.hidden)
             .ignoresSafeArea()
             .onAppear { frame(on: coordinate) }
             .onChange(of: coordinateKey) {
