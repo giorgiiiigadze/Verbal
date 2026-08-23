@@ -25,13 +25,29 @@ struct ClientMoneyBar: View {
     /// Built by walking a fixed order rather than grouping, so the chart reads
     /// the same way every time: won first, then what is still in play, then what
     /// isn't.
+    /// The chart's own colours for the two ends of the story, and for the
+    /// quotes that never left.
+    ///
+    /// Deliberately not the status colours the pills use, which is the one
+    /// place in the app where the same status is drawn two ways on purpose. A
+    /// pill is small type on a tinted ground and has to stay legible there; a
+    /// segment is a block of colour a centimetre wide with nothing on it, and
+    /// the value that reads well as one reads washed out as the other. Won and
+    /// Declined are the figures this page is about, so they get the colours
+    /// that carry across a room.
+    ///
+    /// Not sent is violet rather than the grey it shares with the pill: grey
+    /// was saying two things in one chart, and only one of them was true —
+    /// expired is over, a draft is the one slice still waiting on the user.
+    /// Not amber either, which is the app's warning colour and is spoken for
+    /// by the "unpriced" badge on the rows below.
     private var slices: [Slice] {
         let groups: [(String, Color, (ClientQuotePoint) -> Bool)] = [
-            ("Won", Color(.statusAcceptedText), { $0.status == "accepted" }),
+            ("Won", Color(.chartWon), { $0.status == "accepted" }),
             ("Waiting", Color(.statusSentText), { $0.status == "sent" || $0.status == "viewed" }),
-            ("Declined", Color(.statusDeclinedText), { $0.status == "declined" }),
+            ("Declined", Color(.chartDeclined), { $0.status == "declined" }),
             ("Expired", Color(.statusMutedText), { $0.status == "expired" }),
-            ("Not sent", Color(.statusDraftText), { $0.status == "draft" })
+            ("Not sent", Color(.chartDraft), { $0.status == "draft" })
         ]
         return groups.compactMap { label, color, match in
             let amount = points.filter(match).reduce(0) { $0 + $1.amount }
