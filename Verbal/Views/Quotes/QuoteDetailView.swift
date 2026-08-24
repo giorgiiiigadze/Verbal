@@ -11,6 +11,7 @@ import UIKit
 
 struct QuoteDetailView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(NetworkMonitor.self) private var network
     @Environment(\.dismiss) private var dismiss
     let quote: QuoteSummary
     var onDeleted: () -> Void
@@ -52,6 +53,8 @@ struct QuoteDetailView: View {
     /// then warn about gaps, then share. Each step is skipped when it has
     /// nothing to say, so the common case is still one tap.
     private func beginShare() {
+        guard requireInternetForSharing() else { return }
+
         if BusinessPrompt.shouldAsk(session.businessProfile) {
             showBusinessDetails = true
         } else if missingCount > 0 {
@@ -69,11 +72,21 @@ struct QuoteDetailView: View {
     /// missing both is asked about both rather than having the second silently
     /// waived by answering the first.
     private func shareOrAskForClient() {
+        guard requireInternetForSharing() else { return }
+
         if clientName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             showNoClientWarning = true
         } else {
             showShare = true
         }
+    }
+
+    private func requireInternetForSharing() -> Bool {
+        guard network.isOnline else {
+            toast = Toast(style: .error, message: "Internet required for sharing")
+            return false
+        }
+        return true
     }
 
     private var unpricedTitle: String {

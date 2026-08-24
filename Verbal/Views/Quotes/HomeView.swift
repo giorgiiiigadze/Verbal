@@ -1371,6 +1371,8 @@ struct HomeView: View {
     /// opening the share panel — without them the PDF would print an empty
     /// table, so this waits rather than rendering a half-built document.
     private func share(_ quote: QuoteSummary) {
+        guard requireInternetForSharing() else { return }
+
         Task {
             await session.prefetchLineItems(for: quote.id)
             // Last chance to put a name on the document before a customer reads
@@ -1397,11 +1399,21 @@ struct HomeView: View {
     /// name at the top is a document the customer can't tell was written for
     /// them, and the transcript often doesn't carry that detail.
     private func shareOrAskForClient(_ quote: QuoteSummary) {
+        guard requireInternetForSharing() else { return }
+
         if (quote.clientName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             shareAfterNoClient = quote
         } else {
             shareTarget = quote
         }
+    }
+
+    private func requireInternetForSharing() -> Bool {
+        guard network.isOnline else {
+            toast = Toast(style: .error, message: "Internet required for sharing")
+            return false
+        }
+        return true
     }
 
     /// Reads the line items prefetched just before this — the summary row alone
@@ -1734,49 +1746,53 @@ private struct UpcomingVisitsListView: View {
 
     var body: some View {
         List {
-            ForEach(visitGroups, id: \.day) { group in
+            if let nextVisit = visits.first {
+                Text("Next visit")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 4, trailing: 20))
+
+                UpcomingVisitHeroRow(
+                    visit: nextVisit,
+                    statusColor: statusColor(nextVisit),
+                    statusLabel: statusLabel(nextVisit),
+                    onTap: { onSelect(nextVisit) }
+                )
+                .modifier(UpcomingVisitRowChrome())
+                .modifier(UpcomingVisitSwipeActions(
+                    visit: nextVisit,
+                    isRecorded: isRecorded(nextVisit),
+                    onOpenQuote: onOpenQuote,
+                    onReschedule: onReschedule,
+                    onDelete: onDelete
+                ))
+            }
+
+            ForEach(timelineGroups, id: \.day) { group in
                 Text(dayHeaderText(for: group.day))
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 2, trailing: 20))
+                    .listRowInsets(EdgeInsets(top: 18, leading: 20, bottom: 4, trailing: 20))
 
                 ForEach(group.visits) { visit in
-                    UpcomingVisitCardRow(
+                    UpcomingVisitTimelineRow(
                         visit: visit,
                         statusColor: statusColor(visit),
                         statusLabel: statusLabel(visit),
                         onTap: { onSelect(visit) }
                     )
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
-                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                        if isRecorded(visit) {
-                            Button {
-                                onOpenQuote(visit)
-                            } label: {
-                                Label("Open quote", systemImage: "doc.text")
-                            }
-                            .tint(Color(.statusAcceptedText))
-                        }
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button {
-                            onDelete(visit)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                        .tint(.red)
-
-                        Button {
-                            onReschedule(visit)
-                        } label: {
-                            Label("Reschedule", systemImage: "calendar")
-                        }
-                        .tint(Color(.statusMutedText))
-                    }
+                    .modifier(UpcomingVisitRowChrome())
+                    .modifier(UpcomingVisitSwipeActions(
+                        visit: visit,
+                        isRecorded: isRecorded(visit),
+                        onOpenQuote: onOpenQuote,
+                        onReschedule: onReschedule,
+                        onDelete: onDelete
+                    ))
                 }
             }
         }
@@ -1792,6 +1808,17 @@ private struct UpcomingVisitsListView: View {
                 }
                 .accessibilityLabel("Book a visit")
             }
+        }
+    }
+
+    private var timelineGroups: [(day: Date, visits: [ScheduledVisit])] {
+        guard visits.count > 1 else { return [] }
+
+        let calendar = Calendar.current
+        let remaining = Array(visits.dropFirst())
+        let grouped = Dictionary(grouping: remaining) { calendar.startOfDay(for: $0.date) }
+        return grouped.keys.sorted().map { day in
+            (day: day, visits: grouped[day, default: []].sorted { $0.date < $1.date })
         }
     }
 
@@ -1815,52 +1842,113 @@ private struct UpcomingVisitsListView: View {
 
 }
 
-private struct UpcomingVisitCardRow: View {
+private struct UpcomingVisitRowChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+    }
+}
+
+private struct UpcomingVisitSwipeActions: ViewModifier {
+    let visit: ScheduledVisit
+    let isRecorded: Bool
+    let onOpenQuote: (ScheduledVisit) -> Void
+    let onReschedule: (ScheduledVisit) -> Void
+    let onDelete: (ScheduledVisit) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                if isRecorded {
+                    Button {
+                        onOpenQuote(visit)
+                    } label: {
+                        Label("Open quote", systemImage: "doc.text")
+                    }
+                    .tint(Color(.statusAcceptedText))
+                }
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button {
+                    onDelete(visit)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .tint(.red)
+
+                Button {
+                    onReschedule(visit)
+                } label: {
+                    Label("Reschedule", systemImage: "calendar")
+                }
+                .tint(Color(.statusMutedText))
+            }
+    }
+}
+
+private struct UpcomingVisitHeroRow: View {
     let visit: ScheduledVisit
     let statusColor: Color
     let statusLabel: String
     let onTap: () -> Void
 
     var body: some View {
-        let rowShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        let rowShape = RoundedRectangle(cornerRadius: 28, style: .continuous)
 
         Button(action: onTap) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(visit.title)
-                        .font(.headline)
-                        .foregroundStyle(Color(.mainText))
-                        .lineLimit(1)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 14) {
+                    VStack(spacing: 2) {
+                        Text(visit.date.formatted(.dateTime.hour().minute()))
+                            .font(.title3.weight(.bold).monospacedDigit())
+                            .foregroundStyle(statusColor)
+                        Text(visit.dayText)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .frame(width: 86, height: 72)
+                    .background(statusColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(visit.title)
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(Color(.mainText))
+                                .lineLimit(2)
+
+                            Spacer(minLength: 8)
+
+                            statusBadge
+                        }
+
+                        if let detail = primaryDetail {
+                            Label(detail.text, systemImage: detail.icon)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
                 }
 
-                Spacer(minLength: 0)
-
-                VStack(alignment: .trailing, spacing: 5) {
-                    Text(visit.date.formatted(date: .omitted, time: .shortened))
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(statusColor)
-
-                    Text(statusLabel)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(statusColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(statusColor.opacity(0.12), in: Capsule())
+                if let note = clean(visit.note) {
+                    Text(note)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .padding(.top, 2)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 18)
+            .padding(18)
             .background {
                 rowShape.fill(Color(.cardSurface))
-                rowShape.fill(statusColor.opacity(0.08))
+                rowShape.fill(statusColor.opacity(0.06))
             }
-            .overlay(rowShape.strokeBorder(statusColor.opacity(0.22), lineWidth: 0.5))
+            .overlay(rowShape.strokeBorder(statusColor.opacity(0.18), lineWidth: 0.5))
             .contentShape(.interaction, rowShape)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(visit.accessibilityText)
@@ -1868,10 +1956,118 @@ private struct UpcomingVisitCardRow: View {
         .buttonStyle(.plain)
     }
 
-    private var subtitle: String {
+    private var statusBadge: some View {
+        Text(statusLabel)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(statusColor)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(statusColor.opacity(0.12), in: Capsule())
+    }
+
+    private var primaryDetail: (icon: String, text: String)? {
+        if let address = clean(visit.address) { return ("mappin.and.ellipse", address) }
+        if let phone = clean(visit.phone) { return ("phone", phone) }
+        return ("calendar", visit.whenText)
+    }
+
+    private func clean(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private struct UpcomingVisitTimelineRow: View {
+    let visit: ScheduledVisit
+    let statusColor: Color
+    let statusLabel: String
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 8) {
+                    Text(visit.date.formatted(.dateTime.hour().minute()))
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(statusColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .frame(width: 68, alignment: .trailing)
+
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 8, height: 8)
+
+                    Rectangle()
+                        .fill(statusColor.opacity(0.22))
+                        .frame(width: 1, height: 42)
+                }
+                .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(visit.title)
+                            .font(.headline)
+                            .foregroundStyle(Color(.mainText))
+                            .lineLimit(1)
+
+                        Spacer(minLength: 8)
+
+                        Text(statusLabel)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(statusColor)
+                    }
+
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    HStack(spacing: 12) {
+                        if clean(visit.address) != nil {
+                            chip("mappin.and.ellipse", "Address")
+                        }
+                        if clean(visit.phone) != nil {
+                            chip("phone", "Phone")
+                        }
+                        if clean(visit.note) != nil {
+                            chip("note.text", "Note")
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(Color(.separator).opacity(0.55), lineWidth: 0.5)
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.interaction, Rectangle())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(visit.accessibilityText)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var subtitle: String? {
         if let address = clean(visit.address) { return address }
         if let note = clean(visit.note) { return note }
-        return visit.whenText
+        if let phone = clean(visit.phone) { return phone }
+        return nil
+    }
+
+    private func chip(_ systemImage: String, _ text: String) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+            .labelStyle(.iconOnly)
+            .frame(width: 24, height: 24)
+            .background(Color(.secondarySystemFill), in: Circle())
+            .accessibilityLabel(text)
     }
 
     private func clean(_ value: String?) -> String? {

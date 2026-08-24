@@ -24,8 +24,10 @@ struct ShareQuotePanel: View {
     var onShared: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(NetworkMonitor.self) private var network
     @State private var showSystemShare = false
     @State private var copied = false
+    @State private var toast: Toast?
     @State private var preview: UIImage?
     @State private var pdfURL: URL?
     @State private var isPreviewing = false
@@ -46,7 +48,9 @@ struct ShareQuotePanel: View {
     /// pasteboard. Counted as a share: a link handed over is a quote sent, the
     /// same as attaching the PDF.
     private func copyLink() {
+        guard requireInternetForSharing() else { return }
         guard !isLinking else { return }
+
         isLinking = true
         linkFailed = false
         Task {
@@ -114,6 +118,7 @@ struct ShareQuotePanel: View {
                 HStack(spacing: 12) {
                     actionButton(title: hasPDF ? "Send quote" : "Share via…",
                                  systemImage: "square.and.arrow.up") {
+                        guard requireInternetForSharing() else { return }
                         showSystemShare = true
                     }
                     // A link rather than the quote's text, which this used to copy.
@@ -140,6 +145,7 @@ struct ShareQuotePanel: View {
         }
         .presentationDetents([.height(300)])
         .presentationBackground(.ultraThinMaterial)
+        .toast($toast)
         .task {
             guard let document else { return }
             preview = QuotePDF.thumbnail(document)
@@ -165,6 +171,15 @@ struct ShareQuotePanel: View {
                     .ignoresSafeArea()
             }
         }
+    }
+
+    private func requireInternetForSharing() -> Bool {
+        guard network.isOnline else {
+            toast = Toast(style: .error, message: "Internet required for sharing")
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            return false
+        }
+        return true
     }
 
     private func actionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
