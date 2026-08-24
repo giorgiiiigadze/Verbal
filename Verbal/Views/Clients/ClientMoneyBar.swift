@@ -11,6 +11,7 @@ struct ClientMoneyBar: View {
     /// Already converted into `currencyCode`.
     let points: [ClientQuotePoint]
     let currencyCode: String
+    @State private var drawProgress: CGFloat = 0
 
     /// One status's worth of money, and how it is drawn.
     private struct Slice: Identifiable {
@@ -67,6 +68,8 @@ struct ClientMoneyBar: View {
         .padding(.top, 4)
         .padding(.bottom, 12)
         .animation(.snappy(duration: 0.35), value: total)
+        .onAppear { playIntro() }
+        .onChange(of: total) { _, _ in playIntro() }
     }
 
     // MARK: - Donut
@@ -76,14 +79,22 @@ struct ClientMoneyBar: View {
             Circle()
                 .stroke(Color(.separator).opacity(0.45), lineWidth: 28)
 
-            ForEach(segments) { segment in
+            ZStack {
+                ForEach(segments) { segment in
+                    Circle()
+                        .trim(from: segment.start, to: segment.end)
+                        .stroke(segment.color,
+                                style: StrokeStyle(lineWidth: 28, lineCap: .butt, lineJoin: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+            }
+            .mask {
                 Circle()
-                    .trim(from: segment.start, to: segment.end)
-                    .stroke(segment.color,
-                            style: StrokeStyle(lineWidth: 28, lineCap: .butt, lineJoin: .round))
+                    .trim(from: 0, to: drawProgress)
+                    .stroke(.black,
+                            style: StrokeStyle(lineWidth: 30, lineCap: .butt, lineJoin: .round))
                     .rotationEffect(.degrees(-90))
             }
-
         }
         .frame(width: 184, height: 184)
         .accessibilityElement(children: .ignore)
@@ -144,5 +155,15 @@ struct ClientMoneyBar: View {
         slices
             .map { "\($0.label) \(AppCurrency.format($0.amount, code: currencyCode))" }
             .joined(separator: ", ")
+    }
+
+    private func playIntro() {
+        drawProgress = 0
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(60))
+            withAnimation(.smooth(duration: 0.85)) {
+                drawProgress = 1
+            }
+        }
     }
 }
