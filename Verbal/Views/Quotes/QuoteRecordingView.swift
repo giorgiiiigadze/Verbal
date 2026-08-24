@@ -484,6 +484,13 @@ struct QuoteRecordingView: View {
         Task {
             if let id = await pending.value {
                 try? await QuoteService.deleteQuote(id: id)
+                // And give the allowance back. The ledger never refunds a
+                // delete on purpose, but this draft is being replaced by the
+                // recording about to start — one quote is being made here, not
+                // two, and charging for both would spend a free user's whole
+                // day on a single re-record.
+                try? await QuoteService.voidQuoteUsage(quoteID: id)
+                await session.refreshQuoteUsage()
             }
         }
     }

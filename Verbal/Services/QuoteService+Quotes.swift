@@ -332,6 +332,18 @@ extension QuoteService {
     /// a quote was made, so deleting one doesn't hand its allowance back. RLS
     /// scopes the count to the signed-in user, and there is no delete policy on
     /// that table for anyone.
+    /// Hands back the allowance for a draft being replaced right now.
+    ///
+    /// The counterpart to `quotesUsed`, and deliberately much narrower: the
+    /// function behind it voids only the caller's own row and only within
+    /// minutes of its being made, so re-recording costs one quote rather than
+    /// two while deleting an old quote still refunds nothing.
+    static func voidQuoteUsage(quoteID: UUID) async throws {
+        try await client
+            .rpc("void_quote_usage", params: ["p_quote_id": quoteID.uuidString])
+            .execute()
+    }
+
     static func quotesUsed(since date: Date) async throws -> Int {
         let response = try await client
             .from("quote_usage")

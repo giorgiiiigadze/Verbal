@@ -8,6 +8,10 @@ import SwiftUI
 struct ContentView: View {
     @State private var network = NetworkMonitor()
     @State private var session: SessionStore
+    /// What they're entitled to. Owned here rather than by the tab view so the
+    /// `Transaction.updates` listener is running from launch — a renewal or a
+    /// refund arrives when Apple sends it, not when a screen happens to be up.
+    @State private var store = Store()
     /// Whether this person has been through onboarding — read from the
     /// Keychain, not `@AppStorage`, so it survives a delete and reinstall the
     /// same way the auth session does. See `OnboardingMemory`.
@@ -60,6 +64,7 @@ struct ContentView: View {
             content
                 .environment(session)
                 .environment(network)
+                .environment(store)
 
             if showSplash {
                 SplashScreen()

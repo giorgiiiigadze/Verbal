@@ -17,6 +17,7 @@ struct MainTabView: View {
     private enum TabItem: Hashable { case home, clients, account, record }
 
     @Environment(SessionStore.self) private var session
+    @Environment(Store.self) private var store
     @Environment(AppNotificationRouter.self) private var notificationRouter
     @Environment(\.colorScheme) private var colorScheme
     @State private var selection: TabItem = .home
@@ -50,10 +51,37 @@ struct MainTabView: View {
             get: { selection },
             set: { newValue in
                 if newValue == .record {
-                    showCreate = true
+                    requestCreate()
                 } else {
                     selection = newValue
                 }
+            }
+        )
+    }
+
+    /// The one gate on making a new quote.
+    ///
+    /// `showCreate` is state of this view, and Home only ever sets it through
+    /// the binding below, so every way into the recorder — the mic in the bar,
+    /// a scheduled visit, both empty states — arrives here. One check rather
+    /// than five copies of one, and no way to add a sixth entry point that
+    /// quietly skips it.
+    private func requestCreate() {
+        if store.canCreateQuote(remaining: session.freeQuotesRemaining) {
+            showCreate = true
+        } else {
+            store.isPaywallPresented = true
+        }
+    }
+
+    /// What Home is handed in place of `$showCreate`. Setting it true asks;
+    /// setting it false — which is what the sheet's own dismissal does — closes
+    /// without asking anything.
+    private var createBinding: Binding<Bool> {
+        Binding(
+            get: { showCreate },
+            set: { wantsToCreate in
+                if wantsToCreate { requestCreate() } else { showCreate = false }
             }
         )
     }
@@ -65,7 +93,7 @@ struct MainTabView: View {
             // artwork's own red would otherwise sit in the bar ignoring both
             // selection and the colour scheme.
             Tab(value: TabItem.home) {
-                HomeView(showCreate: $showCreate)
+                HomeView(showCreate: createBinding)
             } label: {
                 Label {
                     Text("Home")
@@ -121,6 +149,12 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $showShareLinkNews, onDismiss: { seenShareLinkNews = true }) {
             ShareLinkNewsSheet()
+        }
+        // The app's only paywall presentation, for the same reason the sheet
+        // above lives here: Home and the quote screen both need to raise it and
+        // both already own several sheets, where a further one is ignored.
+        .sheet(isPresented: Bindable(store).isPaywallPresented) {
+            PaywallSheet(remaining: session.freeQuotesRemaining)
         }
         .onChange(of: notificationRouter.requestedQuoteId) { _, quoteId in
             guard quoteId != nil else { return }

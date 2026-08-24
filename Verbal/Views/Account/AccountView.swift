@@ -25,6 +25,8 @@ import SwiftUI
 
 struct AccountView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(Store.self) private var store
+    @Environment(\.openURL) private var openURL
 
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
     @AppStorage(ScheduledVisitNotifications.enabledKey) private var remindersEnabled = true
@@ -33,6 +35,21 @@ struct AccountView: View {
     @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
     /// Read only to refresh the row's value when the picker writes it.
     @AppStorage(DictationLanguage.defaultsKey) private var dictationLocale = ""
+
+    /// Apple's own subscription management. There is nowhere in the app to
+    /// cancel — Apple owns the billing relationship, and a Cancel button that
+    /// only deep-links elsewhere reads as one that failed.
+    private static let manageSubscriptionsURL =
+        URL(string: "https://apps.apple.com/account/subscriptions")!
+
+    /// "Verbal Pro", or what is left of today. Nil remaining means the count
+    /// hasn't come back yet, and guessing at it here would show someone a
+    /// number that changes under them a second later.
+    private var planLabel: String {
+        if store.isPro { return "Verbal Pro" }
+        guard let remaining = session.freeQuotesRemaining else { return "Free" }
+        return "Free · \(remaining) of \(SessionStore.freeQuotesPerDay) left today"
+    }
 
     /// What the dictation row reads on the right — resolved, so automatic still
     /// names the language it picked.
@@ -107,6 +124,27 @@ struct AccountView: View {
                 }
             } footer: {
                 Text("Your business name, number and address as a client sees them, and the trade Verbal reads your jobs against.")
+            }
+            .listRowBackground(Color(.cardSurface))
+
+            // Above the settings rather than buried with them: what someone is
+            // paying, and how much of today's allowance is left, is a fact
+            // about the account — the same question the section above answers.
+            Section {
+                Button {
+                    if store.isPro {
+                        openURL(Self.manageSubscriptionsURL)
+                    } else {
+                        store.isPaywallPresented = true
+                    }
+                } label: {
+                    LabeledContent("Subscription", value: planLabel)
+                        .foregroundStyle(Color(.mainText))
+                }
+            } footer: {
+                if !store.isPro {
+                    Text("Free includes \(SessionStore.freeQuotesPerDay) new quotes a day. Quotes you have already made stay yours to open, edit and send.")
+                }
             }
             .listRowBackground(Color(.cardSurface))
 

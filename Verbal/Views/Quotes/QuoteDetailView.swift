@@ -11,6 +11,7 @@ import UIKit
 
 struct QuoteDetailView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(Store.self) private var store
     @Environment(NetworkMonitor.self) private var network
     @Environment(\.dismiss) private var dismiss
     let quote: QuoteSummary
@@ -478,10 +479,18 @@ struct QuoteDetailView: View {
     /// away from what they were reading to a screen identical to it; the copy
     /// is waiting on the list when they go back.
     private func duplicateQuote() {
+        guard store.canCreateQuote(remaining: session.freeQuotesRemaining) else {
+            store.isPaywallPresented = true
+            return
+        }
         Task {
             do {
                 try await QuoteService.duplicateQuote(id: quote.id)
                 onNeedsRefresh()
+                // Home has always refreshed the count after a copy and this
+                // screen never did, so duplicating from here left the allowance
+                // reading one too many for the rest of the session.
+                await session.refreshQuoteUsage()
                 toast = Toast(style: .success, message: "Copy saved as a draft")
             } catch {
                 toast = Toast(style: .error, message: "Couldn't duplicate this quote")
