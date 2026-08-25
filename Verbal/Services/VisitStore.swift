@@ -98,27 +98,27 @@ final class VisitStore {
 
     /// Let go of the current account's visits.
     ///
-    /// `preservingPending` keeps anything the server has not been told about —
-    /// a visit booked in a basement and signed out of before finding signal.
-    /// It is written back under that account's id, so the next sign-in finds it
-    /// and pushes it. This runs after `LocalCache.clear(userID:)` has emptied
-    /// the directory, which is why it can safely write into it again.
+    /// `preservingCache` keeps this account's visit file after the rest of the
+    /// account cache has been wiped. The file is still written under that
+    /// account's id, so a second account cannot see it; the original account can
+    /// repaint Upcoming immediately on the next sign-in, and any pending edits
+    /// still push when signal returns.
     ///
     /// Account deletion passes `false`: there is nothing left to push to.
-    func detach(preservingPending: Bool) {
+    func detach(preservingCache: Bool) {
         defer {
             userID = nil
             visits = []
             unsynced = []
             tombstones = []
         }
-        guard preservingPending, let userID else { return }
+        guard preservingCache, let userID else { return }
 
-        let pending = Cache(visits: visits.filter { unsynced.contains($0.id) },
-                            unsynced: Array(unsynced),
-                            tombstones: tombstones)
-        guard !pending.visits.isEmpty || !pending.tombstones.isEmpty else { return }
-        write(pending, userID: userID)
+        let cache = Cache(visits: visits,
+                          unsynced: Array(unsynced),
+                          tombstones: tombstones)
+        guard !cache.visits.isEmpty || !cache.tombstones.isEmpty else { return }
+        write(cache, userID: userID)
     }
 
     /// Push everything outstanding while the session can still authenticate.

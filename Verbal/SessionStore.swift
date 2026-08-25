@@ -552,16 +552,15 @@ final class SessionStore {
         // "unchanged" against the last one's URL and never downloaded.
         UserDefaults.standard.removeObject(forKey: Self.avatarURLKey)
         // Booked visits are client names with dates on them, and they belong to
-        // the account rather than the handset. The server holds them now, so
-        // this is a wipe and not a deletion: account B sees an empty Upcoming,
-        // and account A gets every visit back when they sign in again. Anything
-        // that never reached the server is kept under its own account's id and
-        // pushed at that account's next sign-in.
+        // the account rather than the handset. Account B sees an empty
+        // Upcoming; account A gets its own visit cache back immediately when it
+        // signs in again, then Supabase catches it up. Anything that never
+        // reached the server is pushed at that account's next sign-in.
         //
         // The reminders go regardless — account B must never be buzzed about
         // somebody else's Mrs. Patel.
         ScheduledVisitNotifications.cancelAll(visits: visitStore.visits)
-        visitStore.detach(preservingPending: true)
+        visitStore.detach(preservingCache: true)
         quotes = []
         rateCard = []
         spokenPrices = []
@@ -658,7 +657,7 @@ final class SessionStore {
         // Nothing left to push to: the rows went with the account. Dropped
         // before `clearSession`, so the sign-out below doesn't try to preserve
         // work for a user that no longer exists.
-        visitStore.detach(preservingPending: false)
+        visitStore.detach(preservingCache: false)
         // Forget that they were ever onboarded. Signing out deliberately does
         // not do this — leaving is not forgetting — but deleting the account
         // is the one place someone says so outright, and whoever signs up on
