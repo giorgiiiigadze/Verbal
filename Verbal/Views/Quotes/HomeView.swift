@@ -280,10 +280,12 @@ struct HomeView: View {
                     quotes = session.quotes
                     hasLoaded = session.listsLoaded
                 }
-                // Read here rather than at init: `ScheduledVisit.load()` drops
-                // the days that have already been and gone, and a phone left
-                // open overnight would otherwise still be offering yesterday.
-                visits = ScheduledVisit.load()
+                // Read here rather than at init: the store drops the days that
+                // have already been and gone, and a phone left open overnight
+                // would otherwise still be offering yesterday. `refresh` does
+                // that with no network involved, so it still happens in a loft.
+                session.visitStore.refresh()
+                visits = session.visitStore.visits
                 promptForMissedVisitIfNeeded()
                 await load()
                 await openPendingNotificationQuoteIfNeeded()
@@ -291,6 +293,10 @@ struct HomeView: View {
             .modifier(SessionSync(quotes: session.quotes,
                                   listsLoaded: session.listsLoaded,
                                   apply: sync))
+            .modifier(VisitSync(visits: session.visitStore.visits,
+                                isOnline: network.isOnline,
+                                apply: applyVisits,
+                                reconnected: { Task { await session.visitStore.sync() } }))
             .onChange(of: quotes.isEmpty) { _, isEmpty in
                 if !isEmpty { hasEverHadQuotes = true }
             }
@@ -754,26 +760,32 @@ struct HomeView: View {
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
     }
 
+    /// Take a list that arrived from the server: booked on another phone, or
+    /// pushed from this one after it found signal again.
+    ///
+    /// A pull that changes nothing must look like nothing, which is what the
+    /// guard is for — the same rule `load()` follows for quotes.
+    private func applyVisits(_ fresh: [ScheduledVisit]) {
+        guard fresh != visits else { return }
+        visits = fresh
+        promptForMissedVisitIfNeeded()
+    }
+
     /// New booking, or a correction to one. Sorted on the way in so the list
     /// and the stored copy are always in the order they're read in.
     private func addOrUpdate(_ visit: ScheduledVisit) {
+        session.visitStore.addOrUpdate(visit)
         withAnimation(Self.rowInsert) {
-            if let index = visits.firstIndex(where: { $0.id == visit.id }) {
-                visits[index] = visit
-            } else {
-                visits.append(visit)
-            }
-            visits.sort { $0.date < $1.date }
+            visits = session.visitStore.visits
         }
-        ScheduledVisit.save(visits)
         Task { await ScheduledVisitNotifications.schedule(visit) }
     }
 
     private func remove(_ visit: ScheduledVisit) {
+        session.visitStore.remove(visit)
         withAnimation(Self.rowRemoval) {
-            visits.removeAll { $0.id == visit.id }
+            visits = session.visitStore.visits
         }
-        ScheduledVisit.save(visits)
         ScheduledVisitNotifications.cancel(visit)
         if visits.isEmpty {
             showUpcomingVisits = false
@@ -837,44 +849,36 @@ struct HomeView: View {
     }
 
     private func markRecorded(_ visit: ScheduledVisit, quoteId: UUID) {
-        guard let index = visits.firstIndex(where: { $0.id == visit.id }) else { return }
-        visits[index].recordedQuoteId = quoteId
-        visits[index].didPromptForMissedVisit = false
-        ScheduledVisit.save(visits)
-        ScheduledVisitNotifications.cancel(visits[index])
+        guard visits.contains(where: { $0.id == visit.id }) else { return }
+        session.visitStore.markRecorded(visit, quoteId: quoteId)
+        visits = session.visitStore.visits
+        ScheduledVisitNotifications.cancel(visit)
         Task { await load() }
     }
 
     private func unlinkVisits(fromDeletedQuote quoteId: UUID) {
-        let linkedIndices = visits.indices.filter { visits[$0].recordedQuoteId == quoteId }
-        guard !linkedIndices.isEmpty else { return }
-        let visitsToReschedule = linkedIndices.map { visits[$0] }
+        // The store hands back the visits it released, already unlinked.
+        let unlinked = session.visitStore.unlink(fromDeletedQuote: quoteId)
+        guard !unlinked.isEmpty else { return }
 
         withAnimation(Self.rowRemoval) {
-            for index in linkedIndices {
-                visits[index].recordedQuoteId = nil
-            }
+            visits = session.visitStore.visits
         }
-        ScheduledVisit.save(visits)
 
         Task {
-            for visit in visitsToReschedule {
-                var unlinkedVisit = visit
-                unlinkedVisit.recordedQuoteId = nil
-                await ScheduledVisitNotifications.schedule(unlinkedVisit)
+            for visit in unlinked {
+                await ScheduledVisitNotifications.schedule(visit)
             }
         }
     }
 
     private func markPromptedAndClear(_ visit: ScheduledVisit) {
         missedVisitPrompt = nil
-        var cleared = visit
-        cleared.didPromptForMissedVisit = true
-        ScheduledVisitNotifications.cancel(cleared)
+        ScheduledVisitNotifications.cancel(visit)
+        session.visitStore.markPromptedAndClear(visit)
         withAnimation(Self.rowRemoval) {
-            visits.removeAll { $0.id == visit.id }
+            visits = session.visitStore.visits
         }
-        ScheduledVisit.save(visits)
     }
 
     private func promptForMissedVisitIfNeeded() {
@@ -2185,6 +2189,27 @@ struct SearchWhenAsked: ViewModifier {
 }
 
 // MARK: - Filtering
+
+/// Visits arriving from the server, and the moment there is signal to fetch
+/// them with.
+///
+/// A modifier for the same reason `SessionSync` below is one, and not an
+/// optional one: two more `onChange`s in that body's chain put the type-checker
+/// over its limit outright.
+private struct VisitSync: ViewModifier {
+    let visits: [ScheduledVisit]
+    let isOnline: Bool
+    let apply: ([ScheduledVisit]) -> Void
+    let reconnected: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: visits) { _, fresh in apply(fresh) }
+            // Back in signal after a basement: whatever was booked or cancelled
+            // down there goes up now, without waiting for a relaunch.
+            .onChange(of: isOnline) { _, online in if online { reconnected() } }
+    }
+}
 
 /// Watches the session's copy of the quote list on Home's behalf.
 ///

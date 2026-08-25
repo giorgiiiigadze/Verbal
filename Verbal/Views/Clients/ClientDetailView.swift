@@ -196,7 +196,8 @@ struct ClientDetailView: View {
         }
         .toast($toast)
         .task(id: activeKey.id) {
-            await location.load(name: client.name, key: activeKey.id)
+            await location.load(name: client.name, key: activeKey.id,
+                                visits: session.visitStore.visits)
         }
         .task(id: signature) {
             points = await ClientQuotePoint.of(client.quotes, in: currencyCode)

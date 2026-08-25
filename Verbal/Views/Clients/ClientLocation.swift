@@ -101,11 +101,11 @@ final class ClientLocation {
 
     /// Fetch the address for a client and place it. Cheap to call again with
     /// the same person — it returns without a request.
-    func load(name: String, key: String) async {
+    func load(name: String, key: String, visits: [ScheduledVisit]) async {
         guard loadedKey != key else { return }
         loadedKey = key
         isLoading = true
-        let booked = Self.visits(for: name)
+        let booked = Self.visits(for: name, in: visits)
         suggestion = Self.address(from: booked)
         nextVisit = booked.first { $0.date >= Date() }
 
@@ -156,17 +156,21 @@ final class ClientLocation {
         coordinate = found
     }
 
-    /// Visits booked with this client, soonest first.
+    /// Visits booked with this client, soonest first, out of the list handed in.
+    ///
+    /// Handed in rather than read from storage here: `VisitStore` is the one
+    /// copy of it, and this screen used to re-read the file independently of
+    /// Home — so a visit booked a moment ago on one was not on the other.
     ///
     /// Visits carry one free-text title — "Mrs. Patel — bathroom" — so the
     /// match is a containment check on the name rather than a lookup. Loose on
     /// purpose: the worst case is that the editor opens pre-filled with an
     /// address the user then clears, and the best case is that they never type
     /// an address they already typed once.
-    private static func visits(for name: String) -> [ScheduledVisit] {
+    private static func visits(for name: String, in visits: [ScheduledVisit]) -> [ScheduledVisit] {
         let needle = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return [] }
-        return ScheduledVisit.load()
+        return visits
             .filter { $0.title.lowercased().contains(needle) }
             .sorted { $0.date < $1.date }
     }

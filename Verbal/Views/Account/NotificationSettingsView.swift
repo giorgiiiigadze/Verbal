@@ -12,6 +12,7 @@ struct NotificationSettingsView: View {
     @AppStorage(ScheduledVisitNotifications.enabledKey) private var remindersEnabled = true
     @AppStorage(ScheduledVisitNotifications.leadTimeKey) private var leadTimeRaw = ScheduledVisitReminderLeadTime.atTime.rawValue
 
+    @Environment(SessionStore.self) private var session
     @Environment(\.openURL) private var openURL
     @State private var authorizationStatus: UNAuthorizationStatus = .notDetermined
     @State private var toast: Toast?
@@ -36,7 +37,7 @@ struct NotificationSettingsView: View {
                             if enabled {
                                 await rescheduleReminders()
                             } else {
-                                ScheduledVisitNotifications.cancelAll(visits: ScheduledVisit.load())
+                                ScheduledVisitNotifications.cancelAll(visits: session.visitStore.visits)
                             }
                             await refreshAuthorizationStatus()
                         }
@@ -104,7 +105,7 @@ struct NotificationSettingsView: View {
     }
 
     private func rescheduleReminders() async {
-        await ScheduledVisitNotifications.rescheduleAll(visits: ScheduledVisit.load())
+        await ScheduledVisitNotifications.rescheduleAll(visits: session.visitStore.visits)
         await refreshAuthorizationStatus()
         if authorizationStatus == .denied {
             toast = Toast(style: .error, message: "Notifications are off in iOS Settings")

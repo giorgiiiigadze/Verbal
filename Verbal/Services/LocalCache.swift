@@ -50,6 +50,11 @@ nonisolated enum LocalCache {
         case profile
         /// The avatar's bytes, alongside the row that names it.
         case avatar
+        /// Booked visits, plus what still has to be pushed about them. Unlike
+        /// everything else here this is not only a copy of a server response:
+        /// a visit booked with no signal exists here and nowhere else until the
+        /// phone finds some, so this file is the original, not the cache.
+        case scheduledVisits
 
         var filename: String {
             switch self {
@@ -58,6 +63,7 @@ nonisolated enum LocalCache {
             case .businessProfile: return "businessProfile"
             case .profile: return "profile"
             case .avatar: return "avatar"
+            case .scheduledVisits: return "scheduledVisits"
             case .lineItems(let quoteID): return "lineItems-\(quoteID.uuidString)"
             case .transcript(let quoteID): return "transcript-\(quoteID.uuidString)"
             case .businessLogo: return "businessLogo"

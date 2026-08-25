@@ -230,8 +230,14 @@ final class SessionStore {
     private let network: NetworkMonitor
     private var isExplicitlySigningOut = false
 
+    /// Booked visits, and the sync that keeps them and `scheduled_visits` in
+    /// step. Owned here because the two things that decide whose visits these
+    /// are — a sign-out and a swap to another account — both happen here.
+    let visitStore: VisitStore
+
     init(network: NetworkMonitor) {
         self.network = network
+        self.visitStore = VisitStore(network: network)
     }
 
     /// Restore a stored session synchronously enough for launch decisions.
@@ -419,6 +425,9 @@ final class SessionStore {
             avatarImage = Image(uiImage: image)
             avatarUIImage = image
         }
+        // Read straight off the disk, like everything above it, so Upcoming has
+        // its rows on the first frame instead of after a fetch.
+        visitStore.attach(userID: userID)
         restoreLineItems(userID: userID)
         // Lets the splash stop waiting and Home draw real rows. On a first run
         // there is nothing to restore, so the existing wait still applies.
@@ -502,6 +511,11 @@ final class SessionStore {
         // only worth anything on the launch after next, when there's no signal.
         let ids = quotes.map(\.id)
         Task.detached { await QuoteService.cacheMissingTranscripts(for: ids) }
+
+        // Also off the critical path: Upcoming is already on screen from the
+        // cache. This is what pushes a visit booked with no signal, and pulls
+        // one booked on another phone.
+        Task { await visitStore.sync() }
     }
 
     private func clearSession() {
@@ -537,10 +551,17 @@ final class SessionStore {
         // Same reason: left behind, the next user's avatar is judged
         // "unchanged" against the last one's URL and never downloaded.
         UserDefaults.standard.removeObject(forKey: Self.avatarURLKey)
-        // Booked visits are client names with dates on them. They belong to the
-        // account, not the handset — the same leak the quote cache is wiped for.
-        ScheduledVisitNotifications.cancelAll(visits: ScheduledVisit.load())
-        ScheduledVisit.clear()
+        // Booked visits are client names with dates on them, and they belong to
+        // the account rather than the handset. The server holds them now, so
+        // this is a wipe and not a deletion: account B sees an empty Upcoming,
+        // and account A gets every visit back when they sign in again. Anything
+        // that never reached the server is kept under its own account's id and
+        // pushed at that account's next sign-in.
+        //
+        // The reminders go regardless — account B must never be buzzed about
+        // somebody else's Mrs. Patel.
+        ScheduledVisitNotifications.cancelAll(visits: visitStore.visits)
+        visitStore.detach(preservingPending: true)
         quotes = []
         rateCard = []
         spokenPrices = []
@@ -603,6 +624,10 @@ final class SessionStore {
     // MARK: - Auth actions
 
     func signOut() async throws {
+        // While the token still works. Afterwards there is no session to write
+        // with, so a visit booked in a basement this morning would sit on the
+        // phone until this account next signs in.
+        await visitStore.flushPending()
         isExplicitlySigningOut = true
         do {
             try await client.auth.signOut()
@@ -630,6 +655,10 @@ final class SessionStore {
     /// local session and returns the app to the auth screen.
     func deleteAccount() async throws {
         let _: DeleteAccountResponse = try await client.functions.invoke("delete-account")
+        // Nothing left to push to: the rows went with the account. Dropped
+        // before `clearSession`, so the sign-out below doesn't try to preserve
+        // work for a user that no longer exists.
+        visitStore.detach(preservingPending: false)
         // Forget that they were ever onboarded. Signing out deliberately does
         // not do this — leaving is not forgetting — but deleting the account
         // is the one place someone says so outright, and whoever signs up on

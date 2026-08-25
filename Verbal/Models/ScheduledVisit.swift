@@ -11,10 +11,14 @@
 //  forcing an empty draft into the quotes table to hold a date would put a
 //  £0 quote in the list, in the count, and in the client's history.
 //
-//  Held on the device rather than on the server, on purpose for now: it is a
-//  note-to-self with a date on it, and it earns its way to a table once it has
-//  proved it is used. The cost is that it doesn't follow the user to a second
-//  phone — which is why nothing else depends on it.
+//  Kept in `scheduled_visits` on the server, and mirrored into a per-account
+//  cache on the device that the list is actually drawn from. The device copy
+//  comes first — a visit booked in a basement is written locally and pushed
+//  when there is signal — and `VisitStore` owns both halves.
+//
+//  It used to live in one UserDefaults key with no user id in it, which sign-out
+//  deleted outright: a user who switched accounts lost their booked week and
+//  signing back in brought back nothing.
 //
 
 import Foundation
@@ -32,9 +36,17 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
     var note: String?
     var recordedQuoteId: UUID?
     var didPromptForMissedVisit: Bool
+    /// When this visit was last edited, by whichever device edited it.
+    ///
+    /// The conflict resolver: two phones on one account both write here, and the
+    /// later edit wins. Deliberately the moment of the edit rather than the
+    /// moment the server heard about it — a phone that has been offline for
+    /// three days arrives last, and arriving last is not the same as being right.
+    var updatedAt: Date
 
     private enum CodingKeys: String, CodingKey {
         case id, title, date, phone, address, note, recordedQuoteId, didPromptForMissedVisit
+        case updatedAt
     }
 
     init(id: UUID = UUID(),
@@ -44,7 +56,8 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
          address: String? = nil,
          note: String? = nil,
          recordedQuoteId: UUID? = nil,
-         didPromptForMissedVisit: Bool = false) {
+         didPromptForMissedVisit: Bool = false,
+         updatedAt: Date = .now) {
         self.id = id
         self.title = title
         self.date = date
@@ -53,6 +66,7 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
         self.note = note
         self.recordedQuoteId = recordedQuoteId
         self.didPromptForMissedVisit = didPromptForMissedVisit
+        self.updatedAt = updatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -65,6 +79,10 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
         note = try values.decodeIfPresent(String.self, forKey: .note)
         recordedQuoteId = try values.decodeIfPresent(UUID.self, forKey: .recordedQuoteId)
         didPromptForMissedVisit = try values.decodeIfPresent(Bool.self, forKey: .didPromptForMissedVisit) ?? false
+        // Absent on rows written before visits were synced. `.distantPast` is
+        // the honest answer — the server has never heard of them, so anything
+        // it does hold about them is newer.
+        updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt) ?? .distantPast
     }
 
     var isToday: Bool { Calendar.current.isDateInToday(date) }
@@ -99,47 +117,5 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
     var accessibilityText: String {
         let when = date.formatted(.dateTime.weekday(.wide).month(.wide).day().hour().minute())
         return "\(title), \(when)"
-    }
-
-    // MARK: - Storage
-
-    private static let key = "scheduledVisits"
-
-    /// Everything still active, soonest first. Recorded visits stay through
-    /// their booked day. Missed visits stay until the user answers the one-time
-    /// follow-up prompt.
-    static func load() -> [ScheduledVisit] {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let stored = try? JSONDecoder().decode([ScheduledVisit].self, from: data)
-        else { return [] }
-
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let upcoming = stored
-            .filter { visit in
-                if visit.recordedQuoteId != nil {
-                    return calendar.startOfDay(for: visit.date) >= today
-                }
-                return !visit.didPromptForMissedVisit
-            }
-            .sorted { $0.date < $1.date }
-
-        // Only rewrite when the prune actually removed something, so a plain
-        // read of an unchanged list isn't a write.
-        if upcoming.count != stored.count { save(upcoming) }
-        return upcoming
-    }
-
-    static func save(_ visits: [ScheduledVisit]) {
-        let sorted = visits.sorted { $0.date < $1.date }
-        guard let data = try? JSONEncoder().encode(sorted) else { return }
-        UserDefaults.standard.set(data, forKey: key)
-    }
-
-    /// Cleared with the account. The titles are client names, so they belong to
-    /// whoever was signed in, not to the handset — the same reason the quote
-    /// cache is wiped on sign-out.
-    static func clear() {
-        UserDefaults.standard.removeObject(forKey: key)
     }
 }

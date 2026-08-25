@@ -2,9 +2,9 @@
 //
 // The user id is taken from the caller's JWT, never from the request body, so
 // a caller can only ever delete themselves. Deleting the auth user cascades to
-// profiles, business_profiles, rate_card_items, customers and quotes (which in
-// turn cascade to quote_line_items and transcripts), so no manual cleanup is
-// needed here.
+// profiles, business_profiles, rate_card_items, customers, scheduled_visits and
+// quotes (which in turn cascade to quote_line_items and transcripts), so no
+// manual cleanup is needed here.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
