@@ -62,9 +62,6 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             content
-                .environment(session)
-                .environment(network)
-                .environment(store)
 
             if showSplash {
                 SplashScreen()
@@ -98,6 +95,9 @@ struct ContentView: View {
                 }
             }
         }
+        .environment(session)
+        .environment(network)
+        .environment(store)
         .animation(.easeInOut(duration: 0.35), value: showSplash)
         .animation(.spring(duration: 0.4), value: network.isOnline)
         .onChange(of: network.isOnline) { _, isOnline in

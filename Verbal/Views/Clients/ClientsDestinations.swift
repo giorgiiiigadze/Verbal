@@ -21,6 +21,8 @@ import SwiftUI
 /// which is a snapshot of whatever the list held when it was tapped.
 struct ClientsDestinations: ViewModifier {
     @Environment(SessionStore.self) private var session
+    @Environment(Store.self) private var store
+    @Environment(NetworkMonitor.self) private var network
 
     func body(content: Content) -> some View {
         content
@@ -33,6 +35,9 @@ struct ClientsDestinations: ViewModifier {
                     initialLineItems: session.lineItems(for: quote.id) ?? [],
                     onDeleted: {}
                 )
+                .environment(session)
+                .environment(store)
+                .environment(network)
             }
     }
 }

@@ -22,6 +22,8 @@ struct MainTabView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var selection: TabItem = .home
     @State private var showCreate = false
+    @State private var recordingVisit: ScheduledVisit?
+    @State private var savedRecordingQuoteID: UUID?
 
     /// Announcements are shown once and never again. A promo that comes back is
     /// how people learn to dismiss your sheets without reading them.
@@ -68,6 +70,7 @@ struct MainTabView: View {
     /// quietly skips it.
     private func requestCreate() {
         if store.canCreateQuote(remaining: session.freeQuotesRemaining) {
+            recordingVisit = nil
             showCreate = true
         } else {
             store.isPaywallPresented = true
@@ -81,7 +84,15 @@ struct MainTabView: View {
         Binding(
             get: { showCreate },
             set: { wantsToCreate in
-                if wantsToCreate { requestCreate() } else { showCreate = false }
+                if wantsToCreate {
+                    if store.canCreateQuote(remaining: session.freeQuotesRemaining) {
+                        showCreate = true
+                    } else {
+                        store.isPaywallPresented = true
+                    }
+                } else {
+                    showCreate = false
+                }
             }
         )
     }
@@ -93,7 +104,9 @@ struct MainTabView: View {
             // artwork's own red would otherwise sit in the bar ignoring both
             // selection and the colour scheme.
             Tab(value: TabItem.home) {
-                HomeView(showCreate: createBinding)
+                HomeView(showCreate: createBinding,
+                         recordingVisit: $recordingVisit,
+                         savedRecordingQuoteID: $savedRecordingQuoteID)
             } label: {
                 Label {
                     Text("Home")
@@ -155,6 +168,14 @@ struct MainTabView: View {
         // both already own several sheets, where a further one is ignored.
         .sheet(isPresented: Bindable(store).isPaywallPresented) {
             PaywallSheet(remaining: session.freeQuotesRemaining)
+        }
+        .sheet(isPresented: $showCreate, onDismiss: {
+            recordingVisit = nil
+        }) {
+            QuoteRecordingView(scheduledVisit: recordingVisit) { quoteId in
+                savedRecordingQuoteID = quoteId
+            }
+            .environment(session)
         }
         .onChange(of: notificationRouter.requestedQuoteId) { _, quoteId in
             guard quoteId != nil else { return }

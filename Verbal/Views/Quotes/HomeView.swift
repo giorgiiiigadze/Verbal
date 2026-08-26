@@ -15,6 +15,8 @@ struct HomeView: View {
     @Environment(AppNotificationRouter.self) private var notificationRouter
     @Environment(\.openURL) private var openURL
     @Binding var showCreate: Bool
+    @Binding var recordingVisit: ScheduledVisit?
+    @Binding var savedRecordingQuoteID: UUID?
     @State private var path = NavigationPath()
     @State private var quotes: [QuoteSummary] = []
     @State private var hasLoaded = false
@@ -67,8 +69,6 @@ struct HomeView: View {
     @State private var selectedVisit: ScheduledVisit?
     /// Pushes the complete upcoming visits list when the compact card overflows.
     @State private var showUpcomingVisits = false
-    /// A booked visit that opened the recorder, so the saved quote can mark it done.
-    @State private var visitForRecording: ScheduledVisit?
     /// A missed visit opened from the prompt. It is cleared only after a quote is saved.
     @State private var visitToClearAfterRecording: ScheduledVisit?
     /// A red visit that has been sitting for 24h and needs a decision.
@@ -198,6 +198,8 @@ struct HomeView: View {
                     onNeedsRefresh: { Task { await load() } }
                 )
                 .environment(session)
+                .environment(store)
+                .environment(network)
             }
             .navigationDestination(isPresented: $showRateCard) {
                 RateCardView()
@@ -309,6 +311,12 @@ struct HomeView: View {
                 guard let quoteId else { return }
                 Task { await openQuoteFromNotification(id: quoteId) }
             }
+            .onChange(of: savedRecordingQuoteID) { _, quoteId in
+                handleSavedRecordingQuote(quoteId)
+            }
+            .onChange(of: showCreate) { _, isPresented in
+                handleRecorderPresentationChange(isPresented: isPresented)
+            }
             .refreshable { await load() }
             .alert("Delete this quote?", isPresented: Binding(
                 get: { quoteToDelete != nil },
@@ -341,31 +349,6 @@ struct HomeView: View {
             beginRecording(for: visit)
         },
                                            onDidNotHappen: markPromptedAndClear))
-        // Presented from outside the NavigationStack: attaching this sheet to
-        // the content inside the stack (which also owns a minimizing
-        // .searchable toolbar) corrupts the navigation bar after dismissal —
-        // broken title layout and lost push transitions on the next push.
-        // The allowance is refreshed by the recording itself, once its insert
-        // has actually landed. Doing it here raced that insert: closing the
-        // sheet does not wait for banking to finish.
-        .sheet(isPresented: $showCreate, onDismiss: {
-            visitForRecording = nil
-            visitToClearAfterRecording = nil
-            Task { await load() }
-        }) {
-            let recordingVisit = visitForRecording
-            QuoteRecordingView(scheduledVisit: recordingVisit) { quoteId in
-                if let recordingVisit {
-                    if visitToClearAfterRecording?.id == recordingVisit.id {
-                        markPromptedAndClear(recordingVisit)
-                        visitToClearAfterRecording = nil
-                    } else {
-                        markRecorded(recordingVisit, quoteId: quoteId)
-                    }
-                }
-            }
-                .environment(session)
-        }
         .sheet(item: $selectedVisit) { visit in
             let currentVisit = live(visit)
             VisitActionSheet(
@@ -851,9 +834,29 @@ struct HomeView: View {
         selectedVisit = nil
         Task {
             try? await Task.sleep(for: .seconds(0.35))
-            visitForRecording = visit
+            recordingVisit = visit
             showCreate = true
         }
+    }
+
+    private func handleSavedRecordingQuote(_ quoteId: UUID?) {
+        guard let quoteId else { return }
+        if let recordingVisit {
+            if visitToClearAfterRecording?.id == recordingVisit.id {
+                markPromptedAndClear(recordingVisit)
+                visitToClearAfterRecording = nil
+            } else {
+                markRecorded(recordingVisit, quoteId: quoteId)
+            }
+        }
+        savedRecordingQuoteID = nil
+    }
+
+    private func handleRecorderPresentationChange(isPresented: Bool) {
+        guard !isPresented else { return }
+        recordingVisit = nil
+        visitToClearAfterRecording = nil
+        Task { await load() }
     }
 
     private func markRecorded(_ visit: ScheduledVisit, quoteId: UUID) {
