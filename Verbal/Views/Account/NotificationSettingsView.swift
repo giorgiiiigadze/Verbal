@@ -11,6 +11,7 @@ import UserNotifications
 struct NotificationSettingsView: View {
     @AppStorage(ScheduledVisitNotifications.enabledKey) private var remindersEnabled = true
     @AppStorage(ScheduledVisitNotifications.leadTimeKey) private var leadTimeRaw = ScheduledVisitReminderLeadTime.atTime.rawValue
+    @AppStorage(ScheduledVisitNotifications.privateContentKey) private var privateNotificationContent = true
 
     @Environment(SessionStore.self) private var session
     @Environment(\.openURL) private var openURL
@@ -49,10 +50,16 @@ struct NotificationSettingsView: View {
                     }
                 }
                 .disabled(!remindersEnabled)
+
+                Toggle("Hide client details", isOn: $privateNotificationContent)
+                    .tint(.green)
+                    .onChange(of: privateNotificationContent) { _, _ in
+                        Task { await rescheduleReminders() }
+                    }
             } header: {
                 Text("Upcoming")
             } footer: {
-                Text("Verbal can remind you when a booked visit is coming up, so you can record the quote while the job is fresh.")
+                Text("Verbal can remind you when a booked visit is coming up. Hidden details keeps client names, quote names and notes out of notification previews.")
             }
             .listRowBackground(Color(.cardSurface))
 
@@ -106,6 +113,7 @@ struct NotificationSettingsView: View {
 
     private func rescheduleReminders() async {
         await ScheduledVisitNotifications.rescheduleAll(visits: session.visitStore.visits)
+        await QuoteExpiryNotifications.rescheduleAll(quotes: session.quotes)
         await refreshAuthorizationStatus()
         if authorizationStatus == .denied {
             toast = Toast(style: .error, message: "Notifications are off in iOS Settings")

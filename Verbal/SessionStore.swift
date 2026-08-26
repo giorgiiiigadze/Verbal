@@ -474,13 +474,14 @@ final class SessionStore {
                     restored[quoteID] = items
                 }
             }
-            await self.mergeRestoredLineItems(restored)
+            await self.mergeRestoredLineItems(restored, userID: userID)
         }
     }
 
     /// Fold in what the background read found, leaving alone anything fetched
     /// while it was working — those came from the server and are newer.
-    private func mergeRestoredLineItems(_ restored: [UUID: [QuoteLineItem]]) {
+    private func mergeRestoredLineItems(_ restored: [UUID: [QuoteLineItem]], userID: UUID) {
+        guard cachedUserID == userID else { return }
         for (quoteID, items) in restored where lineItemsCache[quoteID] == nil {
             lineItemsCache[quoteID] = items
         }

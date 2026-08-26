@@ -53,6 +53,10 @@ enum QuotePDF {
         }
 
         context.closePDF()
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: url.path
+        )
         return url
     }
 

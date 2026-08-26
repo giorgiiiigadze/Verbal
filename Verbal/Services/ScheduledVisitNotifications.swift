@@ -43,6 +43,7 @@ enum ScheduledVisitReminderLeadTime: String, CaseIterable, Identifiable {
 enum ScheduledVisitNotifications {
     static let enabledKey = "scheduledVisitNotificationsEnabled"
     static let leadTimeKey = "scheduledVisitNotificationLeadTime"
+    nonisolated static let privateContentKey = "scheduledVisitNotificationPrivateContent"
 
     nonisolated private static let identifierPrefix = "scheduled-visit-"
 
@@ -53,6 +54,10 @@ enum ScheduledVisitNotifications {
     static var leadTime: ScheduledVisitReminderLeadTime {
         let raw = UserDefaults.standard.string(forKey: leadTimeKey)
         return raw.flatMap(ScheduledVisitReminderLeadTime.init(rawValue:)) ?? .atTime
+    }
+
+    nonisolated static var privateNotificationContent: Bool {
+        UserDefaults.standard.object(forKey: privateContentKey) as? Bool ?? true
     }
 
     static func schedule(_ visit: ScheduledVisit) async {
@@ -132,12 +137,18 @@ enum ScheduledVisitNotifications {
     }
 
     nonisolated private static func notificationTitle(for visit: ScheduledVisit) -> String {
+        guard !privateNotificationContent else {
+            return "Upcoming quote reminder"
+        }
         let title = visit.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return "Your upcoming quote is waiting for you" }
         return "\(title) is waiting for you"
     }
 
     nonisolated private static func notificationBody(for visit: ScheduledVisit) -> String {
+        guard !privateNotificationContent else {
+            return "Time to record the quote."
+        }
         if let note = visit.note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
             return "Time to visit and create the quote. \(note)"
         }

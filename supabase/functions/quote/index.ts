@@ -37,14 +37,22 @@ const ALLOWED_ORIGINS = [
   "https://giorgiiiigadze.github.io",
 ];
 
+function allowedOrigin(origin: string | null): string | null {
+  if (!origin) return ALLOWED_ORIGINS[0];
+  return ALLOWED_ORIGINS.includes(origin) ? origin : null;
+}
+
 function corsHeaders(origin: string | null): Record<string, string> {
-  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
+  const allowed = allowedOrigin(origin);
+  return allowed
+    ? {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "content-type",
     "Access-Control-Max-Age": "86400",
-  };
+    "Vary": "Origin",
+  }
+    : { "Vary": "Origin" };
 }
 
 function json(payload: unknown, status: number, origin: string | null): Response {
@@ -65,6 +73,8 @@ interface Quote {
   status: string;
   validity_date: string | null;
   viewed_at: string | null;
+  share_token_expires_at: string | null;
+  share_token_revoked_at: string | null;
   [key: string]: unknown;
 }
 
@@ -81,6 +91,12 @@ function isExpired(quote: Quote): boolean {
   return quote.validity_date < new Date().toISOString().slice(0, 10);
 }
 
+function shareTokenActive(quote: Quote): boolean {
+  if (quote.share_token_revoked_at) return false;
+  if (!quote.share_token_expires_at) return true;
+  return quote.share_token_expires_at > new Date().toISOString();
+}
+
 /// A quote already answered cannot be answered again from the link: reversing
 /// a decision is a conversation, not a button.
 function canDecide(quote: Quote): boolean {
@@ -91,9 +107,9 @@ async function loadQuote(token: string) {
   const { data: quote } = await admin
     .from("quotes")
     .select(
-      "id, user_id, customer_id, title, number, status, currency, job_summary, " +
+        "id, user_id, customer_id, title, number, status, currency, job_summary, " +
         "notes, scope, subtotal, tax_rate, tax_amount, total, validity_date, " +
-        "created_at, viewed_at, decided_at",
+        "created_at, viewed_at, decided_at, share_token_expires_at, share_token_revoked_at",
     )
     .eq("share_token", token)
     .maybeSingle();
@@ -172,7 +188,12 @@ Deno.serve(async (req: Request) => {
   const origin = req.headers.get("Origin");
 
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    const status = allowedOrigin(origin) ? 204 : 403;
+    return new Response(null, { status, headers: corsHeaders(origin) });
+  }
+
+  if (origin && !allowedOrigin(origin)) {
+    return json({ error: "forbidden" }, 403, origin);
   }
 
   const token = tokenFrom(req.url);
@@ -182,6 +203,9 @@ Deno.serve(async (req: Request) => {
   if (!loaded) return json({ error: "not_found" }, 404, origin);
 
   const { quote } = loaded;
+  if (!shareTokenActive(quote)) {
+    return json({ error: "not_found" }, 404, origin);
+  }
 
   if (req.method === "POST") {
     const body = await req.json().catch(() => null);
@@ -216,7 +240,7 @@ Deno.serve(async (req: Request) => {
 
   // Opening the link is the only thing that can ever set "viewed" — the app
   // shows that status prominently and, until this existed, nothing produced it.
-  if (quote.status === "sent" || quote.status === "draft") {
+  if (quote.status === "sent") {
     await admin
       .from("quotes")
       .update({

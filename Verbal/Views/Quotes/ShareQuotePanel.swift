@@ -171,6 +171,9 @@ struct ShareQuotePanel: View {
                     .ignoresSafeArea()
             }
         }
+        .onDisappear {
+            cleanUpPDF()
+        }
     }
 
     private func requireInternetForSharing() -> Bool {
@@ -194,5 +197,11 @@ struct ShareQuotePanel: View {
             .glassEffect(.regular.interactive(), in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+
+    private func cleanUpPDF() {
+        guard let pdfURL else { return }
+        try? FileManager.default.removeItem(at: pdfURL)
+        self.pdfURL = nil
     }
 }

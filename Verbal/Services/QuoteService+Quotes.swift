@@ -45,31 +45,8 @@ extension QuoteService {
         // Fall back to the AI summary as the quote's name when the user didn't type one.
         let typedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedTitle = typedTitle.isEmpty ? quote.title : typedTitle
-        let quoteInsert = QuoteInsert(
-            userId: userID,
-            title: resolvedTitle.isEmpty ? nil : resolvedTitle,
-            jobSummary: quote.jobSummary,
-            scope: quote.scope,
-            notes: quote.notes,
-            subtotal: subtotal,
-            taxRate: (try? await BusinessService.fetch())?.defaultTaxRate ?? 0,
-            status: "draft",
-            currency: currency,
-            customerId: customerId ?? nil
-        )
-
-        let inserted: InsertedRow = try await client
-            .from("quotes")
-            .insert(quoteInsert, returning: .representation)
-            .select("id")
-            .single()
-            .execute()
-            .value
-        let quoteID = inserted.id
-
         let lineItems = quote.lineItems.enumerated().map { index, item in
-            LineItemInsert(
-                quoteId: quoteID,
+            GeneratedLineItemInsert(
                 description: item.description,
                 type: item.type,
                 quantity: item.quantity,
@@ -80,13 +57,29 @@ extension QuoteService {
                 position: index
             )
         }
-        if !lineItems.isEmpty {
-            try await client.from("quote_line_items").insert(lineItems).execute()
+        let taxRate = (try? await BusinessService.fetch())?.defaultTaxRate ?? 0
+        let params = CreateQuoteParams(
+            title: resolvedTitle.isEmpty ? nil : resolvedTitle,
+            jobSummary: quote.jobSummary,
+            scope: quote.scope,
+            notes: quote.notes,
+            subtotal: subtotal,
+            taxRate: taxRate,
+            status: "draft",
+            currency: currency,
+            customerId: customerId,
+            lineItems: lineItems,
+            transcript: transcript
+        )
+        let quoteID: UUID
+        do {
+            quoteID = try await client
+                .rpc("create_quote_with_details", params: params)
+                .execute()
+                .value
+        } catch {
+            quoteID = try await saveDirectlyWithCleanup(params)
         }
-
-        try await client.from("transcripts").insert(
-            TranscriptInsert(quoteId: quoteID, text: transcript, sttSource: "on_device", status: "done")
-        ).execute()
         cacheTranscript(transcript, quoteId: quoteID)
 
         return quoteID
@@ -326,6 +319,77 @@ extension QuoteService {
         return url
     }
 
+    static func revokeShareLink(quoteId: UUID) async throws {
+        struct Params: Encodable { let quote_id: UUID }
+        try await client
+            .rpc("revoke_share_token", params: Params(quote_id: quoteId))
+            .execute()
+    }
+
+    /// Compatibility path for a production database that has not received the
+    /// transactional RPC yet. It cannot make separate HTTP requests one
+    /// transaction, but it cleans up the parent quote if any child write fails.
+    private static func saveDirectlyWithCleanup(_ params: CreateQuoteParams) async throws -> UUID {
+        guard let userID = client.auth.currentUser?.id else {
+            throw QuoteError.notSignedIn
+        }
+
+        let inserted: InsertedRow = try await client
+            .from("quotes")
+            .insert(DirectQuoteInsert(
+                userId: userID,
+                title: params.title,
+                jobSummary: params.jobSummary,
+                scope: params.scope,
+                notes: params.notes,
+                subtotal: params.subtotal,
+                taxRate: params.taxRate,
+                status: params.status,
+                currency: params.currency,
+                customerId: params.customerId
+            ), returning: .representation)
+            .select("id")
+            .single()
+            .execute()
+            .value
+        let quoteID = inserted.id
+
+        do {
+            let lineItems = params.lineItems.map { item in
+                LineItemInsert(
+                    quoteId: quoteID,
+                    description: item.description,
+                    type: item.type,
+                    quantity: item.quantity,
+                    unit: item.unit,
+                    unitPrice: item.unitPrice,
+                    priceSource: item.priceSource,
+                    confidence: item.confidence,
+                    position: item.position
+                )
+            }
+            if !lineItems.isEmpty {
+                try await client.from("quote_line_items").insert(lineItems).execute()
+            }
+
+            try await client.from("transcripts").insert(
+                TranscriptInsert(quoteId: quoteID,
+                                 text: params.transcript,
+                                 sttSource: "on_device",
+                                 status: "done")
+            ).execute()
+            return quoteID
+        } catch {
+            do {
+                try await client.from("quotes").delete().eq("id", value: quoteID).execute()
+            } catch {
+                // Preserve the original save error. The cleanup is best effort
+                // because the caller cannot act on a secondary delete failure.
+            }
+            throw error
+        }
+    }
+
     /// Quotes made since `date`, for the free tier's daily allowance.
     ///
     /// Counted from `quote_usage` rather than `quotes`: the ledger records that
@@ -354,20 +418,44 @@ extension QuoteService {
     }
 }
 
-private struct QuoteInsert: Encodable {
+private struct CreateQuoteParams: Encodable {
+    let title: String?
+    let jobSummary: String
+    let scope: [String]
+    let notes: String?
+    let subtotal: Double
+    let taxRate: Double
+    let status: String
+    let currency: String
+    let customerId: UUID?
+    let lineItems: [GeneratedLineItemInsert]
+    let transcript: String
+
+    enum CodingKeys: String, CodingKey {
+        case title = "p_title"
+        case jobSummary = "p_job_summary"
+        case scope = "p_scope"
+        case notes = "p_notes"
+        case subtotal = "p_subtotal"
+        case taxRate = "p_tax_rate"
+        case status = "p_status"
+        case currency = "p_currency"
+        case customerId = "p_customer_id"
+        case lineItems = "p_line_items"
+        case transcript = "p_transcript"
+    }
+}
+
+private struct DirectQuoteInsert: Encodable {
     let userId: UUID
     let title: String?
     let jobSummary: String
     let scope: [String]
     let notes: String?
     let subtotal: Double
-    /// Percentage taken from the business profile. `tax_amount` and `total` are
-    /// derived from this and `subtotal` by a database trigger, as are `number`
-    /// and `validity_date`, so none of them are sent.
     let taxRate: Double
     let status: String
     let currency: String
-    /// Nil when the user didn't name a client.
     let customerId: UUID?
 
     enum CodingKeys: String, CodingKey {
@@ -377,6 +465,24 @@ private struct QuoteInsert: Encodable {
         case scope, notes, subtotal, status, currency
         case taxRate = "tax_rate"
         case customerId = "customer_id"
+    }
+}
+
+private struct GeneratedLineItemInsert: Encodable {
+    let description: String
+    let type: String
+    let quantity: Double?
+    let unit: String?
+    let unitPrice: Double?
+    let priceSource: String?
+    let confidence: String?
+    let position: Int
+
+    enum CodingKeys: String, CodingKey {
+        case description, type, quantity, unit
+        case unitPrice = "unit_price"
+        case priceSource = "price_source"
+        case confidence, position
     }
 }
 

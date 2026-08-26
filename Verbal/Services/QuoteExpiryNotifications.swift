@@ -123,6 +123,12 @@ enum QuoteExpiryNotifications {
     }
 
     private static func notificationBody(title: String, validityDate: Date?) -> String {
+        guard !ScheduledVisitNotifications.privateNotificationContent else {
+            if validityDate != nil {
+                return "A sent quote is close to its valid-until date."
+            }
+            return "A sent quote is about to expire."
+        }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let name = trimmed.isEmpty ? "This quote" : trimmed
         if let validityDate {

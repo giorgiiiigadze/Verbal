@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://rglpwlmkwukezvexyups.supabase.co; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <title>Quote</title>
 <style>
   :root { color-scheme: light; }
@@ -70,7 +72,8 @@ var API = "https://rglpwlmkwukezvexyups.supabase.co/functions/v1/quote/";
 var root = document.getElementById("root");
 
 function token() {
-  var value = new URLSearchParams(location.search).get("t") || "";
+  var hash = location.hash.replace(/^#/, "");
+  var value = hash || new URLSearchParams(location.search).get("t") || "";
   return /^[0-9a-f]{32}$/.test(value) ? value : null;
 }
 

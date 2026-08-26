@@ -36,7 +36,7 @@ enum AppInfo {
     /// rewrites the content type to text/plain — sensible on a shared domain,
     /// but it leaves HTML unstyled and its buttons dead.
     static func shareURL(token: String) -> URL? {
-        URL(string: "https://giorgiiiigadze.github.io/Verbal/q/?t=\(token)")
+        URL(string: "https://giorgiiiigadze.github.io/Verbal/q/#\(token)")
     }
 
     /// Nil until the app is on the App Store and has a numeric id. Until then

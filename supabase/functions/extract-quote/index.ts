@@ -67,7 +67,8 @@ async function callerId(req: Request): Promise<string | null> {
   return data.user.id;
 }
 
-/// Returns the window that has been exhausted ("hour"/"day"), or null to proceed.
+/// Returns the window that has been exhausted ("hour"/"day"), "meter" when the
+/// limiter cannot verify usage, or null to proceed.
 async function exhaustedWindow(userId: string): Promise<string | null> {
   const now = Date.now();
   const windows: Array<[string, number, string]> = [
@@ -81,12 +82,9 @@ async function exhaustedWindow(userId: string): Promise<string | null> {
       .eq("user_id", userId)
       .neq("outcome", "rate_limited")
       .gte("created_at", since);
-    // Fail open. If the counter is unreachable the database is already in
-    // trouble and the app is broken regardless — refusing here would turn one
-    // outage into two, and the OpenAI key is not at risk from a database blip.
     if (error) {
-      console.error("rate-limit check failed, allowing:", error.message);
-      return null;
+      console.error("rate-limit check failed, refusing:", error.message);
+      return "meter";
     }
     if ((count ?? 0) >= limit) return label;
   }
@@ -145,6 +143,11 @@ Deno.serve(async (req: Request) => {
   const window = await exhaustedWindow(userId);
   if (window) {
     await logUsage({ user_id: userId, model: MODEL, outcome: "rate_limited" });
+    if (window === "meter") {
+      return json({
+        error: "Quote extraction is temporarily unavailable. Try again shortly.",
+      }, 503);
+    }
     return json({
       error: window === "hour"
         ? "That's a lot of quotes in one hour. Try again shortly."
@@ -172,13 +175,14 @@ Deno.serve(async (req: Request) => {
 
     if (!openaiRes.ok) {
       const detail = await openaiRes.text();
+      console.error("OpenAI request failed:", openaiRes.status, detail);
       await logUsage({
         user_id: userId,
         model: MODEL,
         duration_ms: Date.now() - startedAt,
         outcome: "model_error",
       });
-      return json({ error: "OpenAI request failed", detail }, 502);
+      return json({ error: "Quote extraction failed. Try again shortly." }, 502);
     }
 
     const data = await openaiRes.json();
@@ -218,13 +222,14 @@ Deno.serve(async (req: Request) => {
 
     return json({ quote });
   } catch (err) {
+    console.error("Extraction failed:", err);
     await logUsage({
       user_id: userId,
       model: MODEL,
       duration_ms: Date.now() - startedAt,
       outcome: "model_error",
     });
-    return json({ error: "Extraction failed", detail: String(err) }, 500);
+    return json({ error: "Quote extraction failed. Try again shortly." }, 500);
   }
 });
 
