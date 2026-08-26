@@ -43,17 +43,40 @@ struct MainTabView: View {
         UITabBar.appearance().unselectedItemTintColor = UIColor(resource: .mainText)
     }
 
+    /// How long the tab bar is given to finish changing its mind about the
+    /// record "tab" before the recorder is asked for. Long enough for UIKit to
+    /// put its selection back where it found it; short enough that the mic
+    /// still answers on the tap.
+    private static let tabBarSettleDelay = Duration.milliseconds(150)
+
     /// Intercepts taps on the record "tab" before it ever becomes the selected
-    /// tab. Letting it select and then snapping back in onChange briefly puts
-    /// the search-role tab through its tab-bar morph, which corrupts the Home
-    /// stack's navigation bar (broken title layout, lost push transitions,
-    /// vanishing tab bar) after the sheet dismisses.
+    /// tab — and then waits a beat before opening anything.
+    ///
+    /// Refusing the value here is only half of it. This setter runs from inside
+    /// the tab bar's own selection callback, and by the time it runs UIKit has
+    /// already moved its tab bar controller onto the record tab and has to move
+    /// back off it. Raising a sheet in that same turn covers the controller
+    /// mid-move: the modal suspends the child appearance callbacks, so Home's
+    /// navigation controller is left having been told it was going away and
+    /// never told it came back.
+    ///
+    /// A navigation controller in that state believes it is off screen, and
+    /// UIKit treats it accordingly — it pushes without animating and it doesn't
+    /// lay its bar out, so the pushed screen is handed no room at the top. That
+    /// is the quote screen appearing instantly with its title jammed under the
+    /// status bar, and it lasts until something else brings the stack back.
+    ///
+    /// Handing the presentation to a later turn lets the tab bar finish
+    /// reverting first, so the sheet goes up over a settled controller.
     private var tabSelection: Binding<TabItem> {
         Binding(
             get: { selection },
             set: { newValue in
                 if newValue == .record {
-                    requestCreate()
+                    Task {
+                        try? await Task.sleep(for: Self.tabBarSettleDelay)
+                        requestCreate()
+                    }
                 } else {
                     selection = newValue
                 }
@@ -185,8 +208,8 @@ struct MainTabView: View {
 
     /// The mic tab glyph, force-tinted with always-original rendering so it keeps
     /// its color regardless of selection state. Royal blue reads well on the light
-    /// tab bar, but it's near-black on the dark one, so dark mode gets white.
-    /// Computed (not a stored static) so it re-resolves when the scheme changes.
+    /// tab bar, but it's near-black on the dark one, so dark mode gets white:
+    /// hence one glyph per scheme, picked by `micIcon` below.
     ///
     /// Drawn a couple of points smaller than the bar's default and given a
     /// margin of its own. The mic sits in a separate container beside the tab
@@ -194,13 +217,24 @@ struct MainTabView: View {
     /// the two touched and read as one run-on control. Insetting the artwork
     /// puts air between them without shrinking the button — the tap target is
     /// the container, not the image.
-    private var micIcon: UIImage {
+    ///
+    /// Both are built once and kept. This body runs again every time the
+    /// recorder opens or closes, and rendering a fresh `UIImage` each time
+    /// handed the tab bar a new item image to lay out — churn in the bar during
+    /// exactly the transition this screen is trying to hold still.
+    private static let lightMicIcon = MainTabView.makeMicIcon(tint: UIColor(resource: .royalBlue600))
+    private static let darkMicIcon = MainTabView.makeMicIcon(tint: .white)
+
+    private static func makeMicIcon(tint: UIColor) -> UIImage {
         let config = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
         let base = UIImage(systemName: "mic.fill", withConfiguration: config) ?? UIImage()
-        let tint: UIColor = colorScheme == .dark ? .white : UIColor(resource: .royalBlue600)
         return base
             .withTintColor(tint, renderingMode: .alwaysOriginal)
             .withAlignmentRectInsets(UIEdgeInsets(top: -4, left: -4, bottom: -4, right: -4))
+    }
+
+    private var micIcon: UIImage {
+        colorScheme == .dark ? Self.darkMicIcon : Self.lightMicIcon
     }
 
     /// The user's own face where there is one, and otherwise a filled person —
@@ -210,11 +244,27 @@ struct MainTabView: View {
     @ViewBuilder
     private var accountIcon: some View {
         if let uiImage = session.avatarUIImage,
-           let circular = Self.circularIcon(from: uiImage, size: 26) {
+           let circular = Self.avatarIcon(for: uiImage) {
             Image(uiImage: circular)
         } else {
             Image(systemName: "person.crop.circle.fill")
         }
+    }
+
+    /// The last avatar that was cropped, and what it was cropped to.
+    ///
+    /// Same reason the mic glyphs above are held: without this, every run of
+    /// `body` — and the recorder alone causes two — put a fresh
+    /// `UIGraphicsImageRenderer` pass through the tab bar's account item.
+    private static var lastAvatarSource: UIImage?
+    private static var lastAvatarIcon: UIImage?
+
+    private static func avatarIcon(for image: UIImage) -> UIImage? {
+        if lastAvatarSource === image { return lastAvatarIcon }
+        let icon = MainTabView.circularIcon(from: image, size: 26)
+        lastAvatarSource = image
+        lastAvatarIcon = icon
+        return icon
     }
 
     /// Renders a source image into a small circular, original-rendering tab-bar icon.
