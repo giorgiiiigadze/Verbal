@@ -104,6 +104,7 @@ struct ScheduleVisitSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 20) {
                 progressBar
+                    .padding(.horizontal, 24)
 
                 Group {
                     switch step {
@@ -121,7 +122,8 @@ struct ScheduleVisitSheet: View {
                 Spacer(minLength: 0)
             }
             .padding(.top, 16)
-            .padding(.horizontal, 24)
+            // Inset per step rather than here, so the recent-names row can run
+            // the full width of the sheet while everything else stays in 24.
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(.systemBackground))
             .navigationTitle(step.heading)
@@ -239,6 +241,7 @@ struct ScheduleVisitSheet: View {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .strokeBorder(Color(.royalBlue600).opacity(0.18), lineWidth: 1)
                     )
+                    .padding(.horizontal, 24)
 
                 if !suggestions.isEmpty { recentNames }
 
@@ -261,6 +264,7 @@ struct ScheduleVisitSheet: View {
                                 .strokeBorder(Color(.separator), lineWidth: 0.5)
                         )
                 }
+                .padding(.horizontal, 24)
 
             }
             // Room for the keyboard, which covers the lower half of the sheet
@@ -298,6 +302,7 @@ struct ScheduleVisitSheet: View {
 
                 locationPreview
             }
+            .padding(.horizontal, 24)
             .padding(.bottom, 12)
         }
         .scrollBounceBehavior(.basedOnSize)
@@ -369,6 +374,7 @@ struct ScheduleVisitSheet: View {
                 // else on the sheet.
                 .padding(.horizontal, -8)
         }
+        .padding(.horizontal, 24)
     }
 
     /// The wheel rather than the compact field: this step has the screen to
@@ -390,6 +396,7 @@ struct ScheduleVisitSheet: View {
                 .datePickerStyle(.wheel)
                 .frame(maxWidth: .infinity)
         }
+        .padding(.horizontal, 24)
     }
 
     // MARK: - Chrome
@@ -430,6 +437,12 @@ struct ScheduleVisitSheet: View {
             Text("Recent")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .padding(.horizontal, 24)
+
+            // Full width, with the sheet's inset carried by the chips instead
+            // of the row: the first name lines up with the field above it, and
+            // the rest run off the edge of the screen rather than being cut
+            // short by the padding a chip early.
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
                     ForEach(suggestions, id: \.self) { name in
@@ -447,10 +460,11 @@ struct ScheduleVisitSheet: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, 24)
             }
             .scrollIndicators(.hidden)
-            .scrollClipDisabled()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .transition(.opacity)
     }
 

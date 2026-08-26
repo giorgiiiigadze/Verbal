@@ -69,6 +69,8 @@ struct HomeView: View {
     @State private var showUpcomingVisits = false
     /// A booked visit that opened the recorder, so the saved quote can mark it done.
     @State private var visitForRecording: ScheduledVisit?
+    /// A missed visit opened from the prompt. It is cleared only after a quote is saved.
+    @State private var visitToClearAfterRecording: ScheduledVisit?
     /// A red visit that has been sitting for 24h and needs a decision.
     @State private var missedVisitPrompt: ScheduledVisit?
 
@@ -335,7 +337,7 @@ struct HomeView: View {
         .modifier(VisitDeleteConfirmation(visit: $visitToDelete, onDelete: remove))
         .modifier(MissedVisitConfirmation(visit: $missedVisitPrompt,
                                            onRecord: { visit in
-            markPromptedAndClear(visit)
+            visitToClearAfterRecording = visit
             beginRecording(for: visit)
         },
                                            onDidNotHappen: markPromptedAndClear))
@@ -348,12 +350,18 @@ struct HomeView: View {
         // sheet does not wait for banking to finish.
         .sheet(isPresented: $showCreate, onDismiss: {
             visitForRecording = nil
+            visitToClearAfterRecording = nil
             Task { await load() }
         }) {
             let recordingVisit = visitForRecording
             QuoteRecordingView(scheduledVisit: recordingVisit) { quoteId in
                 if let recordingVisit {
-                    markRecorded(recordingVisit, quoteId: quoteId)
+                    if visitToClearAfterRecording?.id == recordingVisit.id {
+                        markPromptedAndClear(recordingVisit)
+                        visitToClearAfterRecording = nil
+                    } else {
+                        markRecorded(recordingVisit, quoteId: quoteId)
+                    }
                 }
             }
                 .environment(session)
