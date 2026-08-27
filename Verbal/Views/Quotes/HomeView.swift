@@ -1724,10 +1724,13 @@ private struct FloatingRecordInset: ViewModifier {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 22)
                         .frame(height: Self.height)
-                        .background(Self.blue, in: Capsule())
+                        // The primary action stays recognisably blue, while
+                        // the interactive glass picks up the depth and light
+                        // movement used by the app's newer controls.
+                        .glassEffect(.regular.tint(Self.blue).interactive(),
+                                     in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
                 .accessibilityHint("Starts a new quote recording")
             }
             .padding(.trailing, 16)
