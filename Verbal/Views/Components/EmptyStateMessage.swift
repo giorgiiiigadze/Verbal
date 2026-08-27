@@ -61,10 +61,9 @@ struct EmptyStateMessage<Actions: View>: View {
 
 /// A quiet capsule action: icon, label, and a chevron to say it goes somewhere.
 ///
-/// Deliberately not the blue filled button. On these screens the app's real
-/// action — the mic — is already sitting in the tab bar, so a solid button here
-/// is the same offer made twice, and two of them side by side read as a
-/// decision the user has to make before they can leave the screen.
+/// Deliberately not the blue filled button. On Home the primary Record action
+/// already floats nearby, so a second solid button would make identical actions
+/// look like a decision the user has to make.
 struct EmptyStatePill: View {
     let title: String
     let icon: String

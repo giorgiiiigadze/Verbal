@@ -94,6 +94,10 @@ struct HomeView: View {
         NavigationStack(path: $path) {
             homeContent
             .background(Color(.homeBackground))
+            // The inset places the action above the tab bar and gives every
+            // Home scroll view the same 62 points of bottom clearance. The
+            // last quote can therefore scroll fully above the floating pill.
+            .modifier(FloatingRecordInset { showCreate = true })
             // Empty on purpose — the name of the screen is `pageTitle`, in the
             // list itself. Left as a large title it would fold into the bar on
             // scroll; left inline it would sit there permanently. Both put the
@@ -486,7 +490,8 @@ struct HomeView: View {
             // Room under the last row for the floating tab bar, which draws
             // over the list rather than beside it. Without this the bottom
             // quote is permanently cut in half, and the one below it is the one
-            // you can never quite reach.
+            // you can never quite reach. The Record safe-area inset adds its
+            // own 50-point height and 12-point gap above this margin.
             .contentMargins(.bottom, 88, for: .scrollContent)
             // Back to the top when a quote arrives — see `load()`. The token is
             // what carries the news down here, since `load()` has no way to
@@ -1013,8 +1018,6 @@ struct HomeView: View {
 
     /// First run: an invitation into the core loop, not a note that the list
     /// is empty. This is the screen a new user meets straight after onboarding.
-    /// No button of its own — the mic in the tab bar is the way in, and a second
-    /// control for the same thing only splits the attention it needs.
     /// Two different screens, not two versions of one. A first quote is worth
     /// selling; an empty list belonging to someone who has made fifty is just a
     /// state, and dressing it up as an announcement is the app talking when it
@@ -1025,10 +1028,9 @@ struct HomeView: View {
             // The same shape the rate card uses when it has been emptied, and
             // for the same reason: this user knows what a quote is.
             //
-            // The action is a quiet pill rather than the blue Record button. The
-            // mic is already in the tab bar an inch below it, so the solid
-            // version was the same offer made twice on a screen whose whole
-            // point is that there is nothing to look at.
+            // Keep this inline action quiet: the blue Record pill is already
+            // floating nearby, and two equally prominent invitations would
+            // turn an empty screen into a choice between identical actions.
             EmptyStateMessage(
                 icon: "waveform",
                 title: "No quotes right now",
@@ -1703,6 +1705,37 @@ struct HomeView: View {
     }
 }
 
+/// Keeps the primary recording action above Home's floating tab bar while
+/// reserving exactly the same vertical space in its scrollable content.
+private struct FloatingRecordInset: ViewModifier {
+    private static let height: CGFloat = 50
+    private static let bottomSpacing: CGFloat = 12
+    private static let blue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        content.safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack {
+                Spacer(minLength: 0)
+                Button(action: action) {
+                    Label("Record", systemImage: "mic.fill")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 22)
+                        .frame(height: Self.height)
+                        .background(Self.blue, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .shadow(color: .black.opacity(0.18), radius: 10, y: 5)
+                .accessibilityHint("Starts a new quote recording")
+            }
+            .padding(.trailing, 16)
+            .padding(.bottom, Self.bottomSpacing)
+        }
+    }
+}
+
 // MARK: - Upcoming Visits
 
 private struct UpcomingVisitRow: View {
@@ -1851,17 +1884,25 @@ private struct UpcomingVisitsListView: View {
 
 }
 
-private struct UpcomingVisitCardRow: View {
+struct UpcomingVisitCardRow: View {
     let visit: ScheduledVisit
     let statusColor: Color
     let statusLabel: String
     let onTap: () -> Void
 
     var body: some View {
-        let rowShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        let rowShape = RoundedRectangle(cornerRadius: 18, style: .continuous)
 
         Button(action: onTap) {
             HStack(spacing: 12) {
+                // The status lives in the leading edge, as it does in Home's
+                // compact Upcoming card. That makes the state legible before
+                // the row is read, without turning every appointment into a
+                // quote-sized status badge.
+                Capsule()
+                    .fill(statusColor)
+                    .frame(width: 3, height: 34)
+
                 VStack(alignment: .leading, spacing: 3) {
                     Text(visit.title)
                         .font(.headline)
@@ -1884,19 +1925,15 @@ private struct UpcomingVisitCardRow: View {
                     Text(statusLabel)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(statusColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(statusColor.opacity(0.12), in: Capsule())
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
-            .padding(.vertical, 18)
+            .padding(.vertical, 12)
             .background {
                 rowShape.fill(Color(.cardSurface))
-                rowShape.fill(statusColor.opacity(0.08))
             }
-            .overlay(rowShape.strokeBorder(statusColor.opacity(0.22), lineWidth: 0.5))
+            .overlay(rowShape.strokeBorder(Color(.separator), lineWidth: 0.5))
             .contentShape(.interaction, rowShape)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(visit.accessibilityText)
@@ -1918,11 +1955,16 @@ private struct UpcomingVisitCardRow: View {
 
 // MARK: - Visit Actions
 
-private enum VisitAction {
+enum VisitAction {
     case future, happeningNow, passed, recorded(QuoteSummary?)
 }
 
-private struct VisitActionSheet: View {
+struct VisitActionSheet: View {
+    /// The same bright blue as Home's floating Record control. Visit actions
+    /// lead into the very same recording flow, so their primary controls
+    /// should not introduce a competing shade of blue.
+    private static let recordBlue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+
     let visit: ScheduledVisit
     let action: VisitAction
     let onPrimary: () -> Void
@@ -2076,7 +2118,7 @@ private struct VisitActionSheet: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
-                .background(Color(.royalBlue600),
+                .background(Self.recordBlue,
                             in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -2107,14 +2149,14 @@ private struct VisitActionSheet: View {
         } label: {
             Text(title)
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(Color(.blueAccentText))
+        .foregroundStyle(Self.recordBlue)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(Color(.royalBlue25),
+                .background(Self.recordBlue.opacity(0.16),
                             in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color(.blueAccentText).opacity(0.18), lineWidth: 1)
+                    .strokeBorder(Self.recordBlue.opacity(0.32), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)

@@ -17,6 +17,10 @@ import MapKit
 import SwiftUI
 
 struct ScheduleVisitSheet: View {
+    /// Matches Home's floating Record action, tying booking a visit and
+    /// recording the quote it leads to into one primary action colour.
+    private static let recordBlue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+
     /// Set when the sheet opened on a visit that already exists.
     var editing: ScheduledVisit?
     let onSave: (ScheduledVisit) -> Void
@@ -53,7 +57,7 @@ struct ScheduleVisitSheet: View {
         /// only the answer, and needs no heading of its own.
         var heading: String {
             switch self {
-            case .details: return "What's the job?"
+            case .details: return "Who's it for?"
             case .location: return "Where is it?"
             case .day: return "Which day?"
             case .time: return "What time?"
@@ -83,9 +87,9 @@ struct ScheduleVisitSheet: View {
         address.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var stepAccentColor: Color {
-        colorScheme == .dark ? .white : Color(.royalBlue600)
-    }
+    /// Progress uses the same blue as the sheet's primary button and Home's
+    /// Record control, so the active step reads as an action in progress.
+    private var stepAccentColor: Color { Self.recordBlue }
 
     /// The name is the only thing required, and only the step that asks for it
     /// can be blocked — a day and a time always have an answer in them.
@@ -167,7 +171,7 @@ struct ScheduleVisitSheet: View {
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
-                            .background(canContinue ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
+                            .background(canContinue ? Self.recordBlue : Self.recordBlue.opacity(0.4),
                                         in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -401,7 +405,7 @@ struct ScheduleVisitSheet: View {
 
     // MARK: - Chrome
 
-    /// Three marks for three questions: where this is, and how much is left.
+    /// Four marks for four questions: where this is, and how much is left.
     /// A step already answered is tappable, so going back doesn't have to be
     /// done one chevron at a time — and a visit being corrected can be jumped
     /// through in either direction, since every answer is already in it.
