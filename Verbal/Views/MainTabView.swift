@@ -130,6 +130,13 @@ struct MainTabView: View {
             recordingVisit = nil
         }) {
             QuoteRecordingView(scheduledVisit: recordingVisit) { quoteId in
+                // The recorder can be started from either Home or Visits. Keep
+                // the association here, at their shared owner, so a completed
+                // quote is never dependent on Home being alive or up to date.
+                if let visit = recordingVisit {
+                    session.visitStore.markRecorded(visit, quoteId: quoteId)
+                    ScheduledVisitNotifications.cancel(visit)
+                }
                 savedRecordingQuoteID = quoteId
             }
             .environment(session)

@@ -13,7 +13,6 @@
 //  wheel on the time one, neither of which fits a stacked form.
 //
 
-import MapKit
 import SwiftUI
 
 struct ScheduleVisitSheet: View {
@@ -38,9 +37,6 @@ struct ScheduleVisitSheet: View {
     @State private var note = ""
     @State private var date = ScheduleVisitSheet.defaultDate
     @State private var recent: [String] = []
-    @State private var resolvedAddress = ""
-    @State private var resolvedCoordinate: CLLocationCoordinate2D?
-    @State private var isResolvingAddress = false
     /// True while the removal alert is up.
     @State private var confirmingRemoval = false
     @FocusState private var titleFocused: Bool
@@ -58,7 +54,7 @@ struct ScheduleVisitSheet: View {
         var heading: String {
             switch self {
             case .details: return "Who's it for?"
-            case .location: return "Where is it?"
+            case .location: return "Add an address"
             case .day: return "Which day?"
             case .time: return "What time?"
             }
@@ -304,62 +300,14 @@ struct ScheduleVisitSheet: View {
                         )
                 }
 
-                locationPreview
+                Text("Optional — add it to get directions later.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 12)
         }
         .scrollBounceBehavior(.basedOnSize)
-        .task(id: trimmedAddress) {
-            await resolveAddressPreview()
-        }
-    }
-
-    @ViewBuilder
-    private var locationPreview: some View {
-        if trimmedAddress.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: "map")
-                    .font(.title3.weight(.medium))
-                    .foregroundStyle(Color(.blueAccentText))
-                Text("Skip this if you don't need directions yet.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        } else if isResolvingAddress {
-            HStack(spacing: 10) {
-                ProgressView()
-                Text("Finding address...")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        } else if let resolvedCoordinate, resolvedAddress == trimmedAddress {
-            Map(initialPosition: .region(MKCoordinateRegion(
-                center: resolvedCoordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-            ))) {
-                Marker(trimmedTitle.isEmpty ? "Visit" : trimmedTitle, coordinate: resolvedCoordinate)
-            }
-            .frame(height: 280)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
-        } else {
-            Text("We'll save the address, but couldn't preview it on the map yet.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        }
     }
 
     /// A whole month, because "which day" is a question about where a date sits
@@ -386,13 +334,6 @@ struct ScheduleVisitSheet: View {
     /// and then a drag.
     private var timeStep: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // What has been answered so far, so the last step isn't a bare
-            // wheel with no idea what it belongs to.
-            Text("\(trimmedTitle) · \(date.formatted(.dateTime.weekday(.wide).day().month(.wide)))")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-
             DatePicker("",
                        selection: $date,
                        displayedComponents: [.hourAndMinute])
@@ -477,7 +418,7 @@ struct ScheduleVisitSheet: View {
         case .details, .day:
             return "Next"
         case .location:
-            return trimmedAddress.isEmpty ? "Skip" : "Next"
+            return trimmedAddress.isEmpty ? "Skip for now" : "Continue"
         case .time:
             return editing == nil ? "Book visit" : "Update visit"
         }
@@ -502,27 +443,6 @@ struct ScheduleVisitSheet: View {
         titleFocused = false
         addressFocused = false
         withAnimation(.snappy(duration: 0.25)) { step = next }
-    }
-
-    @MainActor
-    private func resolveAddressPreview() async {
-        let query = trimmedAddress
-        guard !query.isEmpty else {
-            resolvedAddress = ""
-            resolvedCoordinate = nil
-            isResolvingAddress = false
-            return
-        }
-
-        isResolvingAddress = true
-        try? await Task.sleep(for: AddressGeocoder.typingDelay)
-        guard !Task.isCancelled, query == trimmedAddress else { return }
-
-        // The same lookup the client map does — see `AddressGeocoder`, which is
-        // where this used to be written out by hand.
-        resolvedCoordinate = await AddressGeocoder.coordinate(for: query)
-        resolvedAddress = query
-        isResolvingAddress = false
     }
 
     private func save() {

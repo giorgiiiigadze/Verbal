@@ -277,7 +277,10 @@ struct ScheduleView: View {
     }
 
     private func hasRecordedQuote(for visit: ScheduledVisit) -> Bool {
-        recordedQuote(for: visit) != nil
+        // The relationship is authoritative. The quote list can briefly lag a
+        // successful save, or a refresh can fail, neither of which should turn
+        // a completed visit back into an invitation to record it again.
+        visit.recordedQuoteId != nil || recordedQuote(for: visit) != nil
     }
 
     private func statusColor(for visit: ScheduledVisit) -> Color {
@@ -337,16 +340,29 @@ struct ScheduleView: View {
     }
 
     private func openRecordedQuote(for visit: ScheduledVisit) {
-        guard let quote = recordedQuote(for: visit) else {
-            toast = Toast(style: .error, message: "Couldn't find that quote")
-            return
-        }
         selectedVisit = nil
         Task {
-            await session.prefetchLineItems(for: quote.id)
-            try? await Task.sleep(for: .seconds(0.3))
-            quoteToOpen = quote
+            if let quote = recordedQuote(for: visit) {
+                await presentRecordedQuote(quote)
+                return
+            }
+
+            // A linked visit can arrive before the quote list does. Refresh
+            // once before reporting an error, rather than offering a duplicate
+            // recording action for a quote that has already been saved.
+            await session.refreshQuotes()
+            guard let quote = recordedQuote(for: visit) else {
+                toast = Toast(style: .error, message: "Couldn't find that quote")
+                return
+            }
+            await presentRecordedQuote(quote)
         }
+    }
+
+    private func presentRecordedQuote(_ quote: QuoteSummary) async {
+        await session.prefetchLineItems(for: quote.id)
+        try? await Task.sleep(for: .seconds(0.3))
+        quoteToOpen = quote
     }
 
     private func openDirections(for visit: ScheduledVisit) {

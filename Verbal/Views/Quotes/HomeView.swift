@@ -845,13 +845,11 @@ struct HomeView: View {
     }
 
     private func handleSavedRecordingQuote(_ quoteId: UUID?) {
-        guard let quoteId else { return }
+        guard quoteId != nil else { return }
         if let recordingVisit {
             if visitToClearAfterRecording?.id == recordingVisit.id {
                 markPromptedAndClear(recordingVisit)
                 visitToClearAfterRecording = nil
-            } else {
-                markRecorded(recordingVisit, quoteId: quoteId)
             }
         }
         savedRecordingQuoteID = nil
@@ -861,14 +859,6 @@ struct HomeView: View {
         guard !isPresented else { return }
         recordingVisit = nil
         visitToClearAfterRecording = nil
-        Task { await load() }
-    }
-
-    private func markRecorded(_ visit: ScheduledVisit, quoteId: UUID) {
-        guard visits.contains(where: { $0.id == visit.id }) else { return }
-        session.visitStore.markRecorded(visit, quoteId: quoteId)
-        visits = session.visitStore.visits
-        ScheduledVisitNotifications.cancel(visit)
         Task { await load() }
     }
 
