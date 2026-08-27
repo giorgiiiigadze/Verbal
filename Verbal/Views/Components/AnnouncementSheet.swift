@@ -122,7 +122,9 @@ struct AnnouncementSheet<Preview: View>: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 16)
         }
-        .presentationCornerRadius(28)
+        // No `presentationCornerRadius`: the system's own radius is the one
+        // every other sheet on the phone has, and it follows the device's own
+        // corners. 28 was a guess, and a squarer one than the real thing.
         .presentationBackground(Color(.surface))
     }
 }

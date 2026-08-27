@@ -50,7 +50,9 @@ struct PaywallSheet: View {
         .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom) { actions }
         .presentationDetents([.height(560)])
-        .presentationCornerRadius(28)
+        // No `presentationCornerRadius`: the system's own radius is the one
+        // every other sheet on the phone has, and it follows the device's own
+        // corners. 28 was a guess, and a squarer one than the real thing.
         .presentationBackground(Color(.surface))
         .toast($toast)
         .task { await store.loadProducts() }
