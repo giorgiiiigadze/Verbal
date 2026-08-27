@@ -117,11 +117,6 @@ struct AccountView: View {
                 } label: {
                     header
                 }
-                NavigationLink {
-                    OtherView()
-                } label: {
-                    Label("Other", systemImage: "ellipsis.circle")
-                }
             } footer: {
                 Text("Your business name, number and address as a client sees them, and the trade Verbal reads your jobs against.")
             }
@@ -144,6 +139,15 @@ struct AccountView: View {
             } footer: {
                 if !store.isPro {
                     Text("Free includes \(SessionStore.freeQuotesPerDay) new quotes a day. Quotes you have already made stay yours to open, edit and send.")
+                }
+            }
+            .listRowBackground(Color(.cardSurface))
+
+            Section {
+                NavigationLink {
+                    OtherView()
+                } label: {
+                    Label("Other", systemImage: "ellipsis.circle")
                 }
             }
             .listRowBackground(Color(.cardSurface))
