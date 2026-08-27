@@ -3,11 +3,11 @@
 // The user id is taken from the caller's JWT, never from the request body, so
 // a caller can only ever delete themselves. Deleting the auth user cascades to
 // profiles, business_profiles, rate_card_items, customers, scheduled_visits and
-// quotes (which in turn cascade to quote_line_items and transcripts), so no
-// manual cleanup is needed here.
+// quotes (which in turn cascade to quote_line_items and transcripts). Storage
+// objects must be removed explicitly before Auth will allow the deletion.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2.112.2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -18,6 +18,46 @@ function json(body: unknown, status = 200) {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+const LOGO_BUCKET = "business-logos";
+
+/**
+ * Auth refuses to delete a user who still owns Storage objects. Logos live
+ * under `<user-id>/`, so drain that whole tree before deleting the Auth row.
+ */
+async function removeOwnedLogos(admin: SupabaseClient, userID: string) {
+  const bucket = admin.storage.from(LOGO_BUCKET);
+  const folders = [userID];
+  const paths: string[] = [];
+
+  while (folders.length > 0) {
+    const folder = folders.pop()!;
+    let offset = 0;
+
+    while (true) {
+      const { data: objects, error: listError } = await bucket.list(folder, {
+        limit: 1000,
+        offset,
+        sortBy: { column: "name", order: "asc" },
+      });
+      if (listError) throw listError;
+
+      const page = objects ?? [];
+      for (const object of page) {
+        const path = `${folder}/${object.name}`;
+        if (object.id === null) folders.push(path);
+        else paths.push(path);
+      }
+      if (page.length < 1000) break;
+      offset += page.length;
+    }
+  }
+
+  for (let index = 0; index < paths.length; index += 1000) {
+    const { error: removeError } = await bucket.remove(paths.slice(index, index + 1000));
+    if (removeError) throw removeError;
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -44,6 +84,18 @@ Deno.serve(async (req: Request) => {
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+
+  try {
+    await removeOwnedLogos(admin, user.id);
+  } catch (error) {
+    console.error(
+      "delete-account storage cleanup failed",
+      user.id,
+      error instanceof Error ? error.message : error,
+    );
+    return json({ error: "Could not remove account files" }, 500);
+  }
+
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
   if (deleteError) {
     console.error("delete-account failed", user.id, deleteError.message);

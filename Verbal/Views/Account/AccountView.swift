@@ -242,7 +242,7 @@ struct AccountView: View {
         .navigationBarTitleDisplayMode(.inline)
         .alert("Sign out of Verbal?", isPresented: $showSignOutConfirmation) {
             Button("Sign out", role: .destructive) {
-                Task { try? await session.signOut() }
+                Task { await session.signOut() }
             }
             Button("Cancel", role: .cancel) {}
         } message: {

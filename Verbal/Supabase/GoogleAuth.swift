@@ -61,6 +61,29 @@ enum GoogleAuth {
         )
     }
 
+    /// Clear Google's own local credentials as well as the Supabase session.
+    /// Supabase and Google keep separate Keychain entries; signing out of only
+    /// one leaves the other believing the account is still connected.
+    @MainActor
+    static func signOut() {
+        GIDSignIn.sharedInstance.signOut()
+    }
+
+    /// Revoke the Google grant after the app account has been deleted.
+    ///
+    /// Account deletion itself must not be held hostage by a second provider
+    /// round trip after Supabase has already removed the account. If revocation
+    /// cannot finish, at least remove Google's credentials from this device.
+    @MainActor
+    static func disconnectAfterAccountDeletion() async {
+        guard GIDSignIn.sharedInstance.currentUser != nil else { return }
+        do {
+            try await GIDSignIn.sharedInstance.disconnect()
+        } catch {
+            GIDSignIn.sharedInstance.signOut()
+        }
+    }
+
     @MainActor
     private static func topViewController() -> UIViewController? {
         let scene = UIApplication.shared.connectedScenes

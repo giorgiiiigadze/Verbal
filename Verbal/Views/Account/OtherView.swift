@@ -88,13 +88,7 @@ struct OtherView: View {
         OnboardingMemory.erase()
         OnboardingDraft.clear()
         UserDefaults.standard.removeObject(forKey: "pendingTrade")
-        Task {
-            do {
-                try await session.signOut()
-            } catch {
-                toast = Toast(style: .error, message: "Couldn't sign out")
-            }
-        }
+        Task { await session.signOut() }
     }
 #endif
 }

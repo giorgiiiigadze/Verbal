@@ -81,7 +81,9 @@ final class SessionStore {
            businessLogo != nil { return }
 
         guard let (data, _) = try? await URLSession.shared.data(from: url),
-              let image = UIImage(data: data) else { return }
+              let image = UIImage(data: data),
+              !Task.isCancelled,
+              client.auth.currentUser?.id == cachedUserID else { return }
         businessLogo = image
         LocalCache.save(data, for: .businessLogo, userID: cachedUserID)
         UserDefaults.standard.set(urlString, forKey: Self.logoURLKey)
@@ -228,7 +230,14 @@ final class SessionStore {
 
     private let client = SupabaseManager.client
     private let network: NetworkMonitor
-    private var isExplicitlySigningOut = false
+    /// Only one account preload may publish at a time. Auth events must remain
+    /// free to deliver a revocation while network reads are in flight, so the
+    /// listener schedules this work instead of awaiting it inline.
+    private var bootstrapTask: Task<Void, Never>?
+    private var bootstrapToken: UUID?
+    /// Google must stay connected for the brief window between backend account
+    /// deletion and provider revocation. Every ordinary sign-out clears it.
+    private var isDeletingAccount = false
 
     /// Booked visits, and the sync that keeps them and `scheduled_visits` in
     /// step. Owned here because the two things that decide whose visits these
@@ -256,7 +265,7 @@ final class SessionStore {
         state = .ready
         isBootstrapped = true
         markOnboardingSeen()
-        Task { await bootstrap() }
+        scheduleBootstrap()
         return true
     }
 
@@ -277,29 +286,88 @@ final class SessionStore {
             if !restoreStoredSessionForLaunch() {
                 state = .signedOut
                 isBootstrapped = true
+                GoogleAuth.signOut()
             }
         }
 
         for await change in client.auth.authStateChanges {
             switch change.event {
-            case .signedIn, .userUpdated, .tokenRefreshed:
+            case .initialSession:
                 if change.session != nil {
+                    markOnboardingSeen()
+                    if state == .signedOut {
+                        scheduleBootstrap(revealWhenComplete: true)
+                    } else {
+                        state = .ready
+                        scheduleBootstrap()
+                    }
+                }
+            case .signedIn:
+                if change.session != nil {
+                    markOnboardingSeen()
+                    if state == .signedOut {
+                        // Keep AuthView's branded finishing screen in place
+                        // until the first account data is ready.
+                        scheduleBootstrap(revealWhenComplete: true)
+                    } else {
+                        state = .ready
+                        scheduleBootstrap()
+                    }
+                }
+            case .userUpdated:
+                // Identity fields may have changed, but the user's quote data
+                // and onboarding draft have not. Avoid replaying the entire
+                // account bootstrap for a profile-only event.
+                if change.session != nil {
+                    Task { await refreshProfile() }
+                }
+            case .tokenRefreshed:
+                // Token refresh is routine and may happen every hour. The data
+                // already on screen is still current; only recover the UI if it
+                // was somehow waiting for a session.
+                if change.session != nil, state != .ready {
                     state = .ready
                     markOnboardingSeen()
-                    await bootstrap()
+                    scheduleBootstrap()
                 }
             case .signedOut:
-                // Supabase can surface signed-out during launch or a token
-                // refresh before the stored session has settled. Only the app's
-                // own sign-out/delete flows should clear local state and send
-                // the user back to auth.
-                if isExplicitlySigningOut {
-                    isExplicitlySigningOut = false
-                    clearSession()
-                }
+                // This is authoritative. Supabase also emits it when a session
+                // expires, is revoked on another device, or is displaced by a
+                // single-session policy. Keeping the app open in those cases
+                // would leave private cached data visible behind dead tokens.
+                if !isDeletingAccount { GoogleAuth.signOut() }
+                clearSession()
             default:
                 break
             }
+        }
+    }
+
+    private func scheduleBootstrap(revealWhenComplete: Bool = false) {
+        bootstrapTask?.cancel()
+        let token = UUID()
+        let expectedUserID = client.auth.currentUser?.id
+        bootstrapToken = token
+        bootstrapTask = Task { [weak self] in
+            await self?.bootstrap()
+            guard let self,
+                  !Task.isCancelled,
+                  self.bootstrapToken == token,
+                  self.client.auth.currentUser?.id == expectedUserID else { return }
+            if revealWhenComplete { self.state = .ready }
+        }
+
+        guard revealWhenComplete else { return }
+        // A first-time account normally preloads in well under this. If a
+        // service is slow, reveal the usable app and let its own offline/error
+        // states take over rather than trapping the user behind an auth spinner.
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard let self,
+                  !Task.isCancelled,
+                  self.bootstrapToken == token,
+                  self.client.auth.currentUser?.id == expectedUserID else { return }
+            self.state = .ready
         }
     }
 
@@ -311,20 +379,26 @@ final class SessionStore {
         // previous user's business details stay on screen — and print onto the
         // new user's quotes. Refreshes for the same account keep their cache.
         let userID = client.auth.currentUser?.id
+        guard let userID, !Task.isCancelled else { return }
         if userID != cachedUserID {
             clearUserData()
         }
         cachedUserID = userID
-        if let userID { restoreFromDisk(userID: userID) }
+        restoreFromDisk(userID: userID)
 
         await refreshProfile()
+        guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
         await preloadAvatar()
+        guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
         await preloadLists()
+        guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
         // Both read the business profile the preload just fetched.
         await adoptPendingTrade()
+        guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
         // After the trade, which may be what creates the profile row this then
         // writes into.
         await adoptOnboardingDraft()
+        guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
         await refreshBusinessLogo()
     }
 
@@ -490,6 +564,7 @@ final class SessionStore {
     /// Load the Home and Rate Card lists up front so those tabs show data
     /// immediately instead of flashing an empty state while fetching.
     func preloadLists() async {
+        guard let userID = client.auth.currentUser?.id else { return }
         async let quotesResult = try? await QuoteService.fetchQuotes()
         async let rateResult = try? await QuoteService.fetchRateCard()
         async let bizResult = try? await BusinessService.fetch()
@@ -501,11 +576,17 @@ final class SessionStore {
         // being counted while they're already talking.
         async let usageResult = try? await QuoteService.quotesUsed(
             since: Calendar.current.startOfDay(for: .now))
-        quotes = await quotesResult ?? quotes
-        rateCard = await rateResult ?? rateCard
-        businessProfile = await bizResult ?? businessProfile
-        spokenPrices = await spokenResult ?? spokenPrices
-        quotesUsedToday = await usageResult ?? quotesUsedToday
+        let fetchedQuotes = await quotesResult
+        let fetchedRates = await rateResult
+        let fetchedBusiness = await bizResult
+        let fetchedPrices = await spokenResult
+        let fetchedUsage = await usageResult
+        guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
+        quotes = fetchedQuotes ?? quotes
+        rateCard = fetchedRates ?? rateCard
+        businessProfile = fetchedBusiness ?? businessProfile
+        spokenPrices = fetchedPrices ?? spokenPrices
+        quotesUsedToday = fetchedUsage ?? quotesUsedToday
         listsLoaded = true
 
         // Off the critical path: the list is already on screen, and this is
@@ -520,6 +601,9 @@ final class SessionStore {
     }
 
     private func clearSession() {
+        bootstrapTask?.cancel()
+        bootstrapTask = nil
+        bootstrapToken = nil
         clearUserData()
         state = .signedOut
     }
@@ -581,6 +665,7 @@ final class SessionStore {
                 .eq("id", value: userID)
                 .single()
                 .execute()
+            guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
             profile = response.value
             // Kept for the same reason the business profile is: offline this is
             // the only thing that knows the user's name, and the URL of their
@@ -607,6 +692,7 @@ final class SessionStore {
            avatarUIImage != nil { return }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
+            guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
             if let image = UIImage(data: data) {
                 avatarImage = Image(uiImage: image)
                 avatarUIImage = image
@@ -623,19 +709,19 @@ final class SessionStore {
 
     // MARK: - Auth actions
 
-    func signOut() async throws {
+    func signOut() async {
         // While the token still works. Afterwards there is no session to write
         // with, so a visit booked in a basement this morning would sit on the
         // phone until this account next signs in.
         await visitStore.flushPending()
-        isExplicitlySigningOut = true
+        GoogleAuth.signOut()
+        defer { clearSession() }
         do {
             try await client.auth.signOut()
-            clearSession()
-            isExplicitlySigningOut = false
         } catch {
-            isExplicitlySigningOut = false
-            throw error
+            // supabase-swift removes the on-device session before making the
+            // revocation request. A network failure must not trap someone in
+            // an account they just asked to leave, especially on a shared phone.
         }
     }
 
@@ -664,10 +750,14 @@ final class SessionStore {
         // is the one place someone says so outright, and whoever signs up on
         // this phone next is starting from nothing.
         OnboardingMemory.erase()
-        isExplicitlySigningOut = true
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
         try? await client.auth.signOut()
         clearSession()
-        isExplicitlySigningOut = false
+        // The account and local session are already gone, so the auth listener
+        // has returned the user to onboarding. Provider revocation can finish
+        // without holding the UI open.
+        await GoogleAuth.disconnectAfterAccountDeletion()
     }
 }
 
