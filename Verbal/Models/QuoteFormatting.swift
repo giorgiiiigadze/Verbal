@@ -16,15 +16,6 @@ extension Double {
 
 /// Formatters for Postgres `date` values, which arrive as "yyyy-MM-dd".
 enum QuoteDateFormat {
-    /// An instant, for range filters. `dayOnly` can't be used for these: a date
-    /// with no time in them is read as midnight UTC, which is the wrong boundary
-    /// everywhere but one timezone.
-    static let timestamp: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
     static let dayOnly: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")

@@ -117,27 +117,66 @@ final class SessionStore {
     // MARK: - Free allowance
 
     /// Quotes a day without a subscription.
+    ///
+    /// The server owns this number now — `free_quotes_per_day()` is what the
+    /// gate actually applies — and `dailyQuoteLimit` below carries whatever it
+    /// reports. This constant remains as the value to show before the first
+    /// answer arrives, and as the one the Account screen names in prose.
     static let freeQuotesPerDay = 2
 
-    /// Quotes made since local midnight, counted on the server. Nil until the
-    /// first count comes back — the difference matters, because zero means the
-    /// full allowance and nil means we don't know yet, and nothing should be
-    /// refused on the strength of not knowing.
+    /// Today's allowance as the server counts it. Nil until the first answer
+    /// comes back — the difference matters, because zero means the full
+    /// allowance is spent and nil means we don't know yet, and nothing should
+    /// be refused on the strength of not knowing.
     private(set) var quotesUsedToday: Int?
 
+    /// The limit the server is holding us to, which is not necessarily the one
+    /// compiled in above.
+    private(set) var dailyQuoteLimit: Int = SessionStore.freeQuotesPerDay
+
     var freeQuotesRemaining: Int? {
-        quotesUsedToday.map { max(Self.freeQuotesPerDay - $0, 0) }
+        quotesUsedToday.map { max(dailyQuoteLimit - $0, 0) }
     }
 
-    /// The user's own midnight, not UTC's. A day that rolls over at 4am because
-    /// of where the phone is would be indefensible to explain to someone whose
-    /// allowance vanished mid-afternoon.
+    /// Ask the server what is left.
+    ///
+    /// This used to be computed here: local midnight from `Calendar`, a count
+    /// of ledger rows since then, compared against the constant above. All
+    /// three now also happen inside the database, which is the side that
+    /// refuses — so asking is the only way the two agree. Two implementations
+    /// of "which quotes count as today's" drift, and the shape the drift takes
+    /// is the app offering an allowance the server then declines.
+    ///
+    /// The day is still the user's own and not UTC's. It is worked out from the
+    /// timezone `syncTimeZone` reports, because a day that rolls over at 4am
+    /// would be indefensible to explain to someone whose allowance vanished
+    /// mid-afternoon.
     func refreshQuoteUsage() async {
-        let startOfDay = Calendar.current.startOfDay(for: .now)
-        if let used = try? await QuoteService.quotesUsed(since: startOfDay) {
-            quotesUsedToday = used
-        }
+        guard let allowance = try? await QuoteService.allowance() else { return }
+        quotesUsedToday = allowance.used
+        dailyQuoteLimit = allowance.limit
     }
+
+    /// Tell the server which day the user is living in.
+    ///
+    /// Sent only when it changes — which is a flight, not a launch — so the
+    /// ordinary case costs nothing. Kept in `UserDefaults` rather than read
+    /// back from the profile because the comparison has to work offline, and
+    /// the only cost of getting it wrong is one redundant write.
+    func syncTimeZone() async {
+        let current = TimeZone.current.identifier
+        guard UserDefaults.standard.string(forKey: Self.timeZoneKey) != current else { return }
+        guard (try? await QuoteService.reportTimeZone(current)) != nil else { return }
+        UserDefaults.standard.set(current, forKey: Self.timeZoneKey)
+        // The count fetched moments ago was worked out against whatever zone
+        // the server had before this — UTC, on the first launch after the
+        // allowance moved server-side. Only re-asked when the zone actually
+        // changed, so this costs one extra request once rather than on every
+        // launch.
+        await refreshQuoteUsage()
+    }
+
+    private static let timeZoneKey = "reportedTimeZone"
 
     /// Refetch the rate card after its prices are rewritten elsewhere.
     func refreshRateCard() async {
@@ -574,8 +613,7 @@ final class SessionStore {
         async let spokenResult = try? await QuoteService.recentSpokenPrices()
         // Known before the user can reach the mic, so the allowance is never
         // being counted while they're already talking.
-        async let usageResult = try? await QuoteService.quotesUsed(
-            since: Calendar.current.startOfDay(for: .now))
+        async let usageResult = try? await QuoteService.allowance()
         let fetchedQuotes = await quotesResult
         let fetchedRates = await rateResult
         let fetchedBusiness = await bizResult
@@ -586,7 +624,8 @@ final class SessionStore {
         rateCard = fetchedRates ?? rateCard
         businessProfile = fetchedBusiness ?? businessProfile
         spokenPrices = fetchedPrices ?? spokenPrices
-        quotesUsedToday = fetchedUsage ?? quotesUsedToday
+        quotesUsedToday = fetchedUsage?.used ?? quotesUsedToday
+        dailyQuoteLimit = fetchedUsage?.limit ?? dailyQuoteLimit
         listsLoaded = true
 
         // Off the critical path: the list is already on screen, and this is
@@ -598,6 +637,11 @@ final class SessionStore {
         // cache. This is what pushes a visit booked with no signal, and pulls
         // one booked on another phone.
         Task { await visitStore.sync() }
+
+        // Same: nothing waits on it, and it only writes when the answer has
+        // changed. It is what makes the daily allowance roll over at the user's
+        // midnight rather than UTC's.
+        Task { await syncTimeZone() }
     }
 
     private func clearSession() {
@@ -650,6 +694,15 @@ final class SessionStore {
         rateCard = []
         spokenPrices = []
         quotesUsedToday = nil
+        dailyQuoteLimit = Self.freeQuotesPerDay
+        // Signing out doesn't change what this device is entitled to, but it
+        // does change whose profile that entitlement belongs on. Left set, the
+        // next account to sign in here would find it "already reported" and the
+        // server would never hear about it.
+        SubscriptionService.forgetLastReport()
+        // The zone was reported for the account that just left. The next one
+        // has to report its own, even from the same handset.
+        UserDefaults.standard.removeObject(forKey: Self.timeZoneKey)
         lineItemsCache = [:]
         listsLoaded = false
         cachedUserID = nil

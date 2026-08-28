@@ -66,6 +66,15 @@ struct QuoteRecordingView: View {
 
     private let scheduledVisit: ScheduledVisit?
     private let onSavedQuote: ((UUID) -> Void)?
+    /// Called instead of `onSavedQuote` when the server refused the save
+    /// because today's free quotes are gone.
+    ///
+    /// Handed back to the owner rather than acted on here, because the paywall
+    /// is a sheet on `MainTabView` and this is a sheet on `MainTabView`:
+    /// raising one from inside the other, mid-dismissal, is how a sheet gets
+    /// silently swallowed — the lesson recorded at the top of that file. The
+    /// owner raises it once this one has actually gone.
+    private let onAllowanceExhausted: (() -> Void)?
 
     private enum Field: Hashable { case title, transcript }
     /// Which field the keyboard belongs to, if any. Both fields are vertical,
@@ -73,7 +82,10 @@ struct QuoteRecordingView: View {
     /// bar does that instead, see `bottomBar`.
     @FocusState private var focus: Field?
 
-    init(scheduledVisit: ScheduledVisit? = nil, onSavedQuote: ((UUID) -> Void)? = nil) {
+    init(scheduledVisit: ScheduledVisit? = nil,
+         onSavedQuote: ((UUID) -> Void)? = nil,
+         onAllowanceExhausted: (() -> Void)? = nil) {
+        self.onAllowanceExhausted = onAllowanceExhausted
         self.scheduledVisit = scheduledVisit
         self.onSavedQuote = onSavedQuote
         _title = State(initialValue: "")
@@ -579,6 +591,15 @@ struct QuoteRecordingView: View {
                 onSavedQuote?(id)
                 toast = Toast(style: .success, message: "Quote saved")
                 try? await Task.sleep(for: .seconds(1.0))
+                dismiss()
+            } catch let error where error.isQuoteAllowanceExhausted {
+                // The gate is the server's now, so this is reachable even
+                // though the tab bar checked before the recording started — a
+                // quote banked on another device, or a count that was already
+                // stale by the time this one finished. Saying "couldn't save
+                // quote" about it would be describing a paywall as a fault.
+                await session.refreshQuoteUsage()
+                onAllowanceExhausted?()
                 dismiss()
             } catch {
                 toast = Toast(style: .error, message: "Couldn't save quote")

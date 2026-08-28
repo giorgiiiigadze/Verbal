@@ -220,17 +220,35 @@ Deno.serve(async (req: Request) => {
       return json({ error: "already_answered", ...publicPayload(loaded) }, 409, origin);
     }
     const status = action === "accept" ? "accepted" : "declined";
-    await admin
+    const decidedAt = new Date().toISOString();
+    // Conditional on the status still being undecided, so the decision is made
+    // by the database rather than by whichever of two near-simultaneous
+    // requests happens to write last. `canDecide` above was read from a row
+    // fetched a few queries ago; between then and here a second tap, a
+    // double-submitting browser, or the owner marking it accepted in the app
+    // can all have answered it already. Without the `in` filter both requests
+    // pass the check and the second silently overwrites the first — a customer
+    // who tapped Accept once can end up with a declined quote.
+    const { data: decided } = await admin
       .from("quotes")
-      .update({
-        status,
-        decided_at: new Date().toISOString(),
-        decided_by: "customer",
-      })
-      .eq("id", quote.id);
+      .update({ status, decided_at: decidedAt, decided_by: "customer" })
+      .eq("id", quote.id)
+      .in("status", ["sent", "viewed"])
+      .select("id");
+
+    if (!decided || decided.length === 0) {
+      // Somebody got there first. Re-read so the page shows what the quote
+      // actually says now rather than what this request wanted it to say.
+      const fresh = await loadQuote(token);
+      return json(
+        { error: "already_answered", ...publicPayload(fresh ?? loaded) },
+        409,
+        origin,
+      );
+    }
 
     quote.status = status;
-    quote.decided_at = new Date().toISOString();
+    quote.decided_at = decidedAt;
     return json(publicPayload(loaded), 200, origin);
   }
 
@@ -247,7 +265,11 @@ Deno.serve(async (req: Request) => {
         status: "viewed",
         viewed_at: quote.viewed_at ?? new Date().toISOString(),
       })
-      .eq("id", quote.id);
+      .eq("id", quote.id)
+      // Only ever "sent" -> "viewed". Unconditional, this could walk an
+      // accepted quote backwards if a decision landed between the read above
+      // and this write.
+      .eq("status", "sent");
     quote.status = "viewed";
   }
 

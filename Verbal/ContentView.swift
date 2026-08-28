@@ -112,8 +112,16 @@ struct ContentView: View {
         // session that `SessionStore` recorded arrived after this view read
         // the Keychain, so without this a sign-out inside a reinstalled app
         // drops back to onboarding rather than to sign-in.
-        .onChange(of: session.state) { _, _ in
+        .onChange(of: session.state) { _, state in
             hasSeenOnboarding = OnboardingMemory.hasSeenOnboarding
+            // Report the entitlement against whoever just signed in. StoreKit's
+            // answer belongs to the device and doesn't change here; the profile
+            // it has to be written onto does. Without this a subscriber signing
+            // into a second account looks unsubscribed to the server, and gets
+            // held to the free tier on a phone that has plainly paid.
+            if state == .ready {
+                Task { await store.refreshEntitlement() }
+            }
         }
         .task {
             try? await Task.sleep(for: .seconds(0.5))

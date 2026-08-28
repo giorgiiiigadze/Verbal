@@ -102,18 +102,33 @@ final class Store {
     /// of "no longer paid for" have to be checked.
     func refreshEntitlement() async {
         var active = false
+        // Collected alongside the boolean, and sent on. `isPro` is what this
+        // screen believes; the server needs something it can check for itself,
+        // and the signed blob is that. See `SubscriptionService`.
+        var signed: [String] = []
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result,
                   Self.productIDs.contains(transaction.productID),
                   transaction.revocationDate == nil
             else { continue }
             active = true
+            signed.append(result.jwsRepresentation)
         }
         #if DEBUG
         isPro = active || debugUnlocked
         #else
         isPro = active
         #endif
+
+        // An empty list is a real answer and has to be sent: it is what a
+        // cancellation looks like, and the server cannot tell "no longer
+        // subscribed" from "the app went quiet" unless somebody says so.
+        //
+        // The debug unlock deliberately isn't reported. It exists so the
+        // paywall can be stepped past on a simulator, and a switch in the app
+        // that writes entitlement on the server is the exact thing the server
+        // side of this was built not to have.
+        await SubscriptionService.report(signedTransactions: signed)
     }
 
     #if DEBUG

@@ -23,6 +23,11 @@ struct MainTabView: View {
     @State private var showCreate = false
     @State private var recordingVisit: ScheduledVisit?
     @State private var savedRecordingQuoteID: UUID?
+    /// Set when the recorder's save was refused for want of allowance. Acted on
+    /// in `onDismiss` below rather than when it happens: the paywall and the
+    /// recorder are both sheets on this view, and raising the second while the
+    /// first is still going is how a sheet gets silently swallowed.
+    @State private var recordingHitPaywall = false
 
     /// Announcements are shown once and never again. A promo that comes back is
     /// how people learn to dismiss your sheets without reading them.
@@ -128,18 +133,30 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $showCreate, onDismiss: {
             recordingVisit = nil
-        }) {
-            QuoteRecordingView(scheduledVisit: recordingVisit) { quoteId in
-                // The recorder can be started from either Home or Visits. Keep
-                // the association here, at their shared owner, so a completed
-                // quote is never dependent on Home being alive or up to date.
-                if let visit = recordingVisit {
-                    session.visitStore.markRecorded(visit, quoteId: quoteId)
-                    ScheduledVisitNotifications.cancel(visit)
-                }
-                savedRecordingQuoteID = quoteId
+            // Now that the recorder is actually gone, the paywall has the
+            // screen to itself.
+            if recordingHitPaywall {
+                recordingHitPaywall = false
+                store.isPaywallPresented = true
             }
+        }) {
+            QuoteRecordingView(
+                scheduledVisit: recordingVisit,
+                onSavedQuote: { quoteId in
+                    // The recorder can be started from either Home or Visits.
+                    // Keep the association here, at their shared owner, so a
+                    // completed quote is never dependent on Home being alive or
+                    // up to date.
+                    if let visit = recordingVisit {
+                        session.visitStore.markRecorded(visit, quoteId: quoteId)
+                        ScheduledVisitNotifications.cancel(visit)
+                    }
+                    savedRecordingQuoteID = quoteId
+                },
+                onAllowanceExhausted: { recordingHitPaywall = true }
+            )
             .environment(session)
+            .environment(store)
         }
         .onChange(of: notificationRouter.requestedQuoteId) { _, quoteId in
             guard quoteId != nil else { return }

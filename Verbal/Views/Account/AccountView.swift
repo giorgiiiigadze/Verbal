@@ -48,7 +48,7 @@ struct AccountView: View {
     private var planLabel: String {
         if store.isPro { return "Verbal Pro" }
         guard let remaining = session.freeQuotesRemaining else { return "Free" }
-        return "Free · \(remaining) of \(SessionStore.freeQuotesPerDay) left today"
+        return "Free · \(remaining) of \(session.dailyQuoteLimit) left today"
     }
 
     /// What the dictation row reads on the right — resolved, so automatic still
@@ -138,7 +138,7 @@ struct AccountView: View {
                 }
             } footer: {
                 if !store.isPro {
-                    Text("Free includes \(SessionStore.freeQuotesPerDay) new quotes a day. Quotes you have already made stay yours to open, edit and send.")
+                    Text("Free includes \(session.dailyQuoteLimit) new quotes a day. Quotes you have already made stay yours to open, edit and send.")
                 }
             }
             .listRowBackground(Color(.cardSurface))

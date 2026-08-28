@@ -34,6 +34,34 @@ const PRICING: Record<string, { input: number; cached: number; output: number }>
 const HOURLY_LIMIT = 30;
 const DAILY_LIMIT = 150;
 
+/// The call limits above cap how often, not how much, and the bill is charged
+/// per token. Thirty calls an hour carrying a megabyte of "transcript" each is
+/// a runaway bill that never trips a rate limit — the limiter was counting the
+/// wrong unit on its own.
+///
+/// 24k characters is roughly forty minutes of continuous speech. No dictated
+/// job description comes close; anything that does is not a job description.
+const MAX_TRANSCRIPT_CHARS = 24_000;
+/// A rate card is the user's own price list. A few hundred entries is a large
+/// established business; past that it is someone testing what fits.
+const MAX_RATE_CARD_ITEMS = 400;
+const MAX_RATE_CARD_NAME_CHARS = 200;
+/// Bounds the other half of the bill. The schema-constrained answer for a real
+/// job is a small fraction of this; the cap is only here so a model that starts
+/// repeating itself stops costing money at some point.
+const MAX_OUTPUT_TOKENS = 4_000;
+/// Everything else in the body — trade, currency, business defaults — is short
+/// by nature, so one ceiling over the whole payload covers them together.
+const MAX_BODY_BYTES = 128 * 1024;
+
+/// Refuse on the declared length before reading, so an oversized body is turned
+/// away at the header rather than buffered in full and then rejected. A missing
+/// or lying Content-Length just means the check below does the work instead.
+function declaredTooLarge(req: Request): boolean {
+  const declared = Number(req.headers.get("Content-Length") ?? "");
+  return Number.isFinite(declared) && declared > MAX_BODY_BYTES;
+}
+
 const admin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
@@ -129,15 +157,45 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Not signed in" }, 401);
   }
 
+  if (declaredTooLarge(req)) {
+    return json({ error: "That recording is too long to turn into a quote." }, 413);
+  }
+
+  // Read as text rather than `req.json()` so the size is known before anything
+  // is parsed, and checked again here because Content-Length is the sender's
+  // claim about the body, not a fact about it.
+  const raw = await req.text();
+  if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) {
+    return json({ error: "That recording is too long to turn into a quote." }, 413);
+  }
+
   let body: RequestBody;
   try {
-    body = await req.json();
+    body = JSON.parse(raw);
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
   if (!body.transcript || body.transcript.trim().length === 0) {
     return json({ error: "transcript is required" }, 400);
+  }
+  if (body.transcript.length > MAX_TRANSCRIPT_CHARS) {
+    return json({ error: "That recording is too long to turn into a quote." }, 413);
+  }
+
+  // Trimmed rather than refused: an oversized rate card is the user's own price
+  // list having grown, not an attack, and quietly using the first few hundred
+  // entries produces a quote where refusing produces a dead end. The prompt
+  // only ever needed the prices likely to be spoken about.
+  if (Array.isArray(body.rate_card)) {
+    body.rate_card = body.rate_card
+      .slice(0, MAX_RATE_CARD_ITEMS)
+      .map((item) => ({
+        ...item,
+        name: String(item?.name ?? "").slice(0, MAX_RATE_CARD_NAME_CHARS),
+      }));
+  } else {
+    body.rate_card = undefined;
   }
 
   const window = await exhaustedWindow(userId);
@@ -170,6 +228,7 @@ Deno.serve(async (req: Request) => {
           { role: "user", content: buildUserPrompt(body) },
         ],
         response_format: { type: "json_schema", json_schema: QUOTE_SCHEMA },
+        max_completion_tokens: MAX_OUTPUT_TOKENS,
       }),
     });
 

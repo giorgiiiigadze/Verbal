@@ -77,7 +77,16 @@ extension QuoteService {
                 .rpc("create_quote_with_details", params: params)
                 .execute()
                 .value
-        } catch {
+        } catch let error where error.isMissingDatabaseFunction {
+            // Only when the database genuinely hasn't got the RPC. Catching
+            // everything here meant a refusal — an invalid status, a customer
+            // that isn't yours, today's allowance spent — was answered by
+            // retrying down a path that doesn't make those checks, so the
+            // second attempt quietly succeeded at what the first correctly
+            // refused. Worse, a connection dropped *after* the RPC committed
+            // looks identical to one that failed, and the retry banked a
+            // second copy of the quote and spent a second slot of the
+            // allowance on it.
             quoteID = try await saveDirectlyWithCleanup(params)
         }
         cacheTranscript(transcript, quoteId: quoteID)
@@ -301,12 +310,15 @@ extension QuoteService {
             .execute()
     }
 
-    /// Update a quote's status (draft / sent / viewed / accepted / declined / expired).
-    /// A link the customer can open, minted on first use and stable after that.
+    /// A link the customer can open, minted on first use.
     ///
-    /// Sharing the same quote twice hands out the same address, so a link
-    /// already sitting in someone's messages keeps working — and the token is
-    /// only ever created for quotes that actually get shared.
+    /// Sharing the same quote twice hands back the same address while that
+    /// address is still live, so a link already sitting in someone's messages
+    /// keeps working. Revoked or lapsed is a different matter: since share
+    /// tokens gained a 90-day expiry, asking again after either mints a *new*
+    /// token and the old link stops resolving. That is the intended behaviour —
+    /// a bearer credential that never ages is one that leaks forever — but it
+    /// is not "stable after that", which is what this comment used to claim.
     static func shareLink(quoteId: UUID) async throws -> URL {
         struct Params: Encodable { let quote_id: UUID }
         let token: String = try await client
@@ -390,31 +402,59 @@ extension QuoteService {
         }
     }
 
-    /// Quotes made since `date`, for the free tier's daily allowance.
-    ///
-    /// Counted from `quote_usage` rather than `quotes`: the ledger records that
-    /// a quote was made, so deleting one doesn't hand its allowance back. RLS
-    /// scopes the count to the signed-in user, and there is no delete policy on
-    /// that table for anyone.
     /// Hands back the allowance for a draft being replaced right now.
     ///
-    /// The counterpart to `quotesUsed`, and deliberately much narrower: the
-    /// function behind it voids only the caller's own row and only within
-    /// minutes of its being made, so re-recording costs one quote rather than
-    /// two while deleting an old quote still refunds nothing.
+    /// The counterpart to `allowance()`, and deliberately much narrower: the
+    /// function behind it voids only the caller's own row, only within minutes
+    /// of its being made, and only once the quote itself is gone. That last
+    /// condition is what stops it being a refund button — called with a quote
+    /// you are keeping it now does nothing, where it used to return the
+    /// allowance and leave the quote standing.
+    ///
+    /// So the order matters and is not incidental: delete the draft, then void.
     static func voidQuoteUsage(quoteID: UUID) async throws {
         try await client
             .rpc("void_quote_usage", params: ["p_quote_id": quoteID.uuidString])
             .execute()
     }
 
-    static func quotesUsed(since date: Date) async throws -> Int {
-        let response = try await client
-            .from("quote_usage")
-            .select("id", head: true, count: .exact)
-            .gte("created_at", value: QuoteDateFormat.timestamp.string(from: date))
+    /// Tell the server which timezone the user is in, so the daily allowance
+    /// rolls over at their midnight.
+    ///
+    /// `time_zone` is one of the columns `authenticated` is granted update on;
+    /// the subscription columns beside it deliberately are not. Being able to
+    /// state your own zone is worth very little to an attacker — the server
+    /// caps a rolling 24 hours as well as a calendar day, precisely so walking
+    /// your clock eastwards buys nothing much — and it is worth a great deal to
+    /// someone whose day should end at midnight where they live.
+    static func reportTimeZone(_ identifier: String) async throws {
+        guard let userID = client.auth.currentUser?.id else {
+            throw QuoteError.notSignedIn
+        }
+        struct Payload: Encodable {
+            let timeZone: String
+            enum CodingKeys: String, CodingKey { case timeZone = "time_zone" }
+        }
+        try await client
+            .from("profiles")
+            .update(Payload(timeZone: identifier))
+            .eq("id", value: userID)
             .execute()
-        return response.count ?? 0
+    }
+
+    /// What is left of today's free quotes, as the server counts them.
+    ///
+    /// Counted from `quote_usage` rather than `quotes`: the ledger records that
+    /// a quote was made, so deleting one doesn't hand its allowance back. The
+    /// day it counts within is the user's own, from the timezone their app
+    /// reports — worked out server-side because the server is what refuses, and
+    /// an app computing its own midnight is an app that eventually disagrees
+    /// with the thing holding the gate.
+    static func allowance() async throws -> QuoteAllowance {
+        try await client
+            .rpc("quote_allowance")
+            .execute()
+            .value
     }
 }
 

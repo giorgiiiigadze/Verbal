@@ -1,0 +1,27 @@
+# Project configuration, in the repository rather than only in the dashboard.
+#
+# `quote` has to run without a JWT — it is the endpoint behind a share link, and
+# the customer opening that link has no account. That was true in production and
+# recorded nowhere: a `supabase functions deploy` from a clean checkout would
+# have deployed it with verification on, and every share link already sitting in
+# a customer's inbox would have started returning 401 with nothing in git to
+# explain why. The token is the credential there, and the function is written
+# around that (see its header).
+#
+# Everything else verifies, which is the default and is stated anyway — the
+# whole point of this file is that the setting is visible.
+
+project_id = "rglpwlmkwukezvexyups"
+
+[functions.quote]
+# Public on purpose. Unauthenticated, and hostile-by-default inside.
+verify_jwt = false
+
+[functions.extract-quote]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.verify-subscription]
+verify_jwt = true
