@@ -10,6 +10,9 @@ import SwiftUI
 import UIKit
 
 struct QuoteDetailView: View {
+    /// Matches the primary Record action used throughout the app.
+    private static let recordBlue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+
     @Environment(SessionStore.self) private var session
     @Environment(Store.self) private var store
     @Environment(NetworkMonitor.self) private var network
@@ -819,7 +822,7 @@ struct QuoteDetailView: View {
                         .foregroundStyle(.white)
                 }
                 .buttonStyle(.glassProminent)
-                .tint(Color(.royalBlue600))
+                .tint(Self.recordBlue)
             }
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             ToolbarItem(placement: .topBarTrailing) {

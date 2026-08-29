@@ -58,13 +58,17 @@ struct QuoteDocumentPage: View {
         VStack(alignment: .leading, spacing: 0) {
             if isFirstPage {
                 header
-                Divider().padding(.top, 18)
+                sectionRule.padding(.top, 16)
                 partiesRow.padding(.top, 18)
+                sectionRule.padding(.top, 18)
                 if let summary = document.jobSummary, !summary.isEmpty {
-                    Text(summary)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.black.opacity(0.75))
-                        .padding(.top, 18)
+                    VStack(alignment: .leading, spacing: 6) {
+                        fieldLabel("Job summary")
+                        Text(summary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.black.opacity(0.75))
+                    }
+                    .padding(.top, 18)
                 }
                 if !document.scope.isEmpty {
                     scopeSection.padding(.top, 18)
@@ -93,80 +97,89 @@ struct QuoteDocumentPage: View {
     // MARK: - Sections
 
     private var header: some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .bottom, spacing: 24) {
+            quoteNumber
+            Spacer(minLength: 20)
+            headerMetadata
+        }
+    }
+
+    private var quoteNumber: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            fieldLabel("Quote no.")
+            Text(document.number?.isEmpty == false ? document.number! : "—")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.black.opacity(0.8))
+        }
+    }
+
+    /// The identifying information belongs together at the top of the page,
+    /// where a client can find it without scanning the body of the quote.
+    private var headerMetadata: some View {
+        HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 4) {
-                // Above the name, not beside it: a mark set next to the
-                // business name competes with it, and the widths vary wildly —
-                // a square badge and a long horizontal wordmark would each
-                // shove the name somewhere different.
-                if let logo = document.logo {
-                    Image(uiImage: logo)
-                        .resizable()
-                        .scaledToFit()
-                        // 54 rather than 44: a square mark is capped by height
-                        // and so never touched the width it was allowed, which
-                        // printed it as a stamp beside a 20pt business name. A
-                        // wide wordmark still runs out of width first, so this
-                        // only lifts the marks that were being shortchanged —
-                        // and it stays under the name it belongs to.
-                        .frame(maxWidth: 160, maxHeight: 54, alignment: .leading)
-                        .padding(.bottom, 8)
-                }
-                Text(document.businessName)
-                    .font(.custom("RobotoSlab-Regular", size: 20))
-                    .foregroundStyle(.black)
-                ForEach(document.businessContact, id: \.self) { line in
-                    Text(line)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.black.opacity(0.6))
-                }
-                if let tax = document.business?.taxNumber,
-                   !tax.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Text("Tax no. \(tax)")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.black.opacity(0.6))
-                }
+                fieldLabel("Issued")
+                Text(QuoteDateFormat.display(document.createdAt))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.black.opacity(0.8))
             }
-            Spacer(minLength: 24)
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("QUOTE")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Self.ink)
-                if let number = document.number, !number.isEmpty {
-                    Text("No. \(number)")
+
+            if let validity = document.validityDate {
+                VStack(alignment: .leading, spacing: 4) {
+                    fieldLabel("Valid until")
+                    Text(QuoteDateFormat.display(validity))
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.black.opacity(0.7))
+                        .foregroundStyle(.black.opacity(0.8))
                 }
             }
         }
     }
 
     private var partiesRow: some View {
-        HStack(alignment: .top, spacing: 24) {
-            if let client = document.clientName, !client.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
-                    fieldLabel("Prepared for")
-                    Text(client)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.black)
+        HStack(alignment: .top, spacing: 0) {
+            VStack(alignment: .leading, spacing: 7) {
+                fieldLabel("From")
+                if let logo = document.logo {
+                    Image(uiImage: logo)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 200, maxHeight: 72, alignment: .leading)
+                        .padding(.top, 4)
                 }
-            }
-            Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 3) {
-                fieldLabel("Date")
-                Text(QuoteDateFormat.display(document.createdAt))
-                    .font(.system(size: 11))
+                Text(document.businessName)
+                    .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(.black)
-            }
-            if let validity = document.validityDate {
-                VStack(alignment: .trailing, spacing: 3) {
-                    fieldLabel("Valid until")
-                    Text(QuoteDateFormat.display(validity))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.black)
+                ForEach(document.businessContact, id: \.self) { line in
+                    Text(line)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.black.opacity(0.65))
+                }
+                if let tax = document.business?.taxNumber,
+                   !tax.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Tax no. \(tax)")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.black.opacity(0.65))
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+
+            Rectangle()
+                .fill(.black.opacity(0.20))
+                .frame(width: 1)
+                .padding(.vertical, -18)
+
+            VStack(alignment: .leading, spacing: 7) {
+                fieldLabel("To")
+                Text(document.clientName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                     ? document.clientName! : "Client")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.black)
+                    .padding(.top, 4)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.leading, 24)
         }
+        .frame(minHeight: 122, alignment: .top)
     }
 
     private var scopeSection: some View {
@@ -196,9 +209,15 @@ struct QuoteDocumentPage: View {
             .foregroundStyle(.black.opacity(0.55))
             .padding(.bottom, 7)
 
-            Rectangle().fill(.black.opacity(0.18)).frame(height: 0.8)
+            tableRule
 
-            ForEach(items) { item in
+            // Put each divider immediately before the next row. This keeps it
+            // attached to the row boundary even when a page slice starts or a
+            // long description changes a row's height.
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 {
+                    tableRule
+                }
                 HStack(alignment: .top, spacing: 8) {
                     Text(item.description ?? "—")
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -215,10 +234,22 @@ struct QuoteDocumentPage: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.black.opacity(0.85))
                 .padding(.vertical, 7)
-
-                Rectangle().fill(.black.opacity(0.08)).frame(height: 0.5)
             }
         }
+    }
+
+    private var tableRule: some View {
+        Rectangle()
+            .fill(.black.opacity(0.18))
+            .frame(height: 1)
+    }
+
+    /// Deliberate document rules make the sections read as a controlled grid
+    /// rather than a set of floating text blocks.
+    private var sectionRule: some View {
+        Rectangle()
+            .fill(.black.opacity(0.20))
+            .frame(height: 1)
     }
 
     private var totals: some View {

@@ -154,13 +154,13 @@ enum QuotePDF {
     /// All of it is as tall as the user's own words.
     private static func headerHeight(_ document: QuoteDocument) -> CGFloat {
         var used = Layout.headerBlock
-        if document.logo != nil { used += Layout.logo }
-        used += CGFloat(document.businessContact.count) * Layout.contactLine
-        if document.business?.taxNumber?.isEmpty == false { used += Layout.contactLine }
         used += Layout.partiesRow
+        // A rule below the recipient block keeps the header information as a
+        // distinct, aligned section before the quote body begins.
+        used += Layout.sectionRule
 
         if let summary = document.jobSummary, !summary.isEmpty {
-            used += Layout.blockGap
+            used += Layout.blockGap + Layout.fieldLabel
                 + CGFloat(lineCount(summary, width: PageMetrics.contentWidth, size: 11))
                 * Layout.bodyLine
         }
@@ -210,11 +210,10 @@ enum QuotePDF {
 
     /// Measured off `QuoteDocumentPage`, rounded up.
     private enum Layout {
-        /// Business name, the QUOTE mark beside it, and the rule under them.
-        static let headerBlock: CGFloat = 78
-        static let logo: CGFloat = 62
-        static let contactLine: CGFloat = 12
-        static let partiesRow: CGFloat = 52
+        /// QUOTE mark, metadata, rule, and the two-column sender/recipient panel.
+        static let headerBlock: CGFloat = 48
+        static let partiesRow: CGFloat = 202
+        static let sectionRule: CGFloat = 20
         static let blockGap: CGFloat = 18
         static let bodyLine: CGFloat = 14
         static let smallLine: CGFloat = 12
