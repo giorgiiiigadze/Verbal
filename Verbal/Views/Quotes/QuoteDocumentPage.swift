@@ -143,8 +143,10 @@ struct QuoteDocumentPage: View {
                     Image(uiImage: logo)
                         .resizable()
                         .scaledToFit()
-                        .frame(maxWidth: 200, maxHeight: 72, alignment: .leading)
-                        .padding(.top, 4)
+                        // Keep the letterhead compact: a large uploaded logo
+                        // should not be the reason an otherwise short quote
+                        // spills onto a second PDF page.
+                        .frame(maxWidth: 88, maxHeight: 30, alignment: .leading)
                 }
                 Text(document.businessName)
                     .font(.system(size: 17, weight: .medium))
@@ -179,7 +181,7 @@ struct QuoteDocumentPage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.leading, 24)
         }
-        .frame(minHeight: 122, alignment: .top)
+        .frame(minHeight: 86, alignment: .top)
     }
 
     private var scopeSection: some View {
