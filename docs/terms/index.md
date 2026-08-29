@@ -4,7 +4,7 @@ title: Terms of Service — Verbal
 
 # Terms of Service
 
-**Last updated: 8 August 2026**
+**Last updated: 29 August 2026**
 
 These terms are the agreement between you and Verbal. They cover what the app
 does, what it costs, and who is responsible for what.
@@ -43,7 +43,10 @@ You are responsible for what you say into it and what you send out of it.
 you have already made stay yours: you can read, edit, share and delete them
 whenever you like, subscription or not. The limit is on making new ones.
 
-**Verbal Pro** costs **$19 per month** and removes the daily limit.
+**Verbal Pro** removes the daily limit. In the United States it is offered as
+either **$19 per month** or **$190 per year**; prices in other regions are
+shown in the app before you buy. Eligible customers may be offered a seven-day
+free trial on the monthly plan.
 
 Subscriptions are sold through your Apple ID:
 

@@ -16,12 +16,24 @@
 /* Begin PBXFileReference section */
 		310CF4B3303F693A00456090 /* Verbal.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Verbal.storekit; sourceTree = "<group>"; };
 		31D5DF473015E943004D1E99 /* Verbal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Verbal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000001 /* VerbalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VerbalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000002 /* VerbalUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VerbalUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		31D5DF493015E943004D1E99 /* Verbal */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Verbal;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000003 /* VerbalTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = VerbalTests;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000004 /* VerbalUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = VerbalUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -44,6 +56,8 @@
 			isa = PBXGroup;
 			children = (
 				31D5DF493015E943004D1E99 /* Verbal */,
+				A10000000000000000000003 /* VerbalTests */,
+				A10000000000000000000004 /* VerbalUITests */,
 				31D5DF483015E943004D1E99 /* Products */,
 				310CF4B3303F693A00456090 /* Verbal.storekit */,
 			);
@@ -53,6 +67,8 @@
 			isa = PBXGroup;
 			children = (
 				31D5DF473015E943004D1E99 /* Verbal.app */,
+				A10000000000000000000001 /* VerbalTests.xctest */,
+				A10000000000000000000002 /* VerbalUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -85,7 +101,69 @@
 			productReference = 31D5DF473015E943004D1E99 /* Verbal.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A10000000000000000000005 /* VerbalTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000006 /* Build configuration list for PBXNativeTarget "VerbalTests" */;
+			buildPhases = (
+				A10000000000000000000007 /* Sources */,
+				A10000000000000000000008 /* Frameworks */,
+				A10000000000000000000009 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = (
+				A10000000000000000000010 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000003 /* VerbalTests */,
+			);
+			name = VerbalTests;
+			productName = VerbalTests;
+			productReference = A10000000000000000000001 /* VerbalTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A10000000000000000000011 /* VerbalUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000012 /* Build configuration list for PBXNativeTarget "VerbalUITests" */;
+			buildPhases = (
+				A10000000000000000000013 /* Sources */,
+				A10000000000000000000014 /* Frameworks */,
+				A10000000000000000000015 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = (
+				A10000000000000000000016 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000004 /* VerbalUITests */,
+			);
+			name = VerbalUITests;
+			productName = VerbalUITests;
+			productReference = A10000000000000000000002 /* VerbalUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000017 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 31D5DF3F3015E943004D1E99 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 31D5DF463015E943004D1E99;
+			remoteInfo = Verbal;
+		};
+		A10000000000000000000018 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 31D5DF3F3015E943004D1E99 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 31D5DF463015E943004D1E99;
+			remoteInfo = Verbal;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000010 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 31D5DF463015E943004D1E99 /* Verbal */; targetProxy = A10000000000000000000017 /* PBXContainerItemProxy */; };
+		A10000000000000000000016 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 31D5DF463015E943004D1E99 /* Verbal */; targetProxy = A10000000000000000000018 /* PBXContainerItemProxy */; };
+/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		31D5DF3F3015E943004D1E99 /* Project object */ = {
@@ -119,6 +197,8 @@
 			projectRoot = "";
 			targets = (
 				31D5DF463015E943004D1E99 /* Verbal */,
+				A10000000000000000000005 /* VerbalTests */,
+				A10000000000000000000011 /* VerbalUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -132,7 +212,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000009 /* Resources */ = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000015 /* Resources */ = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000008 /* Frameworks */ = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000014 /* Frameworks */ = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		31D5DF433015E943004D1E99 /* Sources */ = {
@@ -142,6 +229,8 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000007 /* Sources */ = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000013 /* Sources */ = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
@@ -330,6 +419,64 @@
 			};
 			name = Release;
 		};
+		A10000000000000000000019 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72864RU68C;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.giorgi.verbal.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Verbal.app/Verbal";
+			};
+			name = Debug;
+		};
+		A10000000000000000000020 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72864RU68C;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.giorgi.verbal.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Verbal.app/Verbal";
+			};
+			name = Release;
+		};
+		A10000000000000000000021 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72864RU68C;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.giorgi.verbal.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Verbal;
+			};
+			name = Debug;
+		};
+		A10000000000000000000022 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72864RU68C;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.giorgi.verbal.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Verbal;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -347,6 +494,24 @@
 			buildConfigurations = (
 				31D5DF533015E944004D1E99 /* Debug */,
 				31D5DF543015E944004D1E99 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000006 /* Build configuration list for PBXNativeTarget "VerbalTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000019 /* Debug */,
+				A10000000000000000000020 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000012 /* Build configuration list for PBXNativeTarget "VerbalUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000021 /* Debug */,
+				A10000000000000000000022 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -12,7 +12,7 @@
 // guess.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.112.2";
 // Prompt + schema live in prompt.mjs so the eval harness scores what ships.
 // Both files must be deployed together.
 import { QUOTE_SCHEMA, SYSTEM_PROMPT, buildUserPrompt } from "./prompt.mjs";

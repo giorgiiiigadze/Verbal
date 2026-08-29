@@ -63,6 +63,8 @@ enum BusinessService {
         let defaultTaxRate: Double
         let defaultTerms: String?
         let defaultNotes: String?
+        let quoteNumberPrefix: String?
+        let quoteNumberStart: Int
 
         init(userID: UUID, profile: BusinessProfile) {
             self.userID = userID
@@ -78,6 +80,8 @@ enum BusinessService {
             self.defaultTaxRate = profile.defaultTaxRate
             self.defaultTerms = profile.defaultTerms
             self.defaultNotes = profile.defaultNotes
+            self.quoteNumberPrefix = profile.quoteNumberPrefix
+            self.quoteNumberStart = profile.quoteNumberStart
         }
 
         enum CodingKeys: String, CodingKey {
@@ -92,6 +96,8 @@ enum BusinessService {
             case defaultTaxRate = "default_tax_rate"
             case defaultTerms = "default_terms"
             case defaultNotes = "default_notes"
+            case quoteNumberPrefix = "quote_number_prefix"
+            case quoteNumberStart = "quote_number_start"
         }
     }
 }

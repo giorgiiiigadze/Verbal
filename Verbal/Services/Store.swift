@@ -17,6 +17,7 @@
 
 import Foundation
 import StoreKit
+import Supabase
 
 @MainActor
 @Observable
@@ -143,7 +144,14 @@ final class Store {
     /// StoreKit failure is worth a message.
     @discardableResult
     func purchase(_ product: Product) async throws -> Bool {
-        switch try await product.purchase() {
+        guard let userID = SupabaseManager.client.auth.currentUser?.id else {
+            throw QuoteError.notSignedIn
+        }
+        // Apple carries this UUID forward into the signed transaction and its
+        // renewals. The server verifies it before granting the subscription to
+        // an account, so a genuine transaction cannot be copied to another
+        // Verbal account.
+        switch try await product.purchase(options: [.appAccountToken(userID)]) {
         case .success(let verification):
             if case .verified(let transaction) = verification {
                 await transaction.finish()

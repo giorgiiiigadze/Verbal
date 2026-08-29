@@ -4,7 +4,7 @@ title: Privacy Policy — Verbal
 
 # Privacy Policy
 
-**Last updated: 3 August 2026**
+**Last updated: 29 August 2026**
 
 Verbal turns a spoken description of a job into a written, priced quote. This
 policy explains what the app collects, where it goes, and how to get rid of it.
@@ -69,15 +69,17 @@ it needs.
 | Service | What it receives | Why |
 |---|---|---|
 | **Supabase** | Everything stored in your account | Hosts our database and sign-in |
-| **OpenAI** | Your transcript, your rate card, and your currency code | Turns what you said into a structured quote |
+| **OpenAI** | Your transcript, trade, rate card, and currency code | Turns what you said into a structured quote |
 | **Google** | Your sign-in request | Authenticates you |
 | **Frankfurter** | A pair of currency codes | Daily exchange rates for converting a quote |
 | **Apple** | Nothing from your account | On-device transcription; review prompts |
 
-A note on **OpenAI**: your transcript and saved rates are sent to OpenAI's API
-to build the quote. OpenAI states that data submitted through its API is not
-used to train its models. We do not send your name, email, business details, or
-customer details with it.
+A note on **OpenAI**: your transcript, selected trade, saved rates, and currency
+code are sent to OpenAI's API to build the quote. OpenAI states that data
+submitted through its API is not used to train its models. We do not separately
+send your name, email, business contact details, or saved customer record with
+the request. A transcript may, however, contain personal information that you
+say aloud, such as a customer's name or address.
 
 A note on **Frankfurter**: exchange-rate lookups contain only currency codes
 (for example, GBP to EUR). Nothing about you or your quote is included.

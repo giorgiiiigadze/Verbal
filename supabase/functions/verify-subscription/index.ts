@@ -28,7 +28,7 @@
 //                      transactions can be verified; Sandbox does not need it.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.112.2";
 // The Apple library takes DER certificates as Buffers, which Deno provides
 // through its node compatibility layer rather than as a global.
 import { Buffer } from "node:buffer";
@@ -100,9 +100,28 @@ function verifiers(certs: Buffer[]): SignedDataVerifier[] {
 
 interface DecodedTransaction {
   productId?: string;
+  originalTransactionId?: string;
+  appAccountToken?: string;
   expiresDate?: number;
   revocationDate?: number;
   bundleId?: string;
+}
+
+function accountTokenMatches(token: string, userId: string): boolean {
+  return token.toLowerCase() === userId.toLowerCase();
+}
+
+async function belongsToUser(tx: DecodedTransaction, userId: string): Promise<boolean> {
+  // Existing subscriptions predate appAccountToken. They get one atomic first
+  // claim by original transaction id; renewals of that chain must stay with
+  // the account that claimed it.
+  if (!tx.originalTransactionId) return false;
+  const { data, error } = await admin.rpc("claim_subscription_owner", {
+    p_original_transaction_id: tx.originalTransactionId,
+    p_user_id: userId,
+  });
+  if (error) throw error;
+  return data === true;
 }
 
 /// Verified, or nothing. Every failure path returns null on purpose: the caller
@@ -163,10 +182,27 @@ Deno.serve(async (req: Request) => {
     if (tx) decoded.push(tx);
   }
 
+  // A transaction explicitly associated with another Verbal account is not a
+  // "no subscription" answer for this account. Reject it without touching the
+  // caller's stored entitlement, otherwise a copied JWS could downgrade the
+  // account that submitted it as well as fail to upgrade it.
+  if (decoded.some((tx) => tx.appAccountToken && !accountTokenMatches(tx.appAccountToken, userId))) {
+    return json({ error: "This subscription belongs to another Verbal account." }, 403);
+  }
+
   // An empty list is a real answer, not a missing one: it is what the app sends
   // when StoreKit reports no current entitlements, which is how a cancellation
   // gets recorded.
-  const entitlement = bestEntitlement(decoded);
+  const owned: DecodedTransaction[] = [];
+  for (const tx of decoded) {
+    // Only active Pro transactions need an owner claim. Recording arbitrary,
+    // expired transactions would create a claim surface without granting any
+    // current entitlement.
+    if (bestEntitlement([tx]).status === "active" && await belongsToUser(tx, userId)) {
+      owned.push(tx);
+    }
+  }
+  const entitlement = bestEntitlement(owned);
 
   const { error: writeError } = await admin
     .from("profiles")

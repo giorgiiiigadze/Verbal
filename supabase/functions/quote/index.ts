@@ -18,7 +18,7 @@
 // precisely so no public policy has to exist and stay correct forever.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "jsr:@supabase/supabase-js@2.112.2";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -259,7 +259,7 @@ Deno.serve(async (req: Request) => {
   // Opening the link is the only thing that can ever set "viewed" — the app
   // shows that status prominently and, until this existed, nothing produced it.
   if (quote.status === "sent") {
-    await admin
+    const { data: viewed, error: viewError } = await admin
       .from("quotes")
       .update({
         status: "viewed",
@@ -269,8 +269,18 @@ Deno.serve(async (req: Request) => {
       // Only ever "sent" -> "viewed". Unconditional, this could walk an
       // accepted quote backwards if a decision landed between the read above
       // and this write.
-      .eq("status", "sent");
-    quote.status = "viewed";
+      .eq("status", "sent")
+      .select("status, viewed_at")
+      .maybeSingle();
+
+    if (viewError || !viewed) {
+      // A decision can land between the initial read and this update. Never
+      // render the stale state as if the link can still be answered.
+      const fresh = await loadQuote(token);
+      return json(publicPayload(fresh ?? loaded), 200, origin);
+    }
+    quote.status = viewed.status;
+    quote.viewed_at = viewed.viewed_at;
   }
 
   return json(publicPayload(loaded), 200, origin);

@@ -1,8 +1,9 @@
 -- Regression tests for the rules the schema states and now enforces.
 --
 -- Every case here failed before 20260828120000/20260828120100 and passes after.
--- They are written as plain assertions rather than pgTAP so they run against
--- anything with the migrations applied:
+-- The assertions below use a small TAP emitter rather than the pgTAP
+-- extension, so they run anywhere with the migrations applied and report
+-- correctly through `supabase test db` / pg_prove:
 --
 --   supabase db reset
 --   psql "$(supabase status -o env | grep DB_URL | cut -d= -f2-)" -f supabase/tests/quota_and_integrity.sql
@@ -13,13 +14,37 @@
 
 \set ON_ERROR_STOP on
 \pset pager off
+\pset format unaligned
+\pset tuples_only on
+\pset footer off
 
 begin;
 
-create or replace function pg_temp.t_ok(cond boolean, label text) returns void language plpgsql as $$
+create temporary table pg_temp.tap_results (
+  test_number integer generated always as identity primary key,
+  tap_line text not null
+) on commit drop;
+
+create or replace function pg_temp.t_ok(cond boolean, label text)
+returns void
+language plpgsql
+security definer
+set search_path = pg_temp
+as $$
+declare
+  test_no integer;
 begin
-  if cond then raise notice 'PASS  %', label;
-  else raise exception 'FAIL  %', label; end if;
+  insert into pg_temp.tap_results (tap_line)
+  values ('pending')
+  returning test_number into test_no;
+
+  update pg_temp.tap_results as result
+  set tap_line = format('%s %s - %s', case when cond then 'ok' else 'not ok' end, test_no, label)
+  where result.test_number = test_no;
+
+  if not cond then
+    raise exception 'FAIL  %', label;
+  end if;
 end $$;
 
 create or replace function pg_temp.as_user(u text) returns void language plpgsql as $$
@@ -304,14 +329,51 @@ begin
     perform pg_temp.t_ok(true, 'setting it back restores the gate');
   end;
 
-  perform pg_temp.t_ok((select count(*) from public.app_settings) = 0,
-                       'the client cannot read app_settings');
-  update public.app_settings set quota_enforced = false;
-  perform pg_temp.t_ok((select quota_enforced from public.app_settings where id) is null,
-                       'the client cannot move the switch');
+  begin
+    perform pg_temp.t_ok((select count(*) from public.app_settings) = 0,
+                         'the client cannot read app_settings');
+  exception when insufficient_privilege then
+    perform pg_temp.t_ok(true, 'the client cannot read app_settings');
+  end;
+
+  begin
+    update public.app_settings set quota_enforced = false;
+    perform pg_temp.t_ok((select quota_enforced from public.app_settings where id) is null,
+                         'the client cannot move the switch');
+  exception when insufficient_privilege then
+    perform pg_temp.t_ok(true, 'the client cannot move the switch');
+  end;
 end $$;
 reset role;
 select pg_temp.t_ok((select quota_enforced from public.app_settings where id),
                     'the switch is untouched after the client tried');
+
+-- ------------------------------------------------------------
+-- A subscription chain belongs to exactly one Verbal account
+-- ------------------------------------------------------------
+do $$
+begin
+  perform pg_temp.t_ok(
+    public.claim_subscription_owner('legacy-subscription-chain-1', pg_temp.uid(1)),
+    'the first account can claim a legacy subscription chain'
+  );
+  perform pg_temp.t_ok(
+    not public.claim_subscription_owner('legacy-subscription-chain-1', pg_temp.uid(2)),
+    'the same subscription chain cannot be claimed by a second account'
+  );
+
+  set local role authenticated;
+  perform pg_temp.as_user(pg_temp.uid(1)::text);
+  begin
+    perform public.claim_subscription_owner('client-claim', pg_temp.uid(1));
+    raise exception 'FAIL  a client could claim a subscription chain';
+  exception when insufficient_privilege then
+    perform pg_temp.t_ok(true, 'only the subscription verifier may claim a chain');
+  end;
+end $$;
+reset role;
+
+select format('1..%s', count(*)) from pg_temp.tap_results;
+select tap_line from pg_temp.tap_results order by test_number;
 
 rollback;

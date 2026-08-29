@@ -35,6 +35,20 @@ update public.app_settings set quota_enforced = false;
 Quotes go back to being limited only by the app's own check — which is where
 they were before any of this — until you set it back to `true`.
 
+## Subscription ownership rollout
+
+`20260828100822_bind_subscription_ownership.sql` makes every Apple
+subscription chain belong to one Verbal account. Its function is called by the
+updated `verify-subscription` edge function, so deploy in this order:
+
+1. Apply the migration. It is inert until the function starts calling it.
+2. Deploy `verify-subscription` with the migration.
+3. Ship the app build that purchases with StoreKit's `appAccountToken`.
+
+New purchases are bound to the current Verbal account by Apple. Existing
+purchases do not have an account token and are claimed once, by the account
+that first reports the verified subscription after this rollout.
+
 ## Secrets
 
 | Name | Used by | Notes |

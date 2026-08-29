@@ -65,6 +65,7 @@ struct ShareQuotePanel: View {
                 // Minting needs the server. Say so on the button rather than
                 // leaving a tap that quietly did nothing.
                 withAnimation { linkFailed = true }
+                toast = Toast(style: .error, message: "Couldn't create a share link. Try again.")
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }
@@ -98,6 +99,12 @@ struct ShareQuotePanel: View {
                             .strokeBorder(Color(.separator), lineWidth: 0.5)
                     )
                     .onTapGesture { if pdfURL != nil { isPreviewing = true } }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Quote PDF preview")
+                    .accessibilityHint(pdfURL == nil
+                        ? "A preview is being prepared."
+                        : "Double-tap to open the full quote preview.")
+                    .accessibilityAddTraits(pdfURL == nil ? [] : .isButton)
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(title)
@@ -118,7 +125,10 @@ struct ShareQuotePanel: View {
                 HStack(spacing: 12) {
                     actionButton(title: hasPDF ? "Send quote" : "Share via…",
                                  systemImage: "square.and.arrow.up") {
-                        guard requireInternetForSharing() else { return }
+                        // A rendered PDF is local. It can be shared through
+                        // Messages, Mail or AirDrop without a connection; only
+                        // creating a web link needs the server.
+                        if !hasPDF, !requireInternetForSharing() { return }
                         showSystemShare = true
                     }
                     // A link rather than the quote's text, which this used to copy.
@@ -197,6 +207,10 @@ struct ShareQuotePanel: View {
             .glassEffect(.regular.interactive(), in: Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityHint(systemImage == "link"
+            ? "Creates a secure web link for this quote."
+            : "Opens the system share sheet.")
     }
 
     private func cleanUpPDF() {
