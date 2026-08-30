@@ -36,12 +36,6 @@ struct OnboardingView: View {
     @State private var businessName = ""
     @State private var taxRate = ""
     @State private var isTaxRegistered = false
-    /// The reveal holds its sample back for a beat. Not theatre for its own
-    /// sake: the answers just given are being turned into something, and a card
-    /// that snaps in fully formed reads as one that was always there.
-    @State private var revealed = false
-    @State private var setupProgressValue = 0.0
-    @State private var setupMessageIndex = 0
     @FocusState private var focusedField: Field?
 
     private enum Step: Hashable {
@@ -105,6 +99,8 @@ struct OnboardingView: View {
     }
 
     private static let otherTrade = "Something else"
+    /// Matches the lighter blue used by the paywall and quote-share action.
+    private static let actionBlue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
 
     private static let trades = [
         "Electrician", "Plumber", "Carpenter", "Tiler",
@@ -121,7 +117,7 @@ struct OnboardingView: View {
         case .trade:
             return !pendingTrade.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .reveal:
-            return revealed
+            return true
         default:
             return true
         }
@@ -149,10 +145,10 @@ struct OnboardingView: View {
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 20)
-                                .foregroundStyle(Color(.blueAccentText))
+                                .foregroundStyle(Self.actionBlue)
                             Text("Verbal")
                                 .font(.robotoSlab(18, relativeTo: .headline))
-                                .foregroundStyle(Color(.blueAccentText))
+                                .foregroundStyle(Self.actionBlue)
                         }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
@@ -217,9 +213,7 @@ struct OnboardingView: View {
                 ))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-                if current != .reveal || revealed {
-                    footer
-                }
+                footer
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
@@ -256,7 +250,7 @@ struct OnboardingView: View {
     /// the app drawn from outside its own palette.
     private var barFill: Color {
         if isFirstStep { return Color(.mainText) }
-        return canContinue ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4)
+        return canContinue ? Self.actionBlue : Self.actionBlue.opacity(0.4)
     }
 
     /// One button, and only one. Skip moved into the header, where it stops
@@ -366,7 +360,7 @@ struct OnboardingView: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 11)
                             .background(picked
-                                        ? Color(.royalBlue600) : Color(.cardSurface),
+                                        ? Self.actionBlue : Color(.cardSurface),
                                         in: Capsule())
                             .overlay(
                                 Capsule().strokeBorder(
@@ -429,7 +423,7 @@ struct OnboardingView: View {
                             .foregroundStyle(picked ? .white : Color(.mainText))
                             .padding(.horizontal, 16)
                             .padding(.vertical, 11)
-                            .background(picked ? Color(.royalBlue600) : Color(.cardSurface),
+                            .background(picked ? Self.actionBlue : Color(.cardSurface),
                                         in: Capsule())
                             .overlay(
                                 Capsule().strokeBorder(picked ? .clear : Color(.separator),
@@ -473,7 +467,7 @@ struct OnboardingView: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 7)
                                 .background(currencyCode == option.rawValue
-                                            ? Color(.royalBlue600) : Color(.cardSurface),
+                                            ? Self.actionBlue : Color(.cardSurface),
                                             in: Capsule())
                                 .overlay(
                                     Capsule().strokeBorder(
@@ -569,7 +563,7 @@ struct OnboardingView: View {
                     .font(.callout)
                     .foregroundStyle(Color(.mainText))
             }
-            .tint(Color(.royalBlue600))
+            .tint(Self.actionBlue)
 
             if isTaxRegistered {
                 HStack(spacing: 8) {
@@ -612,75 +606,38 @@ struct OnboardingView: View {
                 .font(.robotoSlab(32, relativeTo: .largeTitle))
                 .foregroundStyle(Color(.mainText))
                 .fixedSize(horizontal: false, vertical: true)
-                .id(revealed ? "revealed-\(revealTitle)" : "setup-\(setupMessageIndex)")
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .offset(y: -16)),
-                    removal: .opacity.combined(with: .offset(y: 16))
-                ))
-                .animation(.easeInOut(duration: 0.3), value: revealed)
-                .animation(.easeInOut(duration: 0.35), value: setupMessageIndex)
-
-            if revealed {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(sampleSpokenLine)
-                        .font(.callout)
-                        .italic()
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Image(systemName: "arrow.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color(.blueAccentText).opacity(0.5))
-                        .frame(maxWidth: .infinity)
-
-                    LineItemsCard {
-                        ForEach(Array(sampleLines.enumerated()), id: \.offset) { index, line in
-                            if index > 0 { Divider() }
-                            LineItemRow(description: line.name,
-                                        quantityText: "\(line.quantity) \(line.unit)",
-                                        isMissingPrice: line.price == nil,
-                                        lineTotal: line.price,
-                                        currencyCode: currencyCode)
-                        }
-                    }
-                }
-                .transition(.opacity.combined(with: .offset(y: 12)))
-
-                Text(draftRates.isEmpty
-                     ? "Your rate card is a tab away whenever you want to fill it in."
-                     : "Saved to your rate card. Speak a job and these fill themselves in.")
-                    .font(.footnote)
+            VStack(alignment: .leading, spacing: 12) {
+                Text(sampleSpokenLine)
+                    .font(.callout)
+                    .italic()
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Spacer(minLength: 0)
-            } else {
-                Spacer(minLength: 0)
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Self.actionBlue.opacity(0.5))
+                    .frame(maxWidth: .infinity)
 
-                setupProgress
-            }
-        }
-        .task {
-            guard !revealed else { return }
-            let duration = 3.4
-            let messageStep = 1.7
-            setupMessageIndex = 0
-            setupProgressValue = 0
-            withAnimation(.linear(duration: duration)) {
-                setupProgressValue = 1
-            }
-
-            for index in setupMessages.indices.dropFirst() {
-                try? await Task.sleep(for: .seconds(messageStep))
-                guard !Task.isCancelled else { return }
-                withAnimation(.easeInOut(duration: 0.35)) {
-                    setupMessageIndex = index
+                LineItemsCard {
+                    ForEach(Array(sampleLines.enumerated()), id: \.offset) { index, line in
+                        if index > 0 { Divider() }
+                        LineItemRow(description: line.name,
+                                    quantityText: "\(line.quantity) \(line.unit)",
+                                    isMissingPrice: line.price == nil,
+                                    lineTotal: line.price,
+                                    currencyCode: currencyCode)
+                    }
                 }
             }
 
-            try? await Task.sleep(for: .seconds(duration - messageStep * Double(setupMessages.count - 1)))
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.35)) { revealed = true }
+            Text(draftRates.isEmpty
+                 ? "Your rate card is a tab away whenever you want to fill it in."
+                 : "Saved to your rate card. Speak a job and these fill themselves in.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
         }
     }
 
@@ -746,53 +703,9 @@ struct OnboardingView: View {
     /// been. It still shows what a spoken job turns into, which is the one thing
     /// worth knowing before signing in.
     private var revealTitle: String {
-        if !revealed {
-            return setupTitle
-        }
         return draftRates.isEmpty
             ? "This is what a job\nturns into."
             : "Your first quote is\nhalf-written already."
-    }
-
-    private var setupTitle: String {
-        let messages = setupMessages
-        return messages[min(setupMessageIndex, messages.count - 1)]
-    }
-
-    private var setupMessages: [String] {
-        let name = businessName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !name.isEmpty {
-            return [
-                "Setting up\n\(name)…",
-                "Getting your\nfirst quote ready…"
-            ]
-        }
-
-        let trade = pendingTrade.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trade.isEmpty {
-            return [
-                "Setting up your\n\(trade.lowercased()) workspace…",
-                "Getting your\nfirst quote ready…"
-            ]
-        }
-
-        return [
-            "Setting up your\nquote workspace…",
-            "Getting your\nfirst quote ready…"
-        ]
-    }
-
-    private var setupProgress: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(draftRates.isEmpty ? "Preparing your first quote preview" : "Saving your starter rate card")
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            ProgressView(value: setupProgressValue)
-                .progressViewStyle(.linear)
-                .tint(Color(.royalBlue600))
-        }
-        .padding(.bottom, 10)
     }
 
     /// Two of their own rates and one they didn't price, so the sample shows
