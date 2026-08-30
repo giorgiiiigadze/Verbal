@@ -29,6 +29,7 @@ struct PaywallSheet: View {
     @Environment(Store.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var selection: Plan = .yearly
     @State private var isPurchasing = false
@@ -56,15 +57,14 @@ struct PaywallSheet: View {
                     .accessibilityLabel("Close")
                 }
             }
-            .toolbarBackground(.white, for: .navigationBar)
+            .toolbarBackground(Color(.systemBackground), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
         }
         .presentationDetents([.large])
         // No `presentationCornerRadius`: the system's own radius is the one
         // every other sheet on the phone has, and it follows the device's own
         // corners. 28 was a guess, and a squarer one than the real thing.
-        .presentationBackground(.white)
-        .preferredColorScheme(.light)
+        .presentationBackground(Color(.systemBackground))
         .toast($toast)
         .task { await store.loadProducts() }
     }
@@ -102,7 +102,7 @@ struct PaywallSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 20)
             .padding(.vertical, 22)
-            .background(Color(red: 248 / 255, green: 248 / 255, blue: 247 / 255),
+            .background(benefitsBackground,
                         in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .padding(.top, 18)
         }
@@ -243,7 +243,7 @@ struct PaywallSheet: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(isSelected ? accent : Color(.separator),
-                                  lineWidth: isSelected ? 2 : 1.25)
+                                  lineWidth: isSelected ? 2.5 : 1.5)
             )
             .contentShape(.rect)
         }
@@ -282,7 +282,7 @@ struct PaywallSheet: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(isSelected ? accent : Color(.separator),
-                                  lineWidth: isSelected ? 2 : 1.25)
+                                  lineWidth: isSelected ? 2.5 : 1.5)
             )
             .contentShape(.rect)
         }
@@ -294,6 +294,12 @@ struct PaywallSheet: View {
     /// This is deliberately separate from the darker home-recording blue.
     private var accent: Color {
         Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+    }
+
+    private var benefitsBackground: Color {
+        colorScheme == .dark
+            ? Color(red: 42 / 255, green: 42 / 255, blue: 44 / 255)
+            : Color(red: 248 / 255, green: 248 / 255, blue: 247 / 255)
     }
 
     // MARK: - Actions
@@ -335,7 +341,7 @@ struct PaywallSheet: View {
         .padding(.top, 12)
         .padding(.bottom, 8)
         // Opaque, so the case scrolling underneath doesn't bleed through.
-        .background(.white)
+        .background(Color(.systemBackground))
     }
 
     private var selectedProduct: Product? {
