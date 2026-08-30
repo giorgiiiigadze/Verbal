@@ -43,8 +43,7 @@ struct RateCardView: View {
     var body: some View {
         Group {
             if items.isEmpty && !hasLoaded {
-                // Still loading first paint — stay blank, not "no prices".
-                Color(.homeBackground)
+                loadingState
             } else if items.isEmpty && loadFailed {
                 // Don't invite someone to save their usual prices when the app
                 // simply couldn't reach the ones they already have.
@@ -317,6 +316,48 @@ struct RateCardView: View {
 
     /// One radius for every rate card, matching the quote card on Home.
     private static let cardShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+
+    /// The first fetch is not an empty card. Mirror the list's cards so the
+    /// actual prices land without a jump once the preload answers.
+    private var loadingState: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach([CGFloat(154), 122, 176, 138], id: \.self) { width in
+                    rateSkeleton(titleWidth: width)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
+        }
+        .shimmer(active: true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading your rate card")
+    }
+
+    private func rateSkeleton(titleWidth: CGFloat) -> some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(Color(.separator))
+                .frame(width: 32, height: 32)
+            VStack(alignment: .leading, spacing: 8) {
+                skeletonBar(width: titleWidth, height: 14)
+                skeletonBar(width: titleWidth * 0.45, height: 11)
+            }
+            Spacer(minLength: 0)
+            skeletonBar(width: 52, height: 14)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .background(Color(.cardSurface), in: Self.cardShape)
+        .overlay(Self.cardShape.strokeBorder(Color(.separator), lineWidth: 0.5))
+    }
+
+    private func skeletonBar(width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+            .fill(Color(.separator))
+            .frame(width: width, height: height)
+    }
 
     /// Prices already spoken into quotes, waiting to become rates. The blue is
     /// the app's "this card means something" fill, and it earns it here: it's

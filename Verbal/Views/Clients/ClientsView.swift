@@ -81,7 +81,9 @@ struct ClientsView: View {
 
     var body: some View {
         Group {
-            if clients.isEmpty {
+            if clients.isEmpty && !session.listsLoaded {
+                loadingState
+            } else if clients.isEmpty {
                 emptyState
             } else if filtered.isEmpty {
                 noMatches
@@ -112,6 +114,51 @@ struct ClientsView: View {
     }
 
     // MARK: - Feed
+
+    private var loadingState: some View {
+        ScrollView {
+            LazyVStack(spacing: 14) {
+                clientSkeleton(titleWidth: 132, detailWidth: 96)
+                clientSkeleton(titleWidth: 154, detailWidth: 122)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
+        }
+        .shimmer(active: true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading your clients")
+    }
+
+    private func clientSkeleton(titleWidth: CGFloat, detailWidth: CGFloat) -> some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(Color(.separator))
+                .frame(width: 44, height: 44)
+            VStack(alignment: .leading, spacing: 8) {
+                skeletonBar(width: titleWidth, height: 15)
+                skeletonBar(width: detailWidth, height: 11)
+            }
+            Spacer(minLength: 8)
+            skeletonBar(width: 18, height: 11)
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
+    }
+
+    private func skeletonBar(width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+            .fill(Color(.separator))
+            .frame(width: width, height: height)
+    }
 
     private var feed: some View {
         ScrollView {

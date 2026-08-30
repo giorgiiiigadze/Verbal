@@ -14,9 +14,8 @@
 //  Built on `MicPermissionSheet`'s shape rather than `AnnouncementSheet`,
 //  despite that component having been written with this screen in mind. Three
 //  things it can't do: it dismisses the moment its button is tapped, where a
-//  purchase has to keep the sheet up until StoreKit answers; it has room for
-//  one action, where this needs Restore and the two legal links App Review
-//  insists on; and it has no in-flight state to show while a purchase runs.
+//  purchase has to keep the sheet up until StoreKit answers; and it has no
+//  in-flight state to show while a purchase runs.
 //
 
 import StoreKit
@@ -29,10 +28,9 @@ struct PaywallSheet: View {
 
     @Environment(Store.self) private var store
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
 
-    @State private var selection: Plan = .monthly
+    @State private var selection: Plan = .yearly
     @State private var isPurchasing = false
     @State private var toast: Toast?
 
@@ -42,18 +40,31 @@ struct PaywallSheet: View {
         // The copy grows with Dynamic Type but the detent doesn't, so the case
         // scrolls and the buttons stay put — the same trade `MicPermissionSheet`
         // makes, and for the same reason.
-        ScrollView {
-            content
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
+        NavigationStack {
+            ScrollView {
+                content
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .safeAreaInset(edge: .bottom) { actions }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
+            .toolbarBackground(.white, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .safeAreaInset(edge: .bottom) { actions }
-        .presentationDetents([.height(560)])
+        .presentationDetents([.large])
         // No `presentationCornerRadius`: the system's own radius is the one
         // every other sheet on the phone has, and it follows the device's own
         // corners. 28 was a guess, and a squarer one than the real thing.
-        .presentationBackground(Color(.surface))
+        .presentationBackground(.white)
+        .preferredColorScheme(.light)
         .toast($toast)
         .task { await store.loadProducts() }
     }
@@ -62,18 +73,15 @@ struct PaywallSheet: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            Image(systemName: "infinity")
-                .font(.system(size: 38, weight: .medium))
-                .foregroundStyle(Color(.blueAccentText))
-                .frame(height: 46)
+            proMark
 
             Text(headline)
-                .font(.robotoSlab(24, relativeTo: .title2))
+                .font(.robotoSlab(26, relativeTo: .title2))
                 .foregroundStyle(Color(.mainText))
                 .multilineTextAlignment(.center)
-                .padding(.top, 18)
+                .padding(.top, 16)
 
-            Text("Back tomorrow for two more, or go unlimited and stop counting.")
+            Text("Make every job count with unlimited quotes.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -81,21 +89,37 @@ struct PaywallSheet: View {
                 .padding(.top, 8)
                 .padding(.horizontal, 8)
 
-            VStack(alignment: .leading, spacing: 16) {
-                benefit(icon: "infinity",
-                        title: "Unlimited quotes",
-                        detail: "Quote every job you win, not just the first two of the day.")
-                benefit(icon: "bolt.fill",
-                        title: "Nothing else changes",
-                        detail: "Same app, same quotes. The daily cap is simply gone.")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 26)
-
             plans
                 .padding(.top, 24)
+
+            VStack(alignment: .leading, spacing: 17) {
+                checkmark("Unlimited quotes")
+                checkmark("No daily cap")
+                checkmark("Quote every job, every day")
+                checkmark("Create quotes whenever you need them")
+                checkmark("Keep your workflow exactly as it is")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 22)
+            .background(Color(red: 248 / 255, green: 248 / 255, blue: 247 / 255),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.top, 18)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// A compact brand accent, intentionally not a competing hero illustration.
+    private var proMark: some View {
+        ZStack {
+            Circle()
+                .fill(Color(.royalBlue50))
+                .frame(width: 68, height: 68)
+            Image(systemName: "waveform")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(accent)
+        }
+        .accessibilityHidden(true)
     }
 
     private var headline: String {
@@ -103,21 +127,15 @@ struct PaywallSheet: View {
         return "That's your two quotes for today"
     }
 
-    private func benefit(icon: String, title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 17))
-                .foregroundStyle(Color(.blueAccentText))
-                .frame(width: 26, height: 22)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color(.mainText))
-                Text(detail)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+    private func checkmark(_ title: String) -> some View {
+        HStack(spacing: 13) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Color(.mainText))
+                .frame(width: 18)
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color(.mainText))
             Spacer(minLength: 0)
         }
     }
@@ -129,8 +147,10 @@ struct PaywallSheet: View {
         if store.products.isEmpty {
             #if DEBUG
             VStack(spacing: 10) {
-                fallbackPlanRow(.monthly, price: "$19.00", caption: "per month")
-                fallbackPlanRow(.yearly, price: "$190.00", caption: "per year · two months free")
+                HStack(spacing: 10) {
+                    fallbackPlanRow(.monthly, price: "$19.00", caption: "per month")
+                    fallbackPlanRow(.yearly, price: "$190.00", caption: "per year", badge: "Best value")
+                }
 
                 if !store.isLoadingProducts {
                     Button("Try StoreKit again") { Task { await store.reloadProducts() } }
@@ -181,46 +201,49 @@ struct PaywallSheet: View {
             .padding(.vertical, 8)
             #endif
         } else {
-            VStack(spacing: 10) {
+            HStack(spacing: 10) {
                 if let monthly = store.monthly {
                     planRow(.monthly, product: monthly, caption: "per month")
                 }
                 if let yearly = store.yearly {
-                    planRow(.yearly, product: yearly, caption: "per year · two months free")
+                    planRow(.yearly, product: yearly, caption: "per year", badge: "Best value")
                 }
             }
         }
     }
 
-    private func planRow(_ plan: Plan, product: Product, caption: String) -> some View {
+    private func planRow(_ plan: Plan, product: Product, caption: String, badge: String? = nil) -> some View {
         let isSelected = selection == plan
         return Button {
             selection = plan
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20))
-                    .foregroundStyle(isSelected ? accent : Color(.separator))
-                VStack(alignment: .leading, spacing: 2) {
-                    // Straight from StoreKit, so it is the price in the user's
-                    // own currency as the App Store sells it — never $19
-                    // converted by us into something the sheet can't charge.
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
                     Text(product.displayPrice)
                         .font(.headline.monospacedDigit())
                         .foregroundStyle(Color(.mainText))
+                    if let badge {
+                        Text(badge)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(accent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color(.royalBlue50), in: Capsule())
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
                     Text(caption)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 13)
             .padding(.vertical, 14)
-            .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(isSelected ? accent : Color(.separator),
-                                  lineWidth: isSelected ? 1.5 : 0.5)
+                                  lineWidth: isSelected ? 2 : 1.25)
             )
             .contentShape(.rect)
         }
@@ -228,32 +251,38 @@ struct PaywallSheet: View {
     }
 
     #if DEBUG
-    private func fallbackPlanRow(_ plan: Plan, price: String, caption: String) -> some View {
+    private func fallbackPlanRow(_ plan: Plan, price: String, caption: String, badge: String? = nil) -> some View {
         let isSelected = selection == plan
         return Button {
             selection = plan
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20))
-                    .foregroundStyle(isSelected ? accent : Color(.separator))
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
                     Text(price)
                         .font(.headline.monospacedDigit())
                         .foregroundStyle(Color(.mainText))
+                    if let badge {
+                        Text(badge)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(accent)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color(.royalBlue50), in: Capsule())
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
                     Text(caption)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 13)
             .padding(.vertical, 14)
-            .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(isSelected ? accent : Color(.separator),
-                                  lineWidth: isSelected ? 1.5 : 0.5)
+                                  lineWidth: isSelected ? 2 : 1.25)
             )
             .contentShape(.rect)
         }
@@ -261,17 +290,16 @@ struct PaywallSheet: View {
     }
     #endif
 
-    /// `royalBlue600` carries a light appearance only, so in dark mode it stays
-    /// a near-black navy that vanishes into the surface behind it. The house
-    /// swap, as used by `ReadyToAddSheet` and four others.
+    /// Matches the light blue used by the Share button in `QuoteDetailView`.
+    /// This is deliberately separate from the darker home-recording blue.
     private var accent: Color {
-        colorScheme == .dark ? .white : Color(.royalBlue600)
+        Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
     }
 
     // MARK: - Actions
 
     private var actions: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 10) {
             Button(action: buy) {
                 Group {
                     if isPurchasing {
@@ -283,38 +311,31 @@ struct PaywallSheet: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 54)
-                .background(Color(.royalBlue600).opacity(canBuy ? 1 : 0.4),
-                            in: Capsule())
+                .frame(height: 50)
+                .background(accent.opacity(canBuy ? 1 : 0.4),
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(!canBuy)
 
-            HStack(spacing: 18) {
-                Button("Restore") { Task { await restore() } }
+            HStack(spacing: 3) {
+                Text(billingNote)
                 if let terms = AppInfo.termsURL {
                     Button("Terms") { openURL(terms) }
                 }
-                Button("Privacy") { openURL(AppInfo.privacyPolicyURL) }
+                Button("· Privacy") { openURL(AppInfo.privacyPolicyURL) }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
-            .frame(height: 44)
+            .frame(height: 20)
             .disabled(isPurchasing)
-
-            Button("Not now") { dismiss() }
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 40)
-                .disabled(isPurchasing)
         }
         .padding(.horizontal, 24)
         .padding(.top, 12)
         .padding(.bottom, 8)
         // Opaque, so the case scrolling underneath doesn't bleed through.
-        .background(Color(.surface))
+        .background(.white)
     }
 
     private var selectedProduct: Product? {
@@ -335,10 +356,17 @@ struct PaywallSheet: View {
     /// there. Promising a trial on a button that doesn't grant one is the kind
     /// of thing App Review rejects, and rightly.
     private var ctaTitle: String {
-        guard selection == .monthly,
-              store.monthly?.subscription?.introductoryOffer != nil
-        else { return "Go unlimited" }
-        return "Start 7 days free"
+        if selection == .monthly,
+           store.monthly?.subscription?.introductoryOffer != nil {
+            return "Start 7 days free"
+        }
+        guard let price = selectedProduct?.displayPrice else { return "Go unlimited" }
+        return "Subscribe for \(price) / \(selection == .yearly ? "year" : "month")"
+    }
+
+    private var billingNote: String {
+        let price = selectedProduct?.displayPrice ?? "Subscription"
+        return "\(price) billed \(selection == .yearly ? "yearly" : "monthly")."
     }
 
     private func buy() {
@@ -364,14 +392,4 @@ struct PaywallSheet: View {
         }
     }
 
-    private func restore() async {
-        isPurchasing = true
-        await store.restore()
-        isPurchasing = false
-        if store.isPro {
-            dismiss()
-        } else {
-            toast = Toast(style: .error, message: "Nothing to restore on this Apple ID")
-        }
-    }
 }

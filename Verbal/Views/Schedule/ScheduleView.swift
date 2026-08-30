@@ -82,7 +82,9 @@ struct ScheduleView: View {
 
     var body: some View {
         Group {
-            if visits.isEmpty {
+            if visits.isEmpty && !session.visitStore.hasCompletedInitialSync {
+                loadingState
+            } else if visits.isEmpty {
                 emptyState
             } else if filteredVisits.isEmpty {
                 noMatchesState
@@ -226,6 +228,47 @@ struct ScheduleView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .contentMargins(.bottom, 76, for: .scrollContent)
+    }
+
+    private var loadingState: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                skeletonBar(width: 64, height: 14)
+                    .padding(.bottom, 2)
+                visitSkeleton(titleWidth: 166, detailWidth: 122)
+                visitSkeleton(titleWidth: 142, detailWidth: 96)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 76)
+        }
+        .shimmer(active: true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading your visits")
+    }
+
+    private func visitSkeleton(titleWidth: CGFloat, detailWidth: CGFloat) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                skeletonBar(width: titleWidth, height: 15)
+                skeletonBar(width: detailWidth, height: 11)
+            }
+            Spacer(minLength: 0)
+            skeletonBar(width: 62, height: 20)
+        }
+        .padding(16)
+        .background(Color(.cardSurface),
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
+    }
+
+    private func skeletonBar(width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+            .fill(Color(.separator))
+            .frame(width: width, height: height)
     }
 
     private var emptyState: some View {

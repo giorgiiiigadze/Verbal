@@ -117,15 +117,10 @@ struct AccountView: View {
                 } label: {
                     header
                 }
-            } footer: {
-                Text("Your business name, number and address as a client sees them, and the trade Verbal reads your jobs against.")
-            }
-            .listRowBackground(Color(.cardSurface))
 
-            // Above the settings rather than buried with them: what someone is
-            // paying, and how much of today's allowance is left, is a fact
-            // about the account — the same question the section above answers.
-            Section {
+                // A second row in the same section gives it the system list
+                // divider, tying plan and business details into one account
+                // card without introducing a custom separator.
                 Button {
                     if store.isPro {
                         openURL(Self.manageSubscriptionsURL)
@@ -137,8 +132,11 @@ struct AccountView: View {
                         .foregroundStyle(Color(.mainText))
                 }
             } footer: {
-                if !store.isPro {
-                    Text("Free includes \(session.dailyQuoteLimit) new quotes a day. Quotes you have already made stay yours to open, edit and send.")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Your business name, number and address as a client sees them, and the trade Verbal reads your jobs against.")
+                    if !store.isPro {
+                        Text("Free includes \(session.dailyQuoteLimit) new quotes a day. Quotes you have already made stay yours to open, edit and send.")
+                    }
                 }
             }
             .listRowBackground(Color(.cardSurface))
@@ -148,6 +146,16 @@ struct AccountView: View {
                     OtherView()
                 } label: {
                     Label("Other", systemImage: "ellipsis.circle")
+                }
+                NavigationLink {
+                    NotificationSettingsView()
+                } label: {
+                    LabeledContent("Notifications", value: notificationSummary)
+                }
+                NavigationLink {
+                    AppearanceView()
+                } label: {
+                    LabeledContent("Appearance", value: appearanceLabel)
                 }
             }
             .listRowBackground(Color(.cardSurface))
@@ -187,16 +195,6 @@ struct AccountView: View {
                     DictationLanguageView()
                 } label: {
                     LabeledContent("Dictation language", value: dictationLabel)
-                }
-                NavigationLink {
-                    NotificationSettingsView()
-                } label: {
-                    LabeledContent("Notifications", value: notificationSummary)
-                }
-                NavigationLink {
-                    AppearanceView()
-                } label: {
-                    LabeledContent("Appearance", value: appearanceLabel)
                 }
             } header: {
                 Text("Recording")

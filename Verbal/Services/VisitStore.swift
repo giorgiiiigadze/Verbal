@@ -27,6 +27,10 @@ import Foundation
 final class VisitStore {
     /// Everything still active for this account, soonest first.
     private(set) var visits: [ScheduledVisit] = []
+    /// An empty visit list only becomes an empty-state answer after the first
+    /// sync attempt. Before then, a new device cannot distinguish "none" from
+    /// "not fetched yet".
+    private(set) var hasCompletedInitialSync = false
 
     private let network: NetworkMonitor
 
@@ -89,6 +93,7 @@ final class VisitStore {
     func attach(userID: UUID) {
         guard self.userID != userID else { return }
         self.userID = userID
+        hasCompletedInitialSync = false
 
         var cache = loadCache(userID: userID) ?? adoptLegacyVisits()
         prune(&cache)
@@ -111,6 +116,7 @@ final class VisitStore {
             visits = []
             unsynced = []
             tombstones = []
+            hasCompletedInitialSync = false
         }
         guard preservingCache, let userID else { return }
 
@@ -237,14 +243,23 @@ final class VisitStore {
     /// phone that has been in a loft all afternoon overwrite an edit made on
     /// another one an hour ago, purely because it spoke last.
     func sync() async {
-        guard userID != nil, network.isOnline else { return }
+        guard userID != nil else { return }
+        guard network.isOnline else {
+            // With no network, the synchronous cache is the best available
+            // answer. An empty cache may now honestly become an empty state.
+            hasCompletedInitialSync = true
+            return
+        }
         guard !isSyncing else {
             // Five edits in a row are one round trip and one more, not five.
             wantsAnotherPass = true
             return
         }
         isSyncing = true
-        defer { isSyncing = false }
+        defer {
+            isSyncing = false
+            hasCompletedInitialSync = true
+        }
 
         // A loop rather than a second call: `isSyncing` is still true until this
         // returns, so a pass that asked for itself again from inside would only

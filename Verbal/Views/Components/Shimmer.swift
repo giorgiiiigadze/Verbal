@@ -14,6 +14,7 @@ private struct ShimmerModifier: ViewModifier {
     /// as a sweep over text; pass white to make a gleam over a dark mark.
     var highlight: Color = .primary
     @State private var phase: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
@@ -30,22 +31,30 @@ private struct ShimmerModifier: ViewModifier {
                 }
                 .mask(content)
                 .allowsHitTesting(false)
-                .opacity(active ? 1 : 0)
+                .opacity(active && !reduceMotion ? 1 : 0)
                 .animation(.easeInOut(duration: 0.45), value: active)
             }
             // Start on appear too: a view born already shimmering (the
             // generating banner) never sees a change to react to.
-            .onAppear { if active { startSweep() } }
+            .onAppear { if active && !reduceMotion { startSweep() } }
             .onChange(of: active) { _, isActive in
-                if isActive {
+                if isActive && !reduceMotion {
                     startSweep()
                 } else {
                     withAnimation(.easeInOut(duration: 0.3)) { phase = 0 }
                 }
             }
+            .onChange(of: reduceMotion) { _, reduced in
+                if reduced {
+                    phase = 0
+                } else if active {
+                    startSweep()
+                }
+            }
     }
 
     private func startSweep() {
+        guard !reduceMotion else { return }
         phase = 0
         withAnimation(.easeInOut(duration: 1.3).repeatForever(autoreverses: false)) {
             phase = 1
