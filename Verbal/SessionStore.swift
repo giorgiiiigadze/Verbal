@@ -317,17 +317,11 @@ final class SessionStore {
         // is NOT a sign-out. We only show sign-in when there is truly no stored
         // session. This avoids a flash of the auth page at cold launch,
         // especially offline where the network state isn't known yet.
-        if !restoreStoredSessionForLaunch() {
-            // On some cold launches the Supabase client has not surfaced the
-            // Keychain session on the first synchronous read. Give it one short
-            // turn before deciding the user is actually signed out.
-            try? await Task.sleep(for: .milliseconds(350))
-            if !restoreStoredSessionForLaunch() {
-                state = .signedOut
-                isBootstrapped = true
-                GoogleAuth.signOut()
-            }
-        }
+        // This is only a fast path. On a cold launch, Supabase may still be
+        // restoring its Keychain session when `currentSession` is first read.
+        // The auth stream's `.initialSession` event is the authoritative answer
+        // in that case, so never turn a brief delay into a Google sign-out.
+        _ = restoreStoredSessionForLaunch()
 
         for await change in client.auth.authStateChanges {
             switch change.event {
@@ -340,6 +334,13 @@ final class SessionStore {
                         state = .ready
                         scheduleBootstrap()
                     }
+                } else if state == .loading {
+                    // Supabase has completed its initial session restore and
+                    // confirmed there is no saved account. This is the only
+                    // launch path that should present sign-in without a
+                    // previously emitted signed-out event.
+                    state = .signedOut
+                    isBootstrapped = true
                 }
             case .signedIn:
                 if change.session != nil {
