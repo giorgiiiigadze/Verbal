@@ -19,6 +19,51 @@ import Foundation
 import StoreKit
 import Supabase
 
+enum StoreError: LocalizedError {
+    /// StoreKit returned a transaction whose Apple signature did not verify.
+    /// It must never be finished, reported to the server, or treated as an
+    /// entitlement — doing any of those turns a failed security check into a
+    /// successful purchase.
+    case unverifiedTransaction
+    case purchasePending
+    case unexpectedPurchaseResult
+
+    var errorDescription: String? {
+        switch self {
+        case .unverifiedTransaction:
+            return "We couldn't verify this purchase. Please try again."
+        case .purchasePending:
+            return "Your purchase is waiting for approval. We'll unlock Pro when Apple confirms it."
+        case .unexpectedPurchaseResult:
+            return "We couldn't complete this purchase. Please try again."
+        }
+    }
+}
+
+/// The small, user-visible decisions made after StoreKit has answered.
+///
+/// Keeping these pure lets subscription behaviour be regression-tested without
+/// trying to manufacture StoreKit transactions in XCTest.
+enum SubscriptionFlow {
+    enum RestoreOutcome: Equatable {
+        case restored
+        case noActiveSubscription
+    }
+
+    enum QuotaRefusalOutcome: Equatable {
+        case retryAfterEntitlementSync
+        case showPaywall
+    }
+
+    static func restoreOutcome(isPro: Bool) -> RestoreOutcome {
+        isPro ? .restored : .noActiveSubscription
+    }
+
+    static func quotaRefusalOutcome(isPro: Bool) -> QuotaRefusalOutcome {
+        isPro ? .retryAfterEntitlementSync : .showPaywall
+    }
+}
+
 @MainActor
 @Observable
 final class Store {
@@ -101,7 +146,7 @@ final class Store {
     /// Expired subscriptions are already absent from `currentEntitlements`; a
     /// refunded one is still listed but carries a revocation date, so both ends
     /// of "no longer paid for" have to be checked.
-    func refreshEntitlement() async {
+    func refreshEntitlement(forceReport: Bool = false) async {
         var active = false
         // Collected alongside the boolean, and sent on. `isPro` is what this
         // screen believes; the server needs something it can check for itself,
@@ -129,7 +174,7 @@ final class Store {
         // paywall can be stepped past on a simulator, and a switch in the app
         // that writes entitlement on the server is the exact thing the server
         // side of this was built not to have.
-        await SubscriptionService.report(signedTransactions: signed)
+        await SubscriptionService.report(signedTransactions: signed, force: forceReport)
     }
 
     #if DEBUG
@@ -140,8 +185,10 @@ final class Store {
     #endif
 
     /// True when the purchase went through. A cancellation is not an error —
-    /// the user deciding against it is an ordinary outcome, and only a genuine
-    /// StoreKit failure is worth a message.
+    /// the user deciding against it is an ordinary outcome. A pending purchase
+    /// is different: it needs a plain explanation because it may be awaiting
+    /// parental approval, and Apple will deliver its later result through
+    /// `Transaction.updates`.
     @discardableResult
     func purchase(_ product: Product) async throws -> Bool {
         guard let userID = SupabaseManager.client.auth.currentUser?.id else {
@@ -152,22 +199,36 @@ final class Store {
         // an account, so a genuine transaction cannot be copied to another
         // Verbal account.
         switch try await product.purchase(options: [.appAccountToken(userID)]) {
-        case .success(let verification):
-            if case .verified(let transaction) = verification {
-                await transaction.finish()
-            }
+        case .success(.verified(let transaction)):
+            // Only a verified transaction is acknowledged. Finishing an
+            // unverified result tells StoreKit it was safely handled even
+            // though we deliberately refused to grant it.
+            await transaction.finish()
             await refreshEntitlement()
             return isPro
-        case .userCancelled, .pending:
+        case .success(.unverified):
+            throw StoreError.unverifiedTransaction
+        case .userCancelled:
             return false
+        case .pending:
+            throw StoreError.purchasePending
         @unknown default:
-            return false
+            throw StoreError.unexpectedPurchaseResult
         }
     }
 
-    func restore() async {
-        try? await AppStore.sync()
+    /// Asks the App Store to reconcile purchases for the current Apple ID.
+    ///
+    /// This is deliberately separate from `refreshEntitlement()`: the latter
+    /// only reads the transactions StoreKit already knows about, whereas a
+    /// restore can make StoreKit fetch a purchase made on another device.
+    /// The caller needs the error to tell a failed App Store sync from a
+    /// successful sync which simply found no active subscription.
+    @discardableResult
+    func restore() async throws -> Bool {
+        try await AppStore.sync()
         await refreshEntitlement()
+        return isPro
     }
 
     /// Whether another quote can be made.

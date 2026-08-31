@@ -33,6 +33,7 @@ struct PaywallSheet: View {
 
     @State private var selection: Plan = .yearly
     @State private var isPurchasing = false
+    @State private var isRestoring = false
     @State private var toast: Toast?
 
     private enum Plan { case monthly, yearly }
@@ -56,6 +57,17 @@ struct PaywallSheet: View {
                     }
                     .accessibilityLabel("Close")
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button(action: restorePurchases) {
+                            Text("Restore Purchases")
+                        }
+                        .disabled(isPurchasing || isRestoring)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel("Subscription options")
+                }
             }
             .toolbarBackground(Color(.systemBackground), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -63,7 +75,7 @@ struct PaywallSheet: View {
         .presentationDetents([.large])
         // No `presentationCornerRadius`: the system's own radius is the one
         // every other sheet on the phone has, and it follows the device's own
-        // corners. 28 was a guess, and a squarer one than the real thing.
+            // corners. 28 was a guess, and a squarer one than the real thing.
         .presentationBackground(Color(.systemBackground))
         .toast($toast)
         .task { await store.loadProducts() }
@@ -81,7 +93,7 @@ struct PaywallSheet: View {
                 .multilineTextAlignment(.center)
                 .padding(.top, 16)
 
-            Text("Make every job count with unlimited quotes.")
+            Text("Keep quoting without waiting for tomorrow's free allowance.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -93,11 +105,9 @@ struct PaywallSheet: View {
                 .padding(.top, 24)
 
             VStack(alignment: .leading, spacing: 17) {
-                checkmark("Unlimited quotes")
-                checkmark("No daily cap")
-                checkmark("Quote every job, every day")
-                checkmark("Create quotes whenever you need them")
-                checkmark("Keep your workflow exactly as it is")
+                checkmark("Unlimited new quotes")
+                checkmark("No daily limit")
+                checkmark("Your existing quotes always stay yours")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 20)
@@ -327,9 +337,14 @@ struct PaywallSheet: View {
             HStack(spacing: 3) {
                 Text(billingNote)
                 if let terms = AppInfo.termsURL {
-                    Button("Terms") { openURL(terms) }
+                    Button { openURL(terms) } label: {
+                        Text("Terms apply").underline()
+                    }
                 }
-                Button("· Privacy") { openURL(AppInfo.privacyPolicyURL) }
+                Text("and")
+                Button { openURL(AppInfo.privacyPolicyURL) } label: {
+                    Text("Privacy Policy").underline()
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -349,7 +364,7 @@ struct PaywallSheet: View {
     }
 
     private var canBuy: Bool {
-        guard !isPurchasing else { return false }
+        guard !isPurchasing, !isRestoring else { return false }
         if selectedProduct != nil { return true }
         #if DEBUG
         return store.products.isEmpty
@@ -392,8 +407,27 @@ struct PaywallSheet: View {
                 // Only on success: a cancelled purchase should leave the sheet
                 // exactly where it was, not close as if something happened.
                 if try await store.purchase(product) { dismiss() }
+            } catch let error as StoreError {
+                toast = Toast(style: .error, message: error.localizedDescription)
             } catch {
                 toast = Toast(style: .error, message: "Couldn't complete the purchase")
+            }
+        }
+    }
+
+    private func restorePurchases() {
+        isRestoring = true
+        Task {
+            defer { isRestoring = false }
+            do {
+                switch SubscriptionFlow.restoreOutcome(isPro: try await store.restore()) {
+                case .restored:
+                    dismiss()
+                case .noActiveSubscription:
+                    toast = Toast(style: .error, message: "No active purchases were found")
+                }
+            } catch {
+                toast = Toast(style: .error, message: "Couldn't restore purchases")
             }
         }
     }

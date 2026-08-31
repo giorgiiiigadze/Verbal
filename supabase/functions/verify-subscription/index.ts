@@ -105,6 +105,7 @@ interface DecodedTransaction {
   expiresDate?: number;
   revocationDate?: number;
   bundleId?: string;
+  signedDate?: number;
 }
 
 function accountTokenMatches(token: string, userId: string): boolean {
@@ -204,14 +205,20 @@ Deno.serve(async (req: Request) => {
   }
   const entitlement = bestEntitlement(owned);
 
-  const { error: writeError } = await admin
-    .from("profiles")
-    .update({
-      subscription_status: entitlement.status,
-      subscription_expires_at: entitlement.expiresAt,
-      subscription_product_id: entitlement.productId,
-    })
-    .eq("id", userId);
+  // The notification receiver may process a refund or renewal while the app
+  // is closed. Use Apple’s signed time here too, so an old device report cannot
+  // overwrite a newer server notification delivered out of order.
+  const signedDates = decoded
+    .map((tx) => tx.signedDate)
+    .filter((date): date is number => typeof date === "number");
+  const effectiveAt = signedDates.length > 0 ? Math.max(...signedDates) : Date.now();
+  const { error: writeError } = await admin.rpc("record_subscription_state", {
+    p_user_id: userId,
+    p_status: entitlement.status,
+    p_expires_at: entitlement.expiresAt,
+    p_product_id: entitlement.productId,
+    p_effective_at: new Date(effectiveAt).toISOString(),
+  });
 
   if (writeError) {
     console.error("verify-subscription write failed", userId, writeError.message);

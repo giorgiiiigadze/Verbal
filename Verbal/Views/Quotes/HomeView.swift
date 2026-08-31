@@ -1687,6 +1687,24 @@ struct HomeView: View {
             // had done nothing — and the obvious response to that is to tap it
             // again and end up with three.
             toast = Toast(style: .success, message: "Copy saved as a draft")
+        } catch let error where error.isQuoteAllowanceExhausted {
+            await store.refreshEntitlement(forceReport: true)
+            guard SubscriptionFlow.quotaRefusalOutcome(isPro: store.isPro) == .retryAfterEntitlementSync else {
+                await session.refreshQuoteUsage()
+                store.isPaywallPresented = true
+                return
+            }
+            do {
+                try await QuoteService.duplicateQuote(id: quote.id)
+                await load()
+                await session.refreshQuoteUsage()
+                toast = Toast(style: .success, message: "Copy saved as a draft")
+            } catch let retryError where retryError.isQuoteAllowanceExhausted {
+                await session.refreshQuoteUsage()
+                toast = Toast(style: .error, message: "Your subscription is still syncing. Try again in a moment.")
+            } catch {
+                toast = Toast(style: .error, message: "Couldn't duplicate this quote")
+            }
         } catch {
             // Leave the list unchanged if the copy failed, but say so — the
             // silence read as success.

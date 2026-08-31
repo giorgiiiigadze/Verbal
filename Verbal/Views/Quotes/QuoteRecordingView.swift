@@ -9,6 +9,7 @@ import UIKit
 struct QuoteRecordingView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SessionStore.self) private var session
+    @Environment(Store.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     @State private var recorder = QuoteRecorder()
     /// A short history of microphone levels, newest last, so the meter reads as
@@ -593,18 +594,53 @@ struct QuoteRecordingView: View {
                 try? await Task.sleep(for: .seconds(1.0))
                 dismiss()
             } catch let error where error.isQuoteAllowanceExhausted {
-                // The gate is the server's now, so this is reachable even
-                // though the tab bar checked before the recording started — a
-                // quote banked on another device, or a count that was already
-                // stale by the time this one finished. Saying "couldn't save
-                // quote" about it would be describing a paywall as a fault.
-                await session.refreshQuoteUsage()
-                onAllowanceExhausted?()
-                dismiss()
+                // A rejection can be an ordinary free-tier limit, but it can
+                // also be the narrow gap after a renewal, restore or sign-in:
+                // StoreKit already knows the account is Pro while Supabase has
+                // not yet received its signed transaction. Reconcile and retry
+                // once before offering a subscription to somebody who has one.
+                await store.refreshEntitlement(forceReport: true)
+                if SubscriptionFlow.quotaRefusalOutcome(isPro: store.isPro) == .retryAfterEntitlementSync {
+                    await retrySaveAfterEntitlementSync(generated)
+                } else {
+                    await showPaywallForExhaustedAllowance()
+                }
             } catch {
                 toast = Toast(style: .error, message: "Couldn't save quote")
             }
         }
+    }
+
+    /// The first write was refused before the server had the user's current
+    /// StoreKit entitlement. `refreshEntitlement()` above reports that signed
+    /// transaction, so this is a fresh, single retry of the transactional RPC.
+    /// A quota refusal here means the server still cannot see it; keeping the
+    /// quote open with a sync message is truthful, while a paywall is not.
+    private func retrySaveAfterEntitlementSync(_ quote: GeneratedQuote) async {
+        do {
+            let id = try await QuoteService.save(quote, transcript: transcriptText, title: title,
+                                                 currency: currency, clientName: clientName)
+            onSavedQuote?(id)
+            toast = Toast(style: .success, message: "Quote saved")
+            try? await Task.sleep(for: .seconds(1.0))
+            dismiss()
+        } catch let error where error.isQuoteAllowanceExhausted {
+            await session.refreshQuoteUsage()
+            toast = Toast(style: .error, message: "Your subscription is still syncing. Try again in a moment.")
+        } catch {
+            toast = Toast(style: .error, message: "Couldn't save quote")
+        }
+    }
+
+    private func showPaywallForExhaustedAllowance() async {
+        // The gate is the server's now, so this is reachable even though the
+        // tab bar checked before the recording started — a quote banked on
+        // another device, or a count that was already stale by the time this
+        // one finished. Saying "couldn't save quote" about it would be
+        // describing a paywall as a fault.
+        await session.refreshQuoteUsage()
+        onAllowanceExhausted?()
+        dismiss()
     }
 
     // MARK: - Content (transcript ⇄ summary)

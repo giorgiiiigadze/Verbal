@@ -4,7 +4,7 @@ title: Privacy Policy — Verbal
 
 # Privacy Policy
 
-**Last updated: 29 August 2026**
+**Last updated: 31 August 2026**
 
 Verbal turns a spoken description of a job into a written, priced quote. This
 policy explains what the app collects, where it goes, and how to get rid of it.
@@ -50,6 +50,12 @@ whether it succeeded. This is how we keep the service running within its limits
 and understand what it costs to operate. It contains no part of your transcript
 or quote.
 
+**Subscription information.** If you buy Verbal Pro, Apple sends us signed
+purchase information so we can confirm your access. We store the subscription
+status, product identifier, expiry date, and Apple transaction identifier linked
+to your Verbal account. We do not receive your Apple ID, payment-card details,
+or billing address.
+
 **On your device only.** Your currency preference, whether you have seen the
 intro, a cached table of exchange rates, and your sign-in token. These stay on
 your phone and are removed when you delete the app.
@@ -72,7 +78,7 @@ it needs.
 | **OpenAI** | Your transcript, trade, rate card, and currency code | Turns what you said into a structured quote |
 | **Google** | Your sign-in request | Authenticates you |
 | **Frankfurter** | A pair of currency codes | Daily exchange rates for converting a quote |
-| **Apple** | Nothing from your account | On-device transcription; review prompts |
+| **Apple** | Signed subscription status and transaction information, if you subscribe | Processes payments and confirms Verbal Pro access |
 
 A note on **OpenAI**: your transcript, selected trade, saved rates, and currency
 code are sent to OpenAI's API to build the quote. OpenAI states that data

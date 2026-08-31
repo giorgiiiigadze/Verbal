@@ -25,3 +25,8 @@ verify_jwt = true
 
 [functions.verify-subscription]
 verify_jwt = true
+
+[functions.app-store-notifications]
+# Apple calls this endpoint directly, with its own signed JWS body rather than
+# a Supabase JWT. The function verifies that JWS before it reads or writes data.
+verify_jwt = false

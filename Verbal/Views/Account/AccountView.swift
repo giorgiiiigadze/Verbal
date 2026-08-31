@@ -131,6 +131,7 @@ struct AccountView: View {
                     LabeledContent("Subscription", value: planLabel)
                         .foregroundStyle(Color(.mainText))
                 }
+
             } footer: {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Your business name, number and address as a client sees them, and the trade Verbal reads your jobs against.")
@@ -295,4 +296,5 @@ struct AccountView: View {
         }
         .padding(.vertical, 6)
     }
+
 }

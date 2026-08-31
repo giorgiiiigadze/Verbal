@@ -495,6 +495,24 @@ struct QuoteDetailView: View {
                 // reading one too many for the rest of the session.
                 await session.refreshQuoteUsage()
                 toast = Toast(style: .success, message: "Copy saved as a draft")
+            } catch let error where error.isQuoteAllowanceExhausted {
+                await store.refreshEntitlement(forceReport: true)
+                guard SubscriptionFlow.quotaRefusalOutcome(isPro: store.isPro) == .retryAfterEntitlementSync else {
+                    await session.refreshQuoteUsage()
+                    store.isPaywallPresented = true
+                    return
+                }
+                do {
+                    try await QuoteService.duplicateQuote(id: quote.id)
+                    onNeedsRefresh()
+                    await session.refreshQuoteUsage()
+                    toast = Toast(style: .success, message: "Copy saved as a draft")
+                } catch let retryError where retryError.isQuoteAllowanceExhausted {
+                    await session.refreshQuoteUsage()
+                    toast = Toast(style: .error, message: "Your subscription is still syncing. Try again in a moment.")
+                } catch {
+                    toast = Toast(style: .error, message: "Couldn't duplicate this quote")
+                }
             } catch {
                 toast = Toast(style: .error, message: "Couldn't duplicate this quote")
             }

@@ -373,6 +373,48 @@ begin
 end $$;
 reset role;
 
+-- ------------------------------------------------------------
+-- App Store notifications are private, idempotent, and ordered
+-- ------------------------------------------------------------
+do $$
+declare applied boolean;
+begin
+  applied := public.record_subscription_state(
+    pg_temp.uid(4), 'active', now() + interval '30 days',
+    'com.giorgi.verbal.pro.monthly', now(),
+    'notification-new', 'notification-chain', 'DID_RENEW'
+  );
+  perform pg_temp.t_ok(applied, 'a fresh verified notification updates its owner');
+
+  applied := public.record_subscription_state(
+    pg_temp.uid(4), 'none', null, null, now() + interval '1 hour',
+    'notification-new', 'notification-chain', 'EXPIRED'
+  );
+  perform pg_temp.t_ok(not applied, 'a retried notification is idempotent');
+  perform pg_temp.t_ok(
+    (select subscription_status = 'active' from public.profiles where id = pg_temp.uid(4)),
+    'a duplicate notification cannot overwrite its first result'
+  );
+
+  applied := public.record_subscription_state(
+    pg_temp.uid(4), 'none', null, null, now() - interval '1 hour',
+    'notification-old', 'notification-chain', 'EXPIRED'
+  );
+  perform pg_temp.t_ok(not applied, 'an older notification cannot overwrite a newer state');
+
+  set local role authenticated;
+  perform pg_temp.as_user(pg_temp.uid(4)::text);
+  begin
+    perform public.record_subscription_state(
+      pg_temp.uid(4), 'none', null, null, now(), null, null, null
+    );
+    raise exception 'FAIL  a client could record subscription state';
+  exception when insufficient_privilege then
+    perform pg_temp.t_ok(true, 'only server-side subscription code can record notification state');
+  end;
+end $$;
+reset role;
+
 select format('1..%s', count(*)) from pg_temp.tap_results;
 select tap_line from pg_temp.tap_results order by test_number;
 

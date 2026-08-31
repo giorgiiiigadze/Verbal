@@ -1,0 +1,42 @@
+name: Backend tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  entitlement:
+    name: Entitlement and notification rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test notification state rules
+        run: node supabase/functions/app-store-notifications/notification-state.test.mjs
+      - name: Test verified-entitlement rules
+        working-directory: supabase/functions/verify-subscription
+        run: |
+          npm install --no-save --package-lock=false @apple/app-store-server-library@3.1.0
+          node entitlement.test.mjs
+
+  database:
+    name: Database quota and subscription integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase database
+        run: supabase db start
+      - name: Apply migrations from scratch
+        run: supabase db reset
+      - name: Test quota and subscription integrity
+        run: supabase test db supabase/tests/quota_and_integrity.sql --local

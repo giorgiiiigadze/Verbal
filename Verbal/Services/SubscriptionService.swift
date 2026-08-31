@@ -41,9 +41,9 @@ enum SubscriptionService {
     /// paywall until it lapses on its own, so a missed report costs nothing
     /// until it has been missed for a very long time.
     @MainActor
-    static func report(signedTransactions: [String]) async {
+    static func report(signedTransactions: [String], force: Bool = false) async {
         guard client.auth.currentUser != nil else { return }
-        guard lastReported != signedTransactions else { return }
+        guard force || lastReported != signedTransactions else { return }
 
         struct Payload: Encodable {
             let signed_transactions: [String]
