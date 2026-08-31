@@ -96,7 +96,7 @@ struct ScheduleView: View {
         .navigationTitle("Visits")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarLeading) {
                 Menu {
                     Picker("Show", selection: $filter) {
                         ForEach(ScheduleFilter.allCases) { option in
@@ -109,7 +109,9 @@ struct ScheduleView: View {
                           : "line.3.horizontal.decrease.circle.fill")
                 }
                 .accessibilityLabel("Filter schedule")
+            }
 
+            ToolbarItem(placement: .topBarTrailing) {
                 Button { editor = .new } label: {
                     Image(systemName: "plus")
                 }
