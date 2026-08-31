@@ -295,6 +295,71 @@ struct QuoteDetailView: View {
         }
     }
 
+    /// The narrative half of a quote belongs together: the sentence that says
+    /// what the job is and the list that says what is included. It is a reading
+    /// surface, not an inline editor — changes still live under "Edit quote"
+    /// in the overflow menu, where every other quote-wide edit already is.
+    @ViewBuilder
+    private var jobDetailsSection: some View {
+        if !jobSummary.isEmpty || !scope.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 9) {
+                    Image(systemName: "text.alignleft")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
+                        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    Text("Job details")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color(.mainText))
+                    Spacer(minLength: 0)
+                }
+
+                if !jobSummary.isEmpty {
+                    Text(emphasizedSummary(jobSummary))
+                        .foregroundStyle(Color(.mainText))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 18)
+                }
+
+                if !scope.isEmpty {
+                    if !jobSummary.isEmpty {
+                        Divider().padding(.vertical, 18)
+                    } else {
+                        Spacer().frame(height: 18)
+                    }
+
+                    Text("Included")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+
+                    VStack(alignment: .leading, spacing: 11) {
+                        ForEach(Array(scope.enumerated()), id: \.offset) { _, item in
+                            HStack(alignment: .top, spacing: 10) {
+                                Circle()
+                                    .fill(Color(.mainText))
+                                    .frame(width: 6, height: 6)
+                                    .padding(.top, 6)
+                                Text(emphasizedScopeItem(item))
+                                    .foregroundStyle(Color(.mainText))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .padding(.top, 10)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+        }
+    }
+
     /// The quote's total, pinned to the bottom of the screen like a native bar.
     private var totalBar: some View {
         HStack {
@@ -616,21 +681,7 @@ struct QuoteDetailView: View {
 
                 chips
 
-                // No "Summary" heading over it. The paragraph under the title
-                // is the summary and could not be anything else, so the word
-                // was a label announcing one paragraph — and it pushed the
-                // thing it named further down the page. The review screen after
-                // a recording never had one; this is the two agreeing.
-                if !jobSummary.isEmpty {
-                    Text(emphasizedSummary(jobSummary))
-                        .foregroundStyle(Color(.mainText))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                // 4 on top of the stack's own 20. A section still starts a step
-                // away from the one before it — 24 against the 8 under a heading
-                // — but the blocks stay close enough to read as one document.
-                ScopeList(items: scope)
+                jobDetailsSection
                     .padding(.top, 4)
 
                 lineItemsSection
@@ -644,7 +695,9 @@ struct QuoteDetailView: View {
             .padding(.horizontal, 20)
             .padding(.top, 12)
         }
-        .background(Color(.homeBackground))
+        // A document white in light mode, and a softer charcoal in dark mode:
+        // distinct from both a black canvas and the cards laid on top of it.
+        .background(Color(.quoteDetailBackground))
         .safeAreaInset(edge: .bottom) {
             totalBar
         }

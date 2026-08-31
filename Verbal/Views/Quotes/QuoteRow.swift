@@ -23,7 +23,10 @@ struct QuoteRow: View {
     /// five times down one column. The timestamp stays — it is the only thing
     /// telling the quotes in a thread apart.
     var clientIsKnown: Bool = false
-    var cornerRadius: CGFloat = 22
+    /// Matches the document cards on the quote screen. The old 22pt radius
+    /// made a dense list of quotes look softer and more dashboard-like than
+    /// the details page it opens.
+    var cornerRadius: CGFloat = 16
     var topCornerRadius: CGFloat? = nil
     var bottomCornerRadius: CGFloat? = nil
     var showsBorder: Bool = true
@@ -53,7 +56,7 @@ struct QuoteRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     if quote.pinned {
@@ -94,9 +97,9 @@ struct QuoteRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
-        // A little more vertical air than the dense list version had, so each
-        // quote reads as its own tappable card without widening the text column.
-        .padding(.vertical, 18)
+        // Enough air for a calm document stack without the cards becoming
+        // taller than the information they carry.
+        .padding(.vertical, 16)
         // One fill for every row, pinned or not. A pinned quote already sits
         // under its own heading at the top of the list, which says where it is
         // better than a colour can — and royalBlue25 is the tint the app uses
@@ -120,7 +123,9 @@ struct QuoteRow: View {
         // day headings above the rows still carry the absolute date, and the
         // quote's own screen has it to the minute.
         let age = quoteRelativeLabel(quote.createdAt)
-        let when = quote.status == "draft" ? age : "Sent \(age)"
+        // Status has its own pill; repeating "Sent" here made each sent quote
+        // say the same thing twice before getting to the useful timestamp.
+        let when = age
         guard !clientIsKnown,
               let client = quote.clientName, !client.isEmpty else { return when }
         return "\(client) · \(when)"
@@ -155,8 +160,8 @@ struct QuoteRow: View {
         }
         .font(.caption.weight(.medium))
         .foregroundStyle(pillForeground)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
         .background(pillBackground, in: Capsule())
     }
 
@@ -203,11 +208,11 @@ struct QuoteRowSkeleton: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 18)
+        .padding(.vertical, 16)
         .background(Color(.cardSurface),
-                    in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
     }

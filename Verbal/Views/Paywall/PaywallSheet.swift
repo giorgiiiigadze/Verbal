@@ -105,8 +105,12 @@ struct PaywallSheet: View {
                 .padding(.top, 24)
 
             VStack(alignment: .leading, spacing: 17) {
-                checkmark("Unlimited new quotes")
-                checkmark("No daily limit")
+                checkmark("Create unlimited AI-powered quotes")
+                checkmark("Keep quoting after your two free quotes")
+                checkmark("Send a professional PDF for every job")
+                checkmark("Use your saved rates on every quote")
+                checkmark("Keep every client and job in one place")
+                checkmark("Plan visits and stay on top of reminders")
                 checkmark("Your existing quotes always stay yours")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
