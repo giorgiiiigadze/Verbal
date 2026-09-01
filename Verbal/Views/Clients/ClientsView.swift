@@ -287,6 +287,7 @@ struct ClientsView: View {
     private var emptyState: some View {
         EmptyStateMessage(
             icon: "person.2",
+            assetIcon: "ClientsEmpty",
             title: "No clients yet",
             message: "Put a name on a quote and whoever you quoted for shows up here, with everything you've sent them."
         ) {

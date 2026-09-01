@@ -97,7 +97,7 @@ struct HomeView: View {
             // The inset places the action above the tab bar and gives every
             // Home scroll view the same 62 points of bottom clearance. The
             // last quote can therefore scroll fully above the floating pill.
-            .modifier(FloatingRecordInset { showCreate = true })
+            .modifier(FloatingRecordInset(isVisible: !showsFirstQuoteCard) { showCreate = true })
             // Empty on purpose — the name of the screen is `pageTitle`, in the
             // list itself. Left as a large title it would fold into the bar on
             // scroll; left inline it would sit there permanently. Both put the
@@ -154,9 +154,10 @@ struct HomeView: View {
                             }
                         }
                     } label: {
-                        Image(systemName: filter == .all
-                              ? "line.3.horizontal.decrease"
-                              : "line.3.horizontal.decrease.circle.fill")
+                        Image(.homeFilter)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 22, height: 22)
                     }
                     .accessibilityLabel("Filter quotes")
 
@@ -402,6 +403,13 @@ struct HomeView: View {
         }
     }
 
+    /// The first-quote card already contains the primary recording action.
+    /// Showing the floating control beside it creates two identical calls to
+    /// action on one screen.
+    private var showsFirstQuoteCard: Bool {
+        quotes.isEmpty && visits.isEmpty && hasLoaded && !loadFailed && !hasEverHadQuotes
+    }
+
     // MARK: - List
 
     /// The screen's name, set as the page's own heading rather than as a
@@ -465,22 +473,16 @@ struct HomeView: View {
                             Task { await session.prefetchLineItems(for: quote.id) }
                         }
                         .contextMenu { quoteMenu(for: quote) }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            // No .destructive role: it would animate the row out
-                            // on tap, before the confirmation alert is answered.
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            // A full swipe reaches this action, but it only
+                            // opens the confirmation alert; no quote is removed
+                            // until the user confirms that alert.
                             Button {
                                 quoteToDelete = quote
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
                             .tint(.red)
-
-                            Button {
-                                share(quote)
-                            } label: {
-                                Label("Share", systemImage: "square.and.arrow.up")
-                            }
-                            .tint(Color(.royalBlue300))
                         }
                     }
                 }
@@ -738,6 +740,7 @@ struct HomeView: View {
     private var upcomingEmpty: some View {
         EmptyStateMessage(
             icon: "calendar",
+            assetIcon: "VisitsEmpty",
             title: "Nothing booked in",
             message: "Put the visits you've got coming up here and each one is a tap from a quote."
         ) {
@@ -1114,7 +1117,8 @@ struct HomeView: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 26)
             .frame(height: 50)
-            .background(Color(.royalBlue600), in: Capsule())
+            .background(Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255),
+                        in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -1720,10 +1724,12 @@ private struct FloatingRecordInset: ViewModifier {
     private static let bottomSpacing: CGFloat = 12
     private static let blue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
 
+    let isVisible: Bool
     let action: () -> Void
 
     func body(content: Content) -> some View {
-        content.safeAreaInset(edge: .bottom, spacing: 0) {
+        if isVisible {
+            content.safeAreaInset(edge: .bottom, spacing: 0) {
             HStack {
                 Spacer(minLength: 0)
                 Button(action: action) {
@@ -1743,6 +1749,9 @@ private struct FloatingRecordInset: ViewModifier {
             }
             .padding(.trailing, 16)
             .padding(.bottom, Self.bottomSpacing)
+            }
+        } else {
+            content
         }
     }
 }

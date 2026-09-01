@@ -14,7 +14,13 @@ struct HelpView: View {
             Section {
                 if let mail = AppInfo.supportMailURL {
                     Link(destination: mail) {
-                        Label("Contact support", systemImage: "envelope")
+                        HStack(spacing: 8) {
+                            Image(.contactSupport)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                            Text("Contact support")
+                        }
                     }
                 } else {
                     // Should not happen — the address is a constant — but a

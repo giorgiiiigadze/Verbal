@@ -295,68 +295,22 @@ struct QuoteDetailView: View {
         }
     }
 
-    /// The narrative half of a quote belongs together: the sentence that says
-    /// what the job is and the list that says what is included. It is a reading
-    /// surface, not an inline editor — changes still live under "Edit quote"
-    /// in the overflow menu, where every other quote-wide edit already is.
+    /// Match the generated-quote review exactly: the narrative reads as a
+    /// document before the price table, rather than as a second card competing
+    /// with it. Saved and just-generated quotes should not have two layouts.
     @ViewBuilder
     private var jobDetailsSection: some View {
         if !jobSummary.isEmpty || !scope.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 9) {
-                    Image(systemName: "text.alignleft")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20, height: 20)
-                        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    Text("Job details")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color(.mainText))
-                    Spacer(minLength: 0)
-                }
-
+            VStack(alignment: .leading, spacing: 20) {
                 if !jobSummary.isEmpty {
                     Text(emphasizedSummary(jobSummary))
                         .foregroundStyle(Color(.mainText))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 18)
                 }
 
-                if !scope.isEmpty {
-                    if !jobSummary.isEmpty {
-                        Divider().padding(.vertical, 18)
-                    } else {
-                        Spacer().frame(height: 18)
-                    }
-
-                    Text("Included")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-
-                    VStack(alignment: .leading, spacing: 11) {
-                        ForEach(Array(scope.enumerated()), id: \.offset) { _, item in
-                            HStack(alignment: .top, spacing: 10) {
-                                Circle()
-                                    .fill(Color(.mainText))
-                                    .frame(width: 6, height: 6)
-                                    .padding(.top, 6)
-                                Text(emphasizedScopeItem(item))
-                                    .foregroundStyle(Color(.mainText))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                    }
-                    .padding(.top, 10)
-                }
+                ScopeList(items: scope)
+                    .padding(.top, 4)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
         }
     }
 

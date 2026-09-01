@@ -125,15 +125,12 @@ struct PaywallSheet: View {
 
     /// A compact brand accent, intentionally not a competing hero illustration.
     private var proMark: some View {
-        ZStack {
-            Circle()
-                .fill(Color(.royalBlue50))
-                .frame(width: 68, height: 68)
-            Image(systemName: "waveform")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(accent)
-        }
-        .accessibilityHidden(true)
+        Image(.paywallHero)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 88, height: 88)
+            .foregroundStyle(accent)
+            .accessibilityHidden(true)
     }
 
     private var headline: String {

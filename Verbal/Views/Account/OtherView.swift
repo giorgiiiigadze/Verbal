@@ -23,7 +23,13 @@ struct OtherView: View {
                 Button {
                     showOnboardingAgain()
                 } label: {
-                    Label("Show onboarding again", systemImage: "arrow.counterclockwise")
+                    HStack(spacing: 8) {
+                        Image(.settingsShowOnboarding)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                        Text("Show onboarding again")
+                    }
                 }
             } footer: {
                 Text("Debug only. Clears the local onboarding flag and signs out so the next screen is the first-run flow.")

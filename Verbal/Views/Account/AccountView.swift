@@ -168,7 +168,7 @@ struct AccountView: View {
                 NavigationLink {
                     QuoteDefaultsView()
                 } label: {
-                    Label("Quote defaults", systemImage: "doc.plaintext")
+                    settingsLabel("Quote defaults", icon: .settingsQuoteDefaults)
                 }
                 Picker("Main currency", selection: currency) {
                     ForEach(AppCurrency.allCases) { option in
@@ -210,7 +210,7 @@ struct AccountView: View {
                 NavigationLink {
                     HelpView()
                 } label: {
-                    Label("Help", systemImage: "questionmark.circle")
+                    settingsLabel("Help", icon: .settingsHelp)
                 }
                 NavigationLink {
                     AboutView()
@@ -295,6 +295,16 @@ struct AccountView: View {
             }
         }
         .padding(.vertical, 6)
+    }
+
+    private func settingsLabel(_ title: String, icon: ImageResource) -> some View {
+        HStack(spacing: 8) {
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 20, height: 20)
+            Text(title)
+        }
     }
 
 }

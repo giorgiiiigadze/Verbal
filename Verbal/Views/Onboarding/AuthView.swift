@@ -64,15 +64,21 @@ struct AuthView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                appleButton
-                    .disabled(isChoosingAccount)
+                VStack(spacing: 10) {
+                    googleButton
+                        .disabled(isChoosingAccount)
 
-                googleButton
-                    .disabled(isChoosingAccount)
+                    appleButton
+                        .disabled(isChoosingAccount)
 
-                Spacer().frame(height: 8)
+                    emailButton
+                }
+
+                authConsent
             }
-            .padding(24)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 8)
 
             if isFinishing {
                 loadingScreen
@@ -123,11 +129,11 @@ struct AuthView: View {
         Button(action: signInWithGoogle) {
             authButtonLabel(
                 title: "Continue with Google",
-                foreground: .black,
-                background: .white,
-                border: Color.black.opacity(0.12),
+                foreground: .white,
+                background: .black,
+                border: .white.opacity(0.12),
                 isDimmed: isChoosingAccount,
-                trailing: isChoosingAccount ? AnyView(ProgressView().tint(.black)) : nil
+                trailing: isChoosingAccount ? AnyView(ProgressView().tint(.white)) : nil
             ) {
                 Image(.googleLogo)
                     .resizable()
@@ -156,6 +162,40 @@ struct AuthView: View {
         .accessibilityLabel("Continue with Apple, coming soon")
     }
 
+    /// The email path is intentionally only visual for now. It establishes the
+    /// choice in the sign-in layout without implying an email flow exists yet.
+    private var emailButton: some View {
+        Button(action: {}) {
+            Text("Continue with email")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color(.mainText))
+                .frame(maxWidth: .infinity)
+                .frame(height: authButtonHeight)
+                .background(Color(.cardSurface), in: Capsule())
+                .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Continue with email, coming soon")
+    }
+
+    private var authConsent: some View {
+        VStack(spacing: 3) {
+            Text("By continuing, you agree to Verbal’s")
+            HStack(spacing: 4) {
+                if let terms = AppInfo.termsURL {
+                    Link("Terms of Service", destination: terms)
+                        .underline()
+                }
+                Text("and")
+                Link("Privacy Policy", destination: AppInfo.privacyPolicyURL)
+                    .underline()
+            }
+        }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+    }
+
     private func authButtonLabel<Icon: View>(
         title: String,
         foreground: Color,
@@ -165,21 +205,20 @@ struct AuthView: View {
         trailing: AnyView? = nil,
         @ViewBuilder icon: () -> Icon
     ) -> some View {
-        ZStack {
+        HStack(spacing: 10) {
+            icon()
+                .foregroundStyle(foreground)
+                .frame(width: authButtonIconSize, height: authButtonIconSize)
+                .opacity(isDimmed ? 0.35 : 1)
+
             Text(title)
                 .font(.body.weight(.semibold))
                 .foregroundStyle(foreground)
                 .opacity(isDimmed ? 0.35 : 1)
 
-            HStack {
-                icon()
-                    .foregroundStyle(foreground)
-                    .frame(width: authButtonIconSize, height: authButtonIconSize)
-                    .opacity(isDimmed ? 0.35 : 1)
-                Spacer(minLength: 0)
-                if let trailing { trailing }
-            }
+            if let trailing { trailing }
         }
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, authButtonHorizontalPadding)
         .frame(maxWidth: .infinity)
         .frame(height: authButtonHeight)

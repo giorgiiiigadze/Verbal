@@ -20,6 +20,8 @@ struct EmptyStateMessage<Actions: View>: View {
     /// An SF Symbol, drawn light. Unfilled where the tab bar shows the filled
     /// version of the same glyph, so it reads as that thing with nothing in it.
     let icon: String
+    /// Optional asset for the few empty states that have a custom illustration.
+    var assetIcon: String? = nil
     let title: String
     let message: String
     @ViewBuilder var actions: Actions
@@ -28,11 +30,24 @@ struct EmptyStateMessage<Actions: View>: View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
 
-            Image(systemName: icon)
-                .font(.system(size: 32, weight: .light))
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 18)
-                .accessibilityHidden(true)
+            Group {
+                if let assetIcon {
+                    Image(assetIcon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 44, height: 44)
+                        // Custom illustrations need a little more ink than an
+                        // SF Symbol to retain their line detail, but remain
+                        // quieter than the empty-state title.
+                        .foregroundStyle(Color(.mainText).opacity(0.58))
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.bottom, 18)
+            .accessibilityHidden(true)
 
             Text(title)
                 .font(.headline)

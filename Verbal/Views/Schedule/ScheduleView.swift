@@ -104,9 +104,10 @@ struct ScheduleView: View {
                         }
                     }
                 } label: {
-                    Image(systemName: filter == .all
-                          ? "line.3.horizontal.decrease"
-                          : "line.3.horizontal.decrease.circle.fill")
+                    Image(.homeFilter)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
                 }
                 .accessibilityLabel("Filter schedule")
             }
@@ -276,6 +277,7 @@ struct ScheduleView: View {
     private var emptyState: some View {
         EmptyStateMessage(
             icon: "calendar",
+            assetIcon: "VisitsEmpty",
             title: "Nothing booked in",
             message: "Add the visits you've got coming up and each one will be ready for directions, a call, or a quote."
         ) {
@@ -286,6 +288,7 @@ struct ScheduleView: View {
     private var noMatchesState: some View {
         EmptyStateMessage(
             icon: "line.3.horizontal.decrease.circle",
+            assetIcon: "VisitsNoMatches",
             title: "No visits here",
             message: "Choose another filter to see the rest of your visits."
         ) {

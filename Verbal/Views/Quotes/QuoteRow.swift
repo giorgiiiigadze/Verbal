@@ -2,8 +2,8 @@
 //  QuoteRow.swift
 //  Verbal
 //
-//  The quote card used in the Home list and on a client's detail screen, plus
-//  the loading placeholder built to its exact geometry.
+//  The quote list row used in Home and on a client's detail screen, plus its
+//  loading placeholder.
 //
 
 import SwiftUI
@@ -96,22 +96,13 @@ struct QuoteRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        // Enough air for a calm document stack without the cards becoming
-        // taller than the information they carry.
-        .padding(.vertical, 16)
-        // One fill for every row, pinned or not. A pinned quote already sits
-        // under its own heading at the top of the list, which says where it is
-        // better than a colour can — and royalBlue25 is the tint the app uses
-        // for things asking to be tapped (the outstanding band, the ready-to-add
-        // card), so a pin read as more urgent than the money above it.
-        .background(Color(.cardSurface), in: rowShape)
-        .overlay {
-            if showsBorder {
-                rowShape.strokeBorder(Color(.separator), lineWidth: 0.5)
-            }
-        }
-        .contentShape(.contextMenuPreview, rowShape)
+        // The page background remains visible, while the leading plate gives
+        // each row a stable visual anchor before the title is read.
+        .padding(.vertical, 12)
+        // Keep the hit target shaped like the row without opting the long-press
+        // menu into a lifted card preview, which reads as an unwanted shadow on
+        // an otherwise flat list item.
+        .contentShape(rowShape)
     }
 
     /// Client name and how long ago the quote went out. The client leads where
@@ -133,19 +124,6 @@ struct QuoteRow: View {
 
     /// Small tinted capsule naming the quote's status: gray while nothing has
     /// happened to it, blue once it is out, green or red once it is settled.
-    ///
-    /// The colours are the `Status*` pairs in the asset catalogue rather than
-    /// the system's `.green` / `.red` at some alpha. Those are tuned for iOS
-    /// controls — vivid and cool — and a derived 14% tint of one is not a
-    /// chosen colour; on a warm off-white page the pills read louder than the
-    /// title above them. Each pair here is a muted ink over a ground picked to
-    /// go with it, in both appearances.
-    ///
-    /// "Viewed" is the exception, and deliberately: it's the one state that
-    /// reports something the customer did rather than something the user did,
-    /// and it's the moment worth acting on. Set like "Sent" — both were
-    /// `blueAccentText` on near-identical pale blue — it said the quote had
-    /// gone out, when what it actually says is that somebody is reading it.
     private var statusPill: some View {
         HStack(spacing: 4) {
             if quote.effectiveStatus == "viewed" {
@@ -153,9 +131,6 @@ struct QuoteRow: View {
                     .font(.caption2)
             }
             Text(showsUnpriced ? "\(unpricedCount) unpriced" : pillLabel)
-                // Same reasoning as the chip on the quote screen: the fill
-                // already fades when the status changes, so a label that cuts
-                // is the one part out of step.
                 .contentTransition(.opacity)
         }
         .font(.caption.weight(.medium))
@@ -188,10 +163,8 @@ struct QuoteRow: View {
     }
 }
 
-/// A quote card with its content replaced by bars. Deliberately built to
-/// `QuoteRow`'s geometry — same radius, padding, border and column positions —
-/// so the real cards land where the placeholders were instead of shifting the
-/// page as they arrive.
+/// A transparent quote row with its content replaced by bars. It follows the
+/// real row's geometry so loading never causes a visual jump.
 struct QuoteRowSkeleton: View {
     let titleWidth: CGFloat
 
@@ -207,14 +180,7 @@ struct QuoteRowSkeleton: View {
                 bar(52, 18)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 16)
-        .background(Color(.cardSurface),
-                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        )
+        .padding(.vertical, 12)
     }
 
     private func bar(_ width: CGFloat, _ height: CGFloat) -> some View {
