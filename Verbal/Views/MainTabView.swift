@@ -83,7 +83,8 @@ struct MainTabView: View {
             Tab(value: TabItem.home) {
                 HomeView(showCreate: createBinding,
                          recordingVisit: $recordingVisit,
-                         savedRecordingQuoteID: $savedRecordingQuoteID)
+                         savedRecordingQuoteID: $savedRecordingQuoteID,
+                         onShowAllVisits: { selection = .schedule })
             } label: {
                 Label {
                     Text("Home")

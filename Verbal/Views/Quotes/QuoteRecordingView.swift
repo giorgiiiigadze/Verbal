@@ -36,6 +36,7 @@ struct QuoteRecordingView: View {
     /// explanation ahead of the system dialog or as a route to Settings.
     @State private var showMicPermission = false
     @State private var micAccessBlocked = false
+    @State private var showDiscardConfirmation = false
     /// Offers the prices the extraction was missing to the rate card.
     @State private var showSaveRates = false
     /// Which of the generating phrases the banner is currently showing.
@@ -98,6 +99,10 @@ struct QuoteRecordingView: View {
         !transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var canGenerate: Bool {
+        hasText && !isSaving && !isGenerating
+    }
+
     private var displayTitle: String {
         title.isEmpty ? "Untitled quote" : title
     }
@@ -127,13 +132,6 @@ struct QuoteRecordingView: View {
                             }
                         }
                         .font(.robotoSlab(29, relativeTo: .title))
-
-                        // The generated document supplies its own dated metadata
-                        // row below. Keep this lightweight recording-date chip to
-                        // the capture step so the same date is not shown twice.
-                        if generated == nil {
-                            quoteContext
-                        }
 
                         // Only over a quote that exists. When the transcript
                         // wasn't enough there is nothing to name a client on and
@@ -274,17 +272,7 @@ struct QuoteRecordingView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button(role: .close) {
-                            // Closing keeps the draft; it just carries any late edits
-                            // to the title or client with it.
-                            if let pending = bankTask {
-                                Task {
-                                    if let id = await pending.value {
-                                        await applyEdits(to: id)
-                                        await MainActor.run { onSavedQuote?(id) }
-                                    }
-                                }
-                            }
-                            dismiss()
+                            showDiscardConfirmation = true
                         }
                     }
                     ToolbarItem(placement: .principal) {
@@ -319,10 +307,7 @@ struct QuoteRecordingView: View {
                                 }
                             }
                             Button(role: .destructive) {
-                                Task { await recorder.stop() }
-                                recorder.reset()
-                                discardDraft()
-                                dismiss()
+                                showDiscardConfirmation = true
                             } label: {
                                 Label {
                                     Text("Discard recording")
@@ -361,6 +346,14 @@ struct QuoteRecordingView: View {
                     }
                 }
             }
+        }
+        .alert("Discard this recording?", isPresented: $showDiscardConfirmation) {
+            Button("Discard recording", role: .destructive) {
+                discardCurrentRecording()
+            }
+            Button("Keep recording", role: .cancel) {}
+        } message: {
+            Text("This will permanently remove the recording and its transcript.")
         }
     }
 
@@ -514,6 +507,15 @@ struct QuoteRecordingView: View {
                 await session.refreshQuoteUsage()
             }
         }
+    }
+
+    private func discardCurrentRecording() {
+        Task { await recorder.stop() }
+        recorder.reset()
+        transcriptText = ""
+        levels.removeAll()
+        discardDraft()
+        dismiss()
     }
 
     /// Says the microphone was taken away, and stays until it's picked back up.
@@ -959,12 +961,6 @@ struct QuoteRecordingView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var quoteContext: some View {
-        QuoteChip(text: quoteDateLabel(Date())) {
-            Image(systemName: "calendar")
-        }
-    }
-
     // MARK: - Bottom bar (record / timer / cancel)
 
     /// The recording controls only belong to the capture/editing step. Keeping
@@ -1061,11 +1057,17 @@ struct QuoteRecordingView: View {
             } else {
                 Button("Generate") { generate() }
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(colorScheme == .dark ? Color(.homeBackground) : .white)
+                    // Disabled actions sit on a light surface in dark mode;
+                    // keep their label in the dark text colour so it remains
+                    // legible instead of inheriting the active white label.
+                    .foregroundStyle(canGenerate
+                                     ? (colorScheme == .dark ? Color(.homeBackground) : .white)
+                                     : Color(.homeBackground))
                     .frame(width: 116, height: 48)
-                    .background(Color(.mainText), in: Capsule())
+                    .background(canGenerate ? Color(.mainText) : .white.opacity(0.86),
+                                in: Capsule())
                     .buttonStyle(.plain)
-                    .disabled(!hasText || isSaving || isGenerating)
+                    .disabled(!canGenerate)
             }
         }
         .foregroundStyle(.white)
@@ -1107,12 +1109,12 @@ struct QuoteRecordingView: View {
 
             Button("Generate") { generate() }
             .font(.body.weight(.semibold))
-            .foregroundStyle(Color(.mainText))
+            .foregroundStyle(canGenerate ? Color(.mainText) : Color(.homeBackground))
             .padding(.horizontal, 18)
             .frame(height: 48)
             .background(.white.opacity(0.86), in: Capsule())
             .buttonStyle(.plain)
-            .disabled(!hasText || isGenerating)
+            .disabled(!canGenerate)
         }
         .foregroundStyle(.white)
         .padding(6)

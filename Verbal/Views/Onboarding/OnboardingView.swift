@@ -141,15 +141,20 @@ struct OnboardingView: View {
                         }
                     }
                     ToolbarItem(placement: .principal) {
-                        HStack(spacing: 8) {
-                            Image(.brandMark)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20)
-                                .foregroundStyle(Self.actionBlue)
-                            Text("Verbal")
-                                .font(.robotoSlab(18, relativeTo: .headline))
-                                .foregroundStyle(Self.actionBlue)
+                        // The opening screen is deliberately just the product
+                        // preview, its two-line promise and Continue. The app
+                        // name returns with the setup questions.
+                        if !isFirstStep {
+                            HStack(spacing: 8) {
+                                Image(.brandMark)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 20)
+                                    .foregroundStyle(Self.actionBlue)
+                                Text("Verbal")
+                                    .font(.robotoSlab(18, relativeTo: .headline))
+                                    .foregroundStyle(Self.actionBlue)
+                            }
                         }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
@@ -311,8 +316,7 @@ struct OnboardingView: View {
     /// Both buttons come through here, so the feedback lives here too rather
     /// than being attached to each of them separately.
     private var footerTitle: String {
-        if isFirstStep { return "Get Started" }
-        return current == .notifications ? "Turn on notifications" : "Continue"
+        current == .notifications ? "Turn on notifications" : "Continue"
     }
 
     private func advance(requestingNotifications: Bool = true) {
@@ -782,25 +786,34 @@ struct OnboardingView: View {
             .frame(width: 264)
             .frame(maxWidth: .infinity)
 
-            // The flexible gap goes above the line so it settles near the
-            // bottom, and a fixed one below it keeps it off the button. Pinned
-            // straight to the footer the two read as one block.
-            Spacer(minLength: 12)
+            // The flexible gap settles the promise near the bottom without
+            // competing with the phone preview above it.
+            Spacer(minLength: 24)
+                .frame(maxHeight: 72)
 
-            Text("Speak it.\nSend it.")
-                .font(.robotoSlab(28, relativeTo: .title))
-                .foregroundStyle(Color(.mainText))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            
-            Text("Turn a spoken job into a clean quote you can send before you leave the site.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 28)
+            // Keep the two-part promise centred as a unit, then leave a clear
+            // beat before Continue so the message and its action do not read
+            // as one crowded control.
+            VStack(alignment: .center, spacing: 10) {
+                onboardingPromiseLine("Speak it.", icon: "OnboardingSpeak")
+                onboardingPromiseLine("Send it.", icon: "OnboardingSend")
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 32)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func onboardingPromiseLine(_ text: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Text(text)
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 34, height: 34)
+        }
+        .font(.robotoSlab(32, relativeTo: .title))
+        .foregroundStyle(Color(.mainText))
     }
 
     /// Skipping every question is a legitimate way through this, and the screen

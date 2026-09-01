@@ -16,10 +16,6 @@
 import SwiftUI
 
 struct ScheduleVisitSheet: View {
-    /// Matches Home's floating Record action, tying booking a visit and
-    /// recording the quote it leads to into one primary action colour.
-    private static let recordBlue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
-
     /// Set when the sheet opened on a visit that already exists.
     var editing: ScheduledVisit?
     let onSave: (ScheduledVisit) -> Void
@@ -83,9 +79,10 @@ struct ScheduleVisitSheet: View {
         address.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Progress uses the same blue as the sheet's primary button and Home's
-    /// Record control, so the active step reads as an action in progress.
-    private var stepAccentColor: Color { Self.recordBlue }
+    /// The date and time choices sit directly on the dark sheet surface. A
+    /// white accent makes the current choice and calendar controls legible
+    /// without introducing the recording flow's blue into this quiet wizard.
+    private var stepAccentColor: Color { .white }
 
     /// The name is the only thing required, and only the step that asks for it
     /// can be blocked — a day and a time always have an answer in them.
@@ -341,7 +338,12 @@ struct ScheduleVisitSheet: View {
                        displayedComponents: [.hourAndMinute])
                 .labelsHidden()
                 .datePickerStyle(.wheel)
+                .tint(stepAccentColor)
                 .frame(maxWidth: .infinity)
+                // A full-height wheel gives the thumb more than one or two
+                // nearby values to compare, which is the entire advantage of
+                // asking time on its own step.
+                .frame(height: 340)
         }
         .padding(.horizontal, 24)
     }

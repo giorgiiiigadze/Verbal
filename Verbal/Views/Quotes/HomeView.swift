@@ -17,6 +17,8 @@ struct HomeView: View {
     @Binding var showCreate: Bool
     @Binding var recordingVisit: ScheduledVisit?
     @Binding var savedRecordingQuoteID: UUID?
+    /// Hands Home's compact Upcoming card over to the full Visits tab.
+    let onShowAllVisits: () -> Void
     @State private var path = NavigationPath()
     @State private var quotes: [QuoteSummary] = []
     @State private var hasLoaded = false
@@ -68,8 +70,6 @@ struct HomeView: View {
     @State private var visitToDelete: ScheduledVisit?
     /// The visit whose action sheet is open.
     @State private var selectedVisit: ScheduledVisit?
-    /// Pushes the complete upcoming visits list when the compact card overflows.
-    @State private var showUpcomingVisits = false
     /// A missed visit opened from the prompt. It is cleared only after a quote is saved.
     @State private var visitToClearAfterRecording: ScheduledVisit?
     /// A red visit that has been sitting for 24h and needs a decision.
@@ -193,19 +193,6 @@ struct HomeView: View {
             }
             .navigationDestination(isPresented: $showRateCard) {
                 RateCardView()
-            }
-            .navigationDestination(isPresented: $showUpcomingVisits) {
-                UpcomingVisitsListView(
-                    visits: visits,
-                    statusColor: { visit in visitStatusColor(for: visit) },
-                    statusLabel: { visit in visitStatusLabel(for: visit) },
-                    isRecorded: { visit in hasRecordedQuote(for: visit) },
-                    onSelect: { selectedVisit = $0 },
-                    onAdd: { visitEditor = .new },
-                    onOpenQuote: { visit in openRecordedQuote(for: visit) },
-                    onReschedule: { visit in visitEditor = .existing(visit) },
-                    onDelete: { visit in visitToDelete = visit }
-                )
             }
             // Continue pushes once the sheet is gone, rather than sliding a
             // screen in underneath it.
@@ -533,39 +520,10 @@ struct HomeView: View {
     /// Same weight and colour as the day headings below, because it is the same
     /// kind of thing: a heading over a run of rows, scrolling away with them.
     private var upcomingHeader: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .firstTextBaseline) {
             Text("Upcoming")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
-
-            Spacer(minLength: 0)
-
-            // Only once there is a list to add to. Empty, the card below is
-            // already offering this in its own words, and two invitations to
-            // do one thing read as two different things.
-            if !visits.isEmpty {
-                Menu {
-                    Button {
-                        visitEditor = .new
-                    } label: {
-                        Label("Book a visit", systemImage: "plus")
-                    }
-
-                    Button {
-                        showUpcomingVisits = true
-                    } label: {
-                        Label("Upcoming visits", systemImage: "calendar")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color(.blueAccentText))
-                        .frame(width: 30, height: 30)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Upcoming options")
-            }
         }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
@@ -588,7 +546,7 @@ struct HomeView: View {
 
             if visits.count > Self.visitPreviewCount {
                 Button {
-                    showUpcomingVisits = true
+                    onShowAllVisits()
                 } label: {
                     Text("See all \(visits.count) visits →")
                         .font(.footnote.weight(.medium))
@@ -626,12 +584,6 @@ struct HomeView: View {
         if hasRecordedQuote(for: visit) { return Color(.statusAcceptedText) }
         if Date() >= visit.date.addingTimeInterval(2 * 60 * 60) { return .red }
         return Color(.statusWarningText)
-    }
-
-    private func visitStatusLabel(for visit: ScheduledVisit) -> String {
-        if hasRecordedQuote(for: visit) { return "Recorded" }
-        if Date() >= visit.date.addingTimeInterval(2 * 60 * 60) { return "Overdue" }
-        return "Scheduled"
     }
 
     private func hasRecordedQuote(for visit: ScheduledVisit) -> Bool {
@@ -779,7 +731,6 @@ struct HomeView: View {
         }
         ScheduledVisitNotifications.cancel(visit)
         if visits.isEmpty {
-            showUpcomingVisits = false
             selectedVisit = nil
         }
         toast = Toast(style: .success, message: "Visit removed")
@@ -922,7 +873,6 @@ struct HomeView: View {
         }
 
         await session.prefetchLineItems(for: quote.id)
-        showUpcomingVisits = false
         selectedVisit = nil
         path = NavigationPath()
         path.append(quote)
@@ -1800,100 +1750,6 @@ private struct UpcomingVisitRow: View {
         }
         .buttonStyle(.plain)
     }
-}
-
-private struct UpcomingVisitsListView: View {
-    let visits: [ScheduledVisit]
-    let statusColor: (ScheduledVisit) -> Color
-    let statusLabel: (ScheduledVisit) -> String
-    let isRecorded: (ScheduledVisit) -> Bool
-    let onSelect: (ScheduledVisit) -> Void
-    let onAdd: () -> Void
-    let onOpenQuote: (ScheduledVisit) -> Void
-    let onReschedule: (ScheduledVisit) -> Void
-    let onDelete: (ScheduledVisit) -> Void
-
-    var body: some View {
-        List {
-            ForEach(visitGroups, id: \.day) { group in
-                Text(dayHeaderText(for: group.day))
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 2, trailing: 20))
-
-                ForEach(group.visits) { visit in
-                    UpcomingVisitCardRow(
-                        visit: visit,
-                        statusColor: statusColor(visit),
-                        statusLabel: statusLabel(visit),
-                        onTap: { onSelect(visit) }
-                    )
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
-                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                        if isRecorded(visit) {
-                            Button {
-                                onOpenQuote(visit)
-                            } label: {
-                                Label("Open quote", systemImage: "doc.text")
-                            }
-                            .tint(Color(.statusAcceptedText))
-                        }
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button {
-                            onDelete(visit)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                        .tint(.red)
-
-                        Button {
-                            onReschedule(visit)
-                        } label: {
-                            Label("Reschedule", systemImage: "calendar")
-                        }
-                        .tint(Color(.statusMutedText))
-                    }
-                }
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(Color(.homeBackground))
-        .navigationTitle("Upcoming visits")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: onAdd) {
-                    Image(systemName: "plus")
-                }
-                .accessibilityLabel("Book a visit")
-            }
-        }
-    }
-
-    private var visitGroups: [(day: Date, visits: [ScheduledVisit])] {
-        let calendar = Calendar.current
-        let grouped = Dictionary(grouping: visits) { calendar.startOfDay(for: $0.date) }
-        return grouped.keys.sorted().map { day in
-            (day: day, visits: grouped[day, default: []].sorted { $0.date < $1.date })
-        }
-    }
-
-    private func dayHeaderText(for day: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(day) { return "Today" }
-        if calendar.isDateInTomorrow(day) { return "Tomorrow" }
-
-        let weekday = day.formatted(.dateTime.weekday(.wide))
-        let monthDay = day.formatted(.dateTime.month(.abbreviated).day())
-        return "\(weekday), \(monthDay)"
-    }
-
 }
 
 struct UpcomingVisitCardRow: View {
