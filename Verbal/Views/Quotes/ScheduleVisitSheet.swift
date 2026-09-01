@@ -2,7 +2,7 @@
 //  ScheduleVisitSheet.swift
 //  Verbal
 //
-//  Full-page wizard for booking a visit or correcting one already booked.
+//  Large-sheet wizard for booking a visit or correcting one already booked.
 //
 //  Four steps rather than one form: what the job is, where it is, which day,
 //  what time. A visit is written in the ten seconds after a phone call, usually
@@ -103,9 +103,6 @@ struct ScheduleVisitSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 20) {
-                progressBar
-                    .padding(.horizontal, 24)
-
                 Group {
                     switch step {
                     case .details: detailsStep
@@ -145,6 +142,13 @@ struct ScheduleVisitSheet: View {
                         }
                         .accessibilityLabel("Back")
                     }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Text("\(step.rawValue + 1)/\(Step.allCases.count)")
+                        .font(.subheadline.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Step \(step.rawValue + 1) of \(Step.allCases.count)")
                 }
 
                 if editing != nil, onDelete != nil {
@@ -343,35 +347,6 @@ struct ScheduleVisitSheet: View {
     }
 
     // MARK: - Chrome
-
-    /// Four marks for four questions: where this is, and how much is left.
-    /// A step already answered is tappable, so going back doesn't have to be
-    /// done one chevron at a time — and a visit being corrected can be jumped
-    /// through in either direction, since every answer is already in it.
-    private var progressBar: some View {
-        HStack(spacing: 6) {
-            ForEach(Step.allCases) { candidate in
-                Capsule()
-                    .fill(candidate <= step ? stepAccentColor : Color(.separator))
-                    .frame(height: 3)
-                    // Expanded past the hairline it draws — 3pt is a mark, not
-                    // a target.
-                    .contentShape(Rectangle().inset(by: -14))
-                    .onTapGesture {
-                        guard canJump(to: candidate) else { return }
-                        move(to: candidate)
-                    }
-                    .accessibilityLabel("Step \(candidate.rawValue + 1): \(candidate.heading)")
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: step)
-    }
-
-    private func canJump(to candidate: Step) -> Bool {
-        if candidate == step { return false }
-        // Forward only where the questions in between are already answered.
-        return candidate < step || (editing != nil && !trimmedTitle.isEmpty)
-    }
 
     /// The same offer the client sheet makes, in the same shape: people quoted
     /// before are one tap rather than typed again.

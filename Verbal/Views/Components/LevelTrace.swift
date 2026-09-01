@@ -18,12 +18,13 @@ import SwiftUI
 struct LevelTrace: View {
     static let barCount = 26
     let levels: [Float]
+    var color: Color = Color(.blueAccentText)
 
     var body: some View {
         HStack(alignment: .center, spacing: 2.5) {
             ForEach(0..<Self.barCount, id: \.self) { index in
                 Capsule()
-                    .fill(Color(.blueAccentText).opacity(opacity(at: index)))
+                    .fill(color.opacity(opacity(at: index)))
                     .frame(width: 3, height: height(at: index))
             }
         }

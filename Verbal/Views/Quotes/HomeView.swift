@@ -39,6 +39,7 @@ struct HomeView: View {
     /// of the first one.
     @State private var showRateCard = false
     @State private var showRateCardIntro = false
+    @State private var openRateCardAfterIntro = false
     /// True once the intro has been shown. Held on the device: it is about what
     /// this person has been told, not about what is on their rate card.
     @AppStorage("seenRateCardIntro") private var seenRateCardIntro = false
@@ -94,10 +95,6 @@ struct HomeView: View {
         NavigationStack(path: $path) {
             homeContent
             .background(Color(.homeBackground))
-            // The inset places the action above the tab bar and gives every
-            // Home scroll view the same 62 points of bottom clearance. The
-            // last quote can therefore scroll fully above the floating pill.
-            .modifier(FloatingRecordInset(isVisible: !showsFirstQuoteCard) { showCreate = true })
             // Empty on purpose — the name of the screen is `pageTitle`, in the
             // list itself. Left as a large title it would fold into the bar on
             // scroll; left inline it would sit there permanently. Both put the
@@ -117,23 +114,11 @@ struct HomeView: View {
                                       isPresented: $isSearching,
                                       prompt: "Search quotes"))
             .toolbar {
-                // Search on its own, on the right. It is the one control that
-                // changes what the list contains rather than where you are
-                // going, and the field it opens drops from this side.
-                //
-                // Ours rather than the system's search item: that one brings
-                // its own container wherever it is placed and cannot be pulled
-                // into a group. The cost is that the magnifier drives
-                // `isSearching` by hand; the field itself is still
-                // `.searchable`, so the keyboard, cancel and dismissal
-                // behaviour are unchanged.
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        isSearching = true
-                    } label: {
-                        Image(systemName: "magnifyingglass")
+                    Button { showCreate = true } label: {
+                        Image(systemName: "plus")
                     }
-                    .accessibilityLabel("Search quotes")
+                    .accessibilityLabel("Record a quote")
                 }
                 // The filter and the rate card, in one glass container on the
                 // left, where the thumb reaching across for them is not also
@@ -224,13 +209,15 @@ struct HomeView: View {
             }
             // Continue pushes once the sheet is gone, rather than sliding a
             // screen in underneath it.
-            .sheet(isPresented: $showRateCardIntro) {
+            .sheet(isPresented: $showRateCardIntro, onDismiss: {
+                guard openRateCardAfterIntro else { return }
+                openRateCardAfterIntro = false
+                showRateCard = true
+            }) {
                 RateCardIntroSheet {
                     seenRateCardIntro = true
-                    Task {
-                        try? await Task.sleep(for: .seconds(0.35))
-                        showRateCard = true
-                    }
+                    openRateCardAfterIntro = true
+                    showRateCardIntro = false
                 }
             }
             .sheet(item: $shareAfterDetails) { quote in
@@ -368,16 +355,20 @@ struct HomeView: View {
                 onOpenQuote: { openRecordedQuote(for: currentVisit) }
             )
         }
-        // The booking wizard is a full page: it has four decisions and needs
-        // the room of a route, not a detented panel over the quote list.
-        .fullScreenCover(item: $visitEditor) { editor in
+        // The booking wizard is a large sheet: it preserves Home underneath
+        // while giving the calendar and time picker the room they need.
+        .sheet(item: $visitEditor) { editor in
             switch editor {
             case .new:
                 ScheduleVisitSheet(onSave: addOrUpdate)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             case .existing(let visit):
                 ScheduleVisitSheet(editing: visit,
                                    onSave: addOrUpdate,
                                    onDelete: remove)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
@@ -448,7 +439,7 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 2, trailing: 20))
+                        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 0, trailing: 20))
 
                     ForEach(section.quotes) { quote in
                         ZStack {
@@ -465,7 +456,9 @@ struct HomeView: View {
                         }
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+                        // The date heading already carries the visual break;
+                        // a top inset here doubled the gap before its first row.
+                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 5, trailing: 20))
                         .onAppear {
                             // Warm the cache so tapping opens the detail with line
                             // items already on screen.
@@ -631,7 +624,7 @@ struct HomeView: View {
 
     private func visitStatusColor(for visit: ScheduledVisit) -> Color {
         if hasRecordedQuote(for: visit) { return Color(.statusAcceptedText) }
-        if Date() >= visit.date.addingTimeInterval(2 * 60 * 60) { return Color(.statusDeclinedText) }
+        if Date() >= visit.date.addingTimeInterval(2 * 60 * 60) { return .red }
         return Color(.statusWarningText)
     }
 

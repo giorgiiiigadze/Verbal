@@ -11,6 +11,7 @@ struct QuoteRecordingView: View {
     @Environment(SessionStore.self) private var session
     @Environment(Store.self) private var store
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @State private var recorder = QuoteRecorder()
     /// A short history of microphone levels, newest last, so the meter reads as
     /// a trace of what was just said rather than one bar twitching.
@@ -126,6 +127,8 @@ struct QuoteRecordingView: View {
                             }
                         }
                         .font(.robotoSlab(29, relativeTo: .title))
+
+                        quoteContext
 
                         // Only over a quote that exists. When the transcript
                         // wasn't enough there is nothing to name a client on and
@@ -759,7 +762,7 @@ struct QuoteRecordingView: View {
 
             Text("We'll turn your description into an itemized quote in a moment.")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color(.blueAccentText))
 
             Divider()
         }
@@ -923,7 +926,7 @@ struct QuoteRecordingView: View {
 
     private var transcript: some View {
         Group {
-            if recorder.isRecording {
+            if recorder.isSessionActive {
                 // Live transcription (read-only while recording).
                 if recorder.transcript.isEmpty {
                     Text("Listening…")
@@ -951,9 +954,130 @@ struct QuoteRecordingView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var quoteContext: some View {
+        QuoteChip(text: quoteDateLabel(Date())) {
+            Image(systemName: "calendar")
+        }
+    }
+
     // MARK: - Bottom bar (record / timer / cancel)
 
     private var bottomBar: some View {
+        recordingControlBar
+    }
+
+    private var recordingControlBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                Task {
+                    if recorder.isRecording {
+                        await recorder.stop()
+                    } else {
+                        switch QuoteRecorder.access {
+                        case .ready: await beginRecording()
+                        case .notAsked:
+                            micAccessBlocked = false
+                            showMicPermission = true
+                        case .blocked:
+                            micAccessBlocked = true
+                            showMicPermission = true
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: recorder.isRecording ? "pause.fill" : "play.fill")
+                    .font(.title3.weight(.bold))
+                    .frame(width: 48, height: 48)
+                    .background(.white.opacity(0.22), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(recorder.state == .preparing)
+
+            HStack(spacing: 8) {
+                LevelTrace(levels: levels, color: .white)
+                    .frame(width: 96, height: 22)
+                    .clipped()
+                Text(recorder.elapsedText)
+                    .font(.body.monospacedDigit().weight(.semibold))
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            // A short accidental capture is never useful to generate from. Keep
+            // the clear escape hatch until the recording has enough context.
+            if recorder.isRecording || recorder.elapsed < 5 {
+                Button("Cancel") {
+                    Task { await recorder.stop() }
+                    recorder.reset()
+                    transcriptText = ""
+                    levels.removeAll()
+                }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color(.mainText))
+                .frame(width: 116, height: 48)
+                .background(.white.opacity(0.86), in: Capsule())
+                .buttonStyle(.plain)
+            } else {
+                Button("Generate") { generate() }
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(colorScheme == .dark ? Color(.homeBackground) : .white)
+                    .frame(width: 116, height: 48)
+                    .background(Color(.mainText), in: Capsule())
+                    .buttonStyle(.plain)
+                    .disabled(!hasText || isSaving || isGenerating)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(6)
+        .background(Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255), in: Capsule())
+    }
+
+    private var activeRecordingBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                Task {
+                    if recorder.isRecording {
+                        await recorder.stop()
+                    } else {
+                        await beginRecording()
+                    }
+                }
+            } label: {
+                Image(systemName: recorder.isRecording ? "pause.fill" : "play.fill")
+                    .font(.title3.weight(.bold))
+                    .frame(width: 48, height: 48)
+                    .background(.white.opacity(0.22), in: Circle())
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 8) {
+                if recorder.isRecording {
+                    // `LevelTrace` has a 140pt natural width; constrain and
+                    // clip it here so its bars can never run into the clock.
+                    LevelTrace(levels: levels)
+                        .frame(width: 96, height: 22)
+                        .clipped()
+                } else {
+                    Text("Paused").font(.footnote.weight(.medium))
+                }
+                Text(recorder.elapsedText).font(.body.monospacedDigit().weight(.semibold))
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            Button("Generate") { generate() }
+            .font(.body.weight(.semibold))
+            .foregroundStyle(Color(.mainText))
+            .padding(.horizontal, 18)
+            .frame(height: 48)
+            .background(.white.opacity(0.86), in: Capsule())
+            .buttonStyle(.plain)
+            .disabled(!hasText || isGenerating)
+        }
+        .foregroundStyle(.white)
+        .padding(6)
+        .background(Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255), in: Capsule())
+    }
+
+    private var idleBottomBar: some View {
         HStack {
             Button {
                 Task {
@@ -1041,7 +1165,7 @@ struct QuoteRecordingView: View {
                 .padding(.horizontal, 8)
             }
             .buttonStyle(.glassProminent)
-            .tint(Color(.royalBlue600))
+            .tint(Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255))
             .controlSize(.large)
             .disabled(
                 focus == nil &&

@@ -374,14 +374,10 @@ struct PaywallSheet: View {
         #endif
     }
 
-    /// The free week is on the monthly plan only, so the button says so only
-    /// there. Promising a trial on a button that doesn't grant one is the kind
-    /// of thing App Review rejects, and rightly.
+    /// The purchase button names the billed subscription directly. Introductory
+    /// offers can differ between StoreKit environments and storefronts, so the
+    /// app must not promise a trial unless it is the product being purchased.
     private var ctaTitle: String {
-        if selection == .monthly,
-           store.monthly?.subscription?.introductoryOffer != nil {
-            return "Start 7 days free"
-        }
         guard let price = selectedProduct?.displayPrice else { return "Go unlimited" }
         return "Subscribe for \(price) / \(selection == .yearly ? "year" : "month")"
     }

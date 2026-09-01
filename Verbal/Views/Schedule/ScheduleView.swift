@@ -151,17 +151,20 @@ struct ScheduleView: View {
                 onOpenQuote: { openRecordedQuote(for: current) }
             )
         }
-        // Booking and rescheduling share the same full-page wizard. A visit
-        // has enough detail that the agenda should not remain visible beneath
-        // a short sheet while it is being edited.
-        .fullScreenCover(item: $editor) { editor in
+        // Booking happens in a large sheet: the route stays contextual while
+        // the wizard still has room for its calendar and time picker.
+        .sheet(item: $editor) { editor in
             switch editor {
             case .new:
                 ScheduleVisitSheet(onSave: addOrUpdate)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             case .existing(let visit):
                 ScheduleVisitSheet(editing: visit,
                                    onSave: addOrUpdate,
                                    onDelete: remove)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
         .alert("Remove this visit?", isPresented: Binding(
@@ -337,7 +340,7 @@ struct ScheduleView: View {
     private func statusColor(for visit: ScheduledVisit) -> Color {
         if hasRecordedQuote(for: visit) { return Color(.statusAcceptedText) }
         if Date() >= visit.date.addingTimeInterval(2 * 60 * 60) {
-            return Color(.statusDeclinedText)
+            return .red
         }
         return Color(.statusWarningText)
     }
