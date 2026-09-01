@@ -128,7 +128,12 @@ struct QuoteRecordingView: View {
                         }
                         .font(.robotoSlab(29, relativeTo: .title))
 
-                        quoteContext
+                        // The generated document supplies its own dated metadata
+                        // row below. Keep this lightweight recording-date chip to
+                        // the capture step so the same date is not shown twice.
+                        if generated == nil {
+                            quoteContext
+                        }
 
                         // Only over a quote that exists. When the transcript
                         // wasn't enough there is nothing to name a client on and
@@ -962,8 +967,42 @@ struct QuoteRecordingView: View {
 
     // MARK: - Bottom bar (record / timer / cancel)
 
+    /// The recording controls only belong to the capture/editing step. Keeping
+    /// their blue capsule below the generated document made the recording UI
+    /// look active after Generate had already moved on to the quote review.
+    /// A generated quote is banked automatically, and the close control keeps
+    /// it available from the drafts list.
+    @ViewBuilder
     private var bottomBar: some View {
-        recordingControlBar
+        if generated != nil {
+            saveQuoteBar
+        } else if !isGenerating {
+            recordingControlBar
+        }
+    }
+
+    /// Once the quote is ready, recording has finished. Replace the recording
+    /// capsule with one unambiguous action that saves the banked draft and
+    /// returns to the quotes list.
+    private var saveQuoteBar: some View {
+        Button(action: save) {
+            HStack(spacing: 8) {
+                if isSaving {
+                    ProgressView()
+                        .tint(colorScheme == .dark ? Color(.homeBackground) : .white)
+                } else {
+                    Image(systemName: "checkmark")
+                    Text("Save quote")
+                }
+            }
+            .font(.body.weight(.semibold))
+            .foregroundStyle(colorScheme == .dark ? Color(.homeBackground) : .white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(Color(.mainText), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isSaving)
     }
 
     private var recordingControlBar: some View {
@@ -1004,7 +1043,10 @@ struct QuoteRecordingView: View {
 
             // A short accidental capture is never useful to generate from. Keep
             // the clear escape hatch until the recording has enough context.
-            if recorder.isRecording || recorder.elapsed < 5 {
+            // A pasted or hand-written transcript has no elapsed recording
+            // time. It is still valid input, so only show the short-recording
+            // escape hatch while there are no words to generate from.
+            if recorder.isRecording || (recorder.elapsed < 5 && !hasText) {
                 Button("Cancel") {
                     Task { await recorder.stop() }
                     recorder.reset()
