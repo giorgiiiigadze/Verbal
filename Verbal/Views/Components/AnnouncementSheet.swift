@@ -122,10 +122,13 @@ struct AnnouncementSheet<Preview: View>: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 16)
         }
+        .background(Color(.homeBackground))
         // No `presentationCornerRadius`: the system's own radius is the one
         // every other sheet on the phone has, and it follows the device's own
         // corners. 28 was a guess, and a squarer one than the real thing.
-        .presentationBackground(Color(.surface))
+        // Feature introductions use the same warm white ground as the
+        // recording intro, rather than the cooler generic sheet surface.
+        .presentationBackground(Color(.homeBackground))
     }
 }
 

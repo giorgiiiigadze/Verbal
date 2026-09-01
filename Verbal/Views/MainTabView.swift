@@ -28,6 +28,9 @@ struct MainTabView: View {
     /// recorder are both sheets on this view, and raising the second while the
     /// first is still going is how a sheet gets silently swallowed.
     @State private var recordingHitPaywall = false
+    @AppStorage("hasSeenRecordingIntro") private var hasSeenRecordingIntro = false
+    @State private var showRecordingIntro = false
+    @State private var startRecordingAfterIntro = false
 
     /// Announcements are shown once and never again. A promo that comes back is
     /// how people learn to dismiss your sheets without reading them.
@@ -56,7 +59,11 @@ struct MainTabView: View {
             set: { wantsToCreate in
                 if wantsToCreate {
                     if store.canCreateQuote(remaining: session.freeQuotesRemaining) {
-                        showCreate = true
+                        if hasSeenRecordingIntro {
+                            showCreate = true
+                        } else {
+                            showRecordingIntro = true
+                        }
                     } else {
                         store.isPaywallPresented = true
                     }
@@ -130,6 +137,17 @@ struct MainTabView: View {
         // both already own several sheets, where a further one is ignored.
         .sheet(isPresented: Bindable(store).isPaywallPresented) {
             PaywallSheet(remaining: session.freeQuotesRemaining)
+        }
+        .sheet(isPresented: $showRecordingIntro, onDismiss: {
+            hasSeenRecordingIntro = true
+            guard startRecordingAfterIntro else { return }
+            startRecordingAfterIntro = false
+            showCreate = true
+        }) {
+            RecordingIntroSheet {
+                startRecordingAfterIntro = true
+                showRecordingIntro = false
+            }
         }
         .sheet(isPresented: $showCreate, onDismiss: {
             recordingVisit = nil

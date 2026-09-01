@@ -30,9 +30,9 @@ struct ShareLinkNewsSheet: View {
     /// The link above, and beneath it the row it turns into on Home once the
     /// customer opens it.
     ///
-    /// Drawn to `QuoteRow`'s geometry on purpose — same 22pt radius, same 16/18
-    /// padding, title over subtitle on the left, total over the status pill on
-    /// the right. Someone should recognise this as their own list before they
+    /// Drawn to `QuoteRow`'s geometry on purpose — title over subtitle on the
+    /// left, total over the status pill on the right, with no card around it.
+    /// Someone should recognise this as their own list before they
     /// have read a word of it, and that recognition is what makes "Viewed" mean
     /// something. Deliberately not a screenshot: one goes stale the first time
     /// anything on that row moves.
@@ -73,29 +73,21 @@ struct ShareLinkNewsSheet: View {
                     Text(AppCurrency.format(1240))
                         .font(.subheadline.weight(.semibold).monospacedDigit())
                         .foregroundStyle(Color(.mainText))
-                    // The same filled pill the real row wears, because it is the
-                    // whole point of the announcement.
+                    // Exactly the real row's viewed treatment.
                     HStack(spacing: 4) {
                         Image(systemName: "eye.fill")
                             .font(.caption2)
                         Text("Viewed")
                     }
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Color(.royalBlue600), in: Capsule())
+                    .foregroundStyle(Color(.statusViewedText))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color(.statusViewedFill), in: Capsule())
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 18)
-            .background(Color(.cardSurface),
-                        in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
+            .padding(.vertical, 12)
         }
     }
 }

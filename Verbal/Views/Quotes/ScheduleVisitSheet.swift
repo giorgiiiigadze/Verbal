@@ -2,7 +2,7 @@
 //  ScheduleVisitSheet.swift
 //  Verbal
 //
-//  Books a visit in, or corrects one already booked.
+//  Full-page wizard for booking a visit or correcting one already booked.
 //
 //  Four steps rather than one form: what the job is, where it is, which day,
 //  what time. A visit is written in the ten seconds after a phone call, usually
@@ -125,9 +125,11 @@ struct ScheduleVisitSheet: View {
             // Inset per step rather than here, so the recent-names row can run
             // the full width of the sheet while everything else stays in 24.
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemBackground))
+            .background(Color(.homeBackground))
             .navigationTitle(step.heading)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color(.homeBackground), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     // Back once there is somewhere to go back to. Closing is
@@ -159,16 +161,16 @@ struct ScheduleVisitSheet: View {
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
-                    // A form being committed, so the flat 16pt rectangle rather
-                    // than a capsule — same shape as the client and rate sheets.
+                    // Keep the forward action distinct from the app's blue
+                    // recording controls: this is a dark, pill-shaped action.
                     Button(action: primaryAction) {
                         Text(primaryTitle)
                             .font(.headline)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(colorScheme == .dark ? Color(.homeBackground) : .white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
-                            .background(canContinue ? Self.recordBlue : Self.recordBlue.opacity(0.4),
-                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .background(canContinue ? Color(.mainText) : Color(.mainText).opacity(0.35),
+                                        in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(!canContinue)
@@ -176,15 +178,11 @@ struct ScheduleVisitSheet: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
-                .background(Color(.systemBackground))
+                .background(Color(.homeBackground))
             }
         }
+        .background(Color(.homeBackground))
         .animation(.easeInOut(duration: 0.2), value: suggestions)
-        // Sized for the month grid and location preview. A detent that changed
-        // with the step would resize the sheet under the thumb between one
-        // question and the next.
-        .presentationDetents([.height(580)])
-        .presentationBackground(Color(.systemBackground))
         // Same shape as the delete confirmations on Home: a question, the
         // action named plainly, and Cancel. The swipe on the row itself still
         // goes straight through — a swipe is already a deliberate gesture,

@@ -151,7 +151,10 @@ struct ScheduleView: View {
                 onOpenQuote: { openRecordedQuote(for: current) }
             )
         }
-        .sheet(item: $editor) { editor in
+        // Booking and rescheduling share the same full-page wizard. A visit
+        // has enough detail that the agenda should not remain visible beneath
+        // a short sheet while it is being edited.
+        .fullScreenCover(item: $editor) { editor in
             switch editor {
             case .new:
                 ScheduleVisitSheet(onSave: addOrUpdate)

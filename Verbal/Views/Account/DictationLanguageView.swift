@@ -42,6 +42,7 @@ struct DictationLanguageView: View {
                     subtitle: automaticLabel.isEmpty
                         ? "No speech model is available on this iPhone"
                         : "Matches your iPhone — \(automaticLabel)",
+                    emoji: "🌐",
                     isSelected: selected.isEmpty) {
                     choose(nil)
                 }
@@ -68,6 +69,7 @@ struct DictationLanguageView: View {
                     ForEach(supported, id: \.identifier) { locale in
                         row(title: DictationLanguage.label(for: locale),
                             subtitle: subtitle(for: locale),
+                            emoji: flag(for: locale),
                             isSelected: selected == locale.identifier) {
                             choose(locale)
                         }
@@ -93,10 +95,14 @@ struct DictationLanguageView: View {
     @ViewBuilder
     private func row(title: String,
                      subtitle: String?,
+                     emoji: String,
                      isSelected: Bool,
                      action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: 12) {
+                Text(emoji)
+                    .font(.title3)
+                    .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).foregroundStyle(Color(.mainText))
                     if let subtitle {
@@ -115,6 +121,24 @@ struct DictationLanguageView: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+    }
+
+    /// A flag makes a long picker easier to scan. When Apple's locale has no
+    /// region, use the language's most familiar regional flag rather than a
+    /// blank tile.
+    private func flag(for locale: Locale) -> String {
+        let defaults = [
+            "en": "US", "fr": "FR", "de": "DE", "es": "ES",
+            "it": "IT", "pt": "PT", "ja": "JP", "ko": "KR",
+            "zh": "CN", "hi": "IN", "ka": "GE"
+        ]
+        let language = locale.language.languageCode?.identifier ?? ""
+        let region = locale.region?.identifier ?? defaults[language] ?? "UN"
+        let scalars = region.uppercased().unicodeScalars.compactMap { scalar -> UnicodeScalar? in
+            guard (65...90).contains(Int(scalar.value)) else { return nil }
+            return UnicodeScalar(127_397 + Int(scalar.value))
+        }
+        return scalars.count == 2 ? scalars.map(String.init).joined() : "🌐"
     }
 
     /// What a language row says under its name: the download in progress, then

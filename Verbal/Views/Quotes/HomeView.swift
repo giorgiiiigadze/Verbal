@@ -368,10 +368,9 @@ struct HomeView: View {
                 onOpenQuote: { openRecordedQuote(for: currentVisit) }
             )
         }
-        // Outside the stack for the same reason the recorder is: a sheet
-        // attached inside it, alongside the minimizing `.searchable` toolbar,
-        // leaves the navigation bar broken once it closes.
-        .sheet(item: $visitEditor) { editor in
+        // The booking wizard is a full page: it has four decisions and needs
+        // the room of a route, not a detented panel over the quote list.
+        .fullScreenCover(item: $visitEditor) { editor in
             switch editor {
             case .new:
                 ScheduleVisitSheet(onSave: addOrUpdate)

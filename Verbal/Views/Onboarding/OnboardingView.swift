@@ -15,6 +15,7 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 struct OnboardingView: View {
     /// Called when the last step is finished, to hand over to the auth screen.
@@ -39,7 +40,7 @@ struct OnboardingView: View {
     @FocusState private var focusedField: Field?
 
     private enum Step: Hashable {
-        case trade, jobs, prices, business, reveal, video
+        case trade, jobs, prices, business, reveal, notifications, video
     }
 
     private enum Field: Hashable {
@@ -58,7 +59,7 @@ struct OnboardingView: View {
             list.append(.jobs)
             if !pickedJobs.isEmpty { list.append(.prices) }
         }
-        list.append(contentsOf: [.business, .reveal])
+        list.append(contentsOf: [.business, .reveal, .notifications])
         return list
     }
 
@@ -158,8 +159,8 @@ struct OnboardingView: View {
                         // the reveal.
                         // Absent where the answer is required, so Skip never
                         // offers a way round a disabled Continue.
-                        if step > 0, current != .reveal, current != .video, current != .trade {
-                            Button("Skip") { advance() }
+                        if step > 0, current != .reveal, current != .video, current != .trade, current != .notifications {
+                            Button("Skip") { advance(requestingNotifications: false) }
                                 .font(.subheadline)
                                 .foregroundStyle(Color(.mainText))
                         }
@@ -201,6 +202,7 @@ struct OnboardingView: View {
                     case .prices: pricesStep
                     case .business: businessStep
                     case .reveal: revealStep
+                    case .notifications: notificationsStep
                     case .video: videoStep
                     }
                 }
@@ -255,29 +257,45 @@ struct OnboardingView: View {
 
     /// One button, and only one. Skip moved into the header, where it stops
     /// reading as a second opinion about the thing directly above it.
+    @ViewBuilder
     private var footer: some View {
-        Button {
-            advance()
-        } label: {
-            Text(isFirstStep ? "Get Started" : "Continue")
-                .font(.headline)
-                // Ink on the way in, blue on the way through. Getting started
-                // is a decision; the screens after it are steps, and a step
-                // should not look like the same weight of choice. The label
-                // takes the page's own background, so it inverts along with the
-                // ink behind it rather than being white text on a light button
-                // in the dark.
-                .foregroundStyle(isFirstStep ? Color(.homeBackground) : .white)
-                .frame(maxWidth: .infinity)
-                // 58, not 54. It is the only thing to do on every one of these
-                // screens, and a taller button reads as the deliberate end of
-                // the page rather than a control that happens to be down there.
-                .frame(height: 58)
-                .background(barFill, in: Capsule())
+        if current == .notifications {
+            VStack(spacing: 10) {
+                Button { advance() } label: {
+                    Text("Turn on notifications")
+                        .font(.headline)
+                        .foregroundStyle(Color(.homeBackground))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 58)
+                        .background(Color(.mainText), in: Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button { advance(requestingNotifications: false) } label: {
+                    Text("Not now")
+                        .font(.headline)
+                        .foregroundStyle(Color(.mainText))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 58)
+                        .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        } else {
+            Button {
+                advance()
+            } label: {
+                Text(footerTitle)
+                    .font(.headline)
+                    .foregroundStyle(isFirstStep ? Color(.homeBackground) : .white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 58)
+                    .background(barFill, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canContinue)
+            .animation(.easeInOut(duration: 0.2), value: canContinue)
         }
-        .buttonStyle(.plain)
-        .disabled(!canContinue)
-        .animation(.easeInOut(duration: 0.2), value: canContinue)
     }
 
     /// Softer than going forward. Both are steps, but one is a decision and the
@@ -292,18 +310,40 @@ struct OnboardingView: View {
 
     /// Both buttons come through here, so the feedback lives here too rather
     /// than being attached to each of them separately.
-    private func advance() {
+    private var footerTitle: String {
+        if isFirstStep { return "Get Started" }
+        return current == .notifications ? "Turn on notifications" : "Continue"
+    }
+
+    private func advance(requestingNotifications: Bool = true) {
         focusedField = nil
+        if current == .notifications {
+            guard requestingNotifications else {
+                completeOnboarding()
+                return
+            }
+            Task {
+                _ = try? await UNUserNotificationCenter.current().requestAuthorization(
+                    options: [.alert, .sound, .badge]
+                )
+                await MainActor.run { completeOnboarding() }
+            }
+            return
+        }
         guard !isLastStep else {
-            // The end of the questions, not another step through them — the
-            // heavier notification marks it as arriving somewhere.
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            saveDraft()
-            onContinue()
+            completeOnboarding()
             return
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         step += 1
+    }
+
+    private func completeOnboarding() {
+        // The end of the questions, not another step through them — the
+        // heavier notification marks it as arriving somewhere.
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        saveDraft()
+        onContinue()
     }
 
     /// Everything but the trade, which already has its own key and its own
@@ -639,6 +679,71 @@ struct OnboardingView: View {
 
             Spacer(minLength: 0)
         }
+    }
+
+    // MARK: - Notifications
+
+    /// A permission request needs a reason before the system takes over. These
+    /// examples are deliberately visit reminders — useful work the app already
+    /// does — rather than vague promises about updates.
+    private var notificationsStep: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            notificationPreview
+                .padding(.top, 16)
+
+            Text("Never miss a\nvisit.")
+                .font(.robotoSlab(32, relativeTo: .largeTitle))
+                .foregroundStyle(Color(.mainText))
+                .padding(.top, 34)
+
+            Text("Get a reminder when it’s time to visit a customer and record their quote. You can change this anytime in Settings.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 14)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var notificationPreview: some View {
+        ZStack(alignment: .topTrailing) {
+            previewNotification(icon: "calendar", tint: Color(.royalBlue100),
+                                title: "Visit in 15 minutes",
+                                message: "Bathroom re-tiling · Marina Kapanadze")
+                .padding(.trailing, 12)
+
+            previewNotification(icon: "mic.fill", tint: Color(.royalBlue25),
+                                title: "Ready to record your quote",
+                                message: "Turn the visit into a quote while it’s fresh")
+                .padding(.top, 82)
+                .padding(.leading, 20)
+        }
+        .frame(maxWidth: .infinity, minHeight: 170)
+        .padding(18)
+        .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+    }
+
+    private func previewNotification(icon: String, tint: Color, title: String, message: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3.weight(.medium))
+                .foregroundStyle(Color(.mainText))
+                .frame(width: 42, height: 42)
+                .background(tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(.mainText))
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     // MARK: - Step 1 · the app, running
