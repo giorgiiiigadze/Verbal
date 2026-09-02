@@ -4,14 +4,13 @@ This is the release order for Verbal’s monthly and yearly Apple subscriptions.
 Do each check in order. Do not enable the server-side free-tier gate until a
 real Sandbox/TestFlight subscriber is visible as `active` in Supabase.
 
-## Current status — 31 August 2026
+## Current status — 2 September 2026
 
 - [x] StoreKit purchase, restore, and paywall flows are in the app.
 - [x] Supabase verification, ownership binding, quota gate, and notification
   handler are in the repository.
-- [x] The linked production project (`rglpwlmkwukezvexyups`) has all existing
-  migrations applied.
 - [ ] `20260831132905_app_store_notifications.sql` is pending deployment.
+- [ ] `20260902090154_backend_security_hardening.sql` is pending deployment.
 - [ ] Apple Developer Program / App Store Connect setup is not yet available.
 
 ## 1. Create the Apple foundation
@@ -71,7 +70,8 @@ Expected result: every SQL assertion and every entitlement test passes.
 
 ## 4. Deploy Supabase in this order
 
-First confirm the only pending migration is the notifications migration:
+First confirm the pending migrations are the notifications and backend-security
+migrations:
 
 ```sh
 supabase migration list --linked

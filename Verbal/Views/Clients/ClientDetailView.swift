@@ -18,6 +18,7 @@ struct ClientDetailView: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
     /// Who the page is about now. Starts as the key it was pushed with and
@@ -71,6 +72,13 @@ struct ClientDetailView: View {
     /// and no two numbers on the page that can disagree about a conversion.
     @State private var points: [ClientQuotePoint] = []
     @State private var showsAllQuotes = false
+
+    /// On the white canvas, only the grouped information cards need lift.
+    /// Keep the shadow out of dark mode, where the card outline already carries
+    /// the separation without adding a muddy halo.
+    private var cardShadow: Color {
+        colorScheme == .light ? Color.black.opacity(0.07) : .clear
+    }
 
     var body: some View {
         ScrollView {
@@ -266,6 +274,7 @@ struct ClientDetailView: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
+        .shadow(color: cardShadow, radius: 12, y: 4)
     }
 
     private func summaryMetric(_ value: String, label: String) -> some View {
@@ -373,6 +382,7 @@ struct ClientDetailView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(Color(.separator), lineWidth: 0.5)
             )
+            .shadow(color: cardShadow, radius: 12, y: 4)
         }
     }
 
@@ -483,6 +493,7 @@ struct ClientDetailView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(Color(.separator), lineWidth: 0.5)
             )
+            .shadow(color: cardShadow, radius: 12, y: 4)
         }
     }
 

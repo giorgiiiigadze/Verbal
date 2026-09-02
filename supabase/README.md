@@ -122,7 +122,11 @@ psql "$(supabase status -o env | grep DB_URL | cut -d= -f2-)" \
   -f supabase/tests/quota_and_integrity.sql
 ```
 
-40 assertions, each of which failed before the two migrations above and passes
+The database suite also exercises the request-budget reservation and its
+service-role-only permission, anonymous RPC restrictions, and deletion-feedback
+input bounds introduced by `20260902090154_backend_security_hardening.sql`.
+
+Each assertion failed before its corresponding migration and passes
 after. They cover the daily gate, the subscription exemption and its lapse, the
 allowance refund, derived totals, quote-number allocation, share-token
 lifecycle, and the column grants that keep entitlement out of the client's

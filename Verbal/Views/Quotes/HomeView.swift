@@ -411,7 +411,11 @@ struct HomeView: View {
             List {
                 pageTitle
 
-                upcomingSection
+                // Visits are not quotes, so they stay out of a status-filtered
+                // quote list. They remain available from the Schedule tab.
+                if filter == .all {
+                    upcomingSection
+                }
 
                 ForEach(sections, id: \.title) { section in
                     // Header as a normal row (not a Section header) so it scrolls
@@ -547,24 +551,12 @@ struct HomeView: View {
         // The same 8 the rows already hold off the card's sides, so a row sits
         // the same distance from every edge.
         .padding(.vertical, 8)
-        .background(Color(.cardSurface),
+        .background(Color(.visitSurface),
                     in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
-        // A quiet continuation cue: it appears only when another visit can be
-        // reached by scrolling, and uses the card's adaptive surface colour.
-        .overlay(alignment: .bottom) {
-            if visits.count > Self.visibleVisitCount {
-                LinearGradient(colors: [.clear, Color(.cardSurface)],
-                               startPoint: .top,
-                               endPoint: .bottom)
-                    .frame(height: 26)
-                    .allowsHitTesting(false)
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            }
-        }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
@@ -1657,45 +1649,6 @@ struct HomeView: View {
     }
 }
 
-/// Keeps the primary recording action above Home's floating tab bar while
-/// reserving exactly the same vertical space in its scrollable content.
-private struct FloatingRecordInset: ViewModifier {
-    private static let height: CGFloat = 50
-    private static let bottomSpacing: CGFloat = 12
-    private static let blue = Color(.royalBlue600)
-
-    let isVisible: Bool
-    let action: () -> Void
-
-    func body(content: Content) -> some View {
-        if isVisible {
-            content.safeAreaInset(edge: .bottom, spacing: 0) {
-            HStack {
-                Spacer(minLength: 0)
-                Button(action: action) {
-                    Label("Record", systemImage: "mic.fill")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 22)
-                        .frame(height: Self.height)
-                        // The primary action stays recognisably blue, while
-                        // the interactive glass picks up the depth and light
-                        // movement used by the app's newer controls.
-                        .glassEffect(.regular.tint(Self.blue).interactive(),
-                                     in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Starts a new quote recording")
-            }
-            .padding(.trailing, 16)
-            .padding(.bottom, Self.bottomSpacing)
-            }
-        } else {
-            content
-        }
-    }
-}
-
 // MARK: - Upcoming Visits
 
 private struct UpcomingVisitRow: View {
@@ -1797,7 +1750,7 @@ struct UpcomingVisitCardRow: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background {
-                rowShape.fill(Color(.cardSurface))
+                rowShape.fill(Color(.visitSurface))
             }
             .overlay(rowShape.strokeBorder(Color(.separator), lineWidth: 0.5))
             .contentShape(.interaction, rowShape)

@@ -49,6 +49,7 @@ const APP_APPLE_ID = Deno.env.get("APPLE_APP_APPLE_ID");
 /// entitlement per product. Anything beyond this is someone seeing how much
 /// signature verification they can make us do per request.
 const MAX_TRANSACTIONS = 8;
+const MAX_BODY_BYTES = 128 * 1024;
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -59,6 +60,23 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
+}
+
+function declaredTooLarge(req: Request): boolean {
+  const declared = Number(req.headers.get("Content-Length") ?? "");
+  return Number.isFinite(declared) && declared > MAX_BODY_BYTES;
+}
+
+async function reserveVerification(userId: string): Promise<string | null> {
+  const { data, error } = await admin.rpc("reserve_request_budget", {
+    p_user_id: userId,
+    p_operation: "verify_subscription",
+  });
+  if (error) {
+    console.error("subscription request-budget reservation failed:", error.message);
+    return "meter";
+  }
+  return typeof data === "string" ? data : null;
 }
 
 function rootCertificates(): Buffer[] {
@@ -155,6 +173,8 @@ Deno.serve(async (req: Request) => {
   if (userError || !userData.user) return json({ error: "Not signed in" }, 401);
   const userId = userData.user.id;
 
+  if (declaredTooLarge(req)) return json({ error: "Request is too large" }, 413);
+
   const certs = rootCertificates();
   if (certs.length === 0) {
     // Fail loudly rather than quietly downgrading everyone who paid: with no
@@ -164,11 +184,24 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Subscription checks are unavailable." }, 503);
   }
 
+  const raw = await req.text();
+  if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) {
+    return json({ error: "Request is too large" }, 413);
+  }
+
   let body: { signed_transactions?: unknown };
   try {
-    body = await req.json();
+    body = JSON.parse(raw);
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const window = await reserveVerification(userId);
+  if (window) {
+    const error = window === "meter"
+      ? "Subscription checks are temporarily unavailable."
+      : "Too many subscription checks. Try again shortly.";
+    return json({ error }, window === "meter" ? 503 : 429);
   }
 
   const submitted = Array.isArray(body.signed_transactions)

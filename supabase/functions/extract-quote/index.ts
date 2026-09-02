@@ -31,9 +31,6 @@ const PRICING: Record<string, { input: number; cached: number; output: number }>
 
 /// Generous enough that no real tradesperson will meet them — a busy one writes
 /// a handful of quotes a day — but low enough to cap a runaway script.
-const HOURLY_LIMIT = 30;
-const DAILY_LIMIT = 150;
-
 /// The call limits above cap how often, not how much, and the bill is charged
 /// per token. Thirty calls an hour carrying a megabyte of "transcript" each is
 /// a runaway bill that never trips a rate limit — the limiter was counting the
@@ -95,28 +92,19 @@ async function callerId(req: Request): Promise<string | null> {
   return data.user.id;
 }
 
-/// Returns the window that has been exhausted ("hour"/"day"), "meter" when the
-/// limiter cannot verify usage, or null to proceed.
-async function exhaustedWindow(userId: string): Promise<string | null> {
-  const now = Date.now();
-  const windows: Array<[string, number, string]> = [
-    [new Date(now - 3_600_000).toISOString(), HOURLY_LIMIT, "hour"],
-    [new Date(now - 86_400_000).toISOString(), DAILY_LIMIT, "day"],
-  ];
-  for (const [since, limit, label] of windows) {
-    const { count, error } = await admin
-      .from("usage_events")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .neq("outcome", "rate_limited")
-      .gte("created_at", since);
-    if (error) {
-      console.error("rate-limit check failed, refusing:", error.message);
-      return "meter";
-    }
-    if ((count ?? 0) >= limit) return label;
+/// Atomically reserve one extraction slot. The SQL function serializes callers
+/// for the same account, closing the count-then-call race that allowed a burst
+/// of parallel requests to all pass before any had logged usage.
+async function reserveExtraction(userId: string): Promise<string | null> {
+  const { data, error } = await admin.rpc("reserve_request_budget", {
+    p_user_id: userId,
+    p_operation: "extract_quote",
+  });
+  if (error) {
+    console.error("request-budget reservation failed, refusing:", error.message);
+    return "meter";
   }
-  return null;
+  return typeof data === "string" ? data : null;
 }
 
 interface UsageRow {
@@ -198,7 +186,7 @@ Deno.serve(async (req: Request) => {
     body.rate_card = undefined;
   }
 
-  const window = await exhaustedWindow(userId);
+  const window = await reserveExtraction(userId);
   if (window) {
     await logUsage({ user_id: userId, model: MODEL, outcome: "rate_limited" });
     if (window === "meter") {

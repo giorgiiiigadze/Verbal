@@ -1037,38 +1037,18 @@ struct QuoteRecordingView: View {
             }
             .frame(maxWidth: .infinity, alignment: .center)
 
-            // A short accidental capture is never useful to generate from. Keep
-            // the clear escape hatch until the recording has enough context.
-            // A pasted or hand-written transcript has no elapsed recording
-            // time. It is still valid input, so only show the short-recording
-            // escape hatch while there are no words to generate from.
-            if recorder.isRecording || (recorder.elapsed < 5 && !hasText) {
-                Button("Cancel") {
-                    Task { await recorder.stop() }
-                    recorder.reset()
-                    transcriptText = ""
-                    levels.removeAll()
-                }
+            Button("Generate") { generate() }
                 .font(.body.weight(.semibold))
-                .foregroundStyle(Color(.mainText))
+                // Disabled actions sit on a light surface in dark mode; keep
+                // their label in the dark text colour so it stays legible.
+                .foregroundStyle(canGenerate
+                                 ? (colorScheme == .dark ? Color(.homeBackground) : .white)
+                                 : Color(.homeBackground))
                 .frame(width: 116, height: 48)
-                .background(.white.opacity(0.86), in: Capsule())
+                .background(canGenerate ? Color(.mainText) : .white.opacity(0.86),
+                            in: Capsule())
                 .buttonStyle(.plain)
-            } else {
-                Button("Generate") { generate() }
-                    .font(.body.weight(.semibold))
-                    // Disabled actions sit on a light surface in dark mode;
-                    // keep their label in the dark text colour so it remains
-                    // legible instead of inheriting the active white label.
-                    .foregroundStyle(canGenerate
-                                     ? (colorScheme == .dark ? Color(.homeBackground) : .white)
-                                     : Color(.homeBackground))
-                    .frame(width: 116, height: 48)
-                    .background(canGenerate ? Color(.mainText) : .white.opacity(0.86),
-                                in: Capsule())
-                    .buttonStyle(.plain)
-                    .disabled(!canGenerate)
-            }
+                .disabled(!canGenerate)
         }
         .foregroundStyle(.white)
         .padding(6)

@@ -207,9 +207,7 @@ struct ClientsView: View {
     }
 
     private func meta(for client: Client) -> String {
-        let count = "\(client.quotes.count) quote\(client.quotes.count == 1 ? "" : "s")"
-        guard let activity = activity(for: client) else { return count }
-        return "\(count) · \(activity)"
+        "\(client.quotes.count) quote\(client.quotes.count == 1 ? "" : "s")"
     }
 
     private func activity(for client: Client) -> String? {

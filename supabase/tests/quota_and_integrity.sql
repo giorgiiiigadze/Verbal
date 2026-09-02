@@ -415,6 +415,70 @@ begin
 end $$;
 reset role;
 
+-- ------------------------------------------------------------
+-- Costly server-side operations reserve their rate-limit slot atomically
+-- ------------------------------------------------------------
+do $$
+declare result text; i integer;
+begin
+  for i in 1..30 loop
+    select public.reserve_request_budget(pg_temp.uid(6), 'extract_quote') into result;
+    perform pg_temp.t_ok(result is null, 'an extraction slot is reserved below the hourly limit');
+  end loop;
+
+  select public.reserve_request_budget(pg_temp.uid(6), 'extract_quote') into result;
+  perform pg_temp.t_ok(result = 'hour', 'the next extraction is refused at the hourly limit');
+
+  for i in 1..12 loop
+    select public.reserve_request_budget(pg_temp.uid(6), 'verify_subscription') into result;
+    perform pg_temp.t_ok(result is null, 'a subscription-check slot is reserved below the hourly limit');
+  end loop;
+  select public.reserve_request_budget(pg_temp.uid(6), 'verify_subscription') into result;
+  perform pg_temp.t_ok(result = 'hour', 'the next subscription check is refused at the hourly limit');
+
+  set local role authenticated;
+  perform pg_temp.as_user(pg_temp.uid(6)::text);
+  begin
+    perform public.reserve_request_budget(pg_temp.uid(6), 'extract_quote');
+    raise exception 'FAIL  a client could reserve a server-side request budget';
+  exception when insufficient_privilege then
+    perform pg_temp.t_ok(true, 'only service-side code can reserve a request budget');
+  end;
+end $$;
+reset role;
+
+-- Public execute is not suitable for RPCs that modify an account's data.
+select pg_temp.t_ok(
+  not has_function_privilege('anon', 'public.create_quote_with_details(text, text, text[], text, numeric, numeric, text, text, uuid, jsonb, text)', 'execute')
+  and not has_function_privilege('anon', 'public.ensure_share_token(uuid)', 'execute')
+  and not has_function_privilege('anon', 'public.revoke_share_token(uuid)', 'execute')
+  and not has_function_privilege('anon', 'public.void_quote_usage(uuid)', 'execute'),
+  'anonymous callers cannot execute account-mutating RPCs'
+);
+
+-- Deletion feedback is anonymous by design, but its stored input is bounded.
+do $$
+begin
+  set local role authenticated;
+  perform pg_temp.as_user(pg_temp.uid(1)::text);
+  begin
+    insert into public.account_deletion_feedback (reason, comment)
+    values (repeat('x', 161), null);
+    raise exception 'FAIL  oversized deletion-feedback reason was accepted';
+  exception when check_violation then
+    perform pg_temp.t_ok(true, 'deletion-feedback reasons have a length limit');
+  end;
+
+  begin
+    insert into public.account_deletion_feedback (reason, comment)
+    values ('Other', repeat('x', 2001));
+    raise exception 'FAIL  oversized deletion-feedback comment was accepted';
+  exception when check_violation then
+    perform pg_temp.t_ok(true, 'deletion-feedback comments have a length limit');
+  end;
+end $$;
+reset role;
+
 select format('1..%s', count(*)) from pg_temp.tap_results;
 select tap_line from pg_temp.tap_results order by test_number;
 
