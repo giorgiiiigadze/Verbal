@@ -44,15 +44,6 @@ struct ScheduleVisitSheet: View {
     @State private var showingClientSheet = false
     /// True while the removal alert is up.
     @State private var confirmingRemoval = false
-    /// False until the sheet has finished populating itself from `editing`.
-    ///
-    /// The rule below that drags the end time along with the start must not
-    /// fire while the sheet is loading a visit: the "previous" start it would
-    /// measure against is the placeholder this view was constructed with, not
-    /// a time the user ever chose, and the length it computed from that
-    /// overwrote the real one. Opening a booked visit to look at it was enough
-    /// to change its duration, and the next save wrote that back.
-    @State private var hasLoaded = false
     @FocusState private var titleFocused: Bool
     @FocusState private var addressFocused: Bool
     @FocusState private var noteFocused: Bool
@@ -93,6 +84,47 @@ struct ScheduleVisitSheet: View {
     private var durationMinutes: Int {
         let minutes = Int(end.timeIntervalSince(start) / 60)
         return max(ScheduledVisit.minimumDurationMinutes, minutes)
+    }
+
+    /// The start, wired so that moving it takes the end with it and keeps the
+    /// visit the same length: sliding a 90-minute survey from 10 to 11 leaves
+    /// it 90 minutes. Dragging the end is what changes the length.
+    ///
+    /// Deliberately a binding rather than `.onChange(of: start)`. An observer
+    /// cannot tell a user's drag from the sheet populating itself, and it fires
+    /// after the view update, by which time any "still loading" flag has
+    /// already been set — whether it corrupted the visit came down to when
+    /// SwiftUI scheduled a render. A setter runs only when a control is driven,
+    /// so loading a visit cannot reach it at all.
+    private var startBinding: Binding<Date> {
+        Binding {
+            start
+        } set: { moved in
+            let length = max(end.timeIntervalSince(start),
+                             TimeInterval(ScheduledVisit.minimumDurationMinutes * 60))
+            start = moved
+            end = moved.addingTimeInterval(length)
+        }
+    }
+
+    /// The client, wired the same way: picking someone fills in an address we
+    /// already hold for them, while loading a visit that already names them
+    /// leaves its address exactly as booked.
+    private var clientBinding: Binding<String> {
+        Binding {
+            clientName
+        } set: { picked in
+            clientName = picked
+            let name = picked.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, trimmedAddress.isEmpty else { return }
+            Task {
+                if let known = try? await QuoteService.customerAddress(named: name),
+                   trimmedAddress.isEmpty {
+                    address = known
+                    showingAddressField = true
+                }
+            }
+        }
     }
 
     /// "1h 30min" — the grey label beside the range. Built from the live state
@@ -138,35 +170,50 @@ struct ScheduleVisitSheet: View {
                     // are left the same way.
                     Button(role: .close) { dismiss() }
                 }
-
-                if editing != nil, onDelete != nil {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(role: .destructive) {
-                            confirmingRemoval = true
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                        .tint(Color(.statusDeclinedText))
-                        .accessibilityLabel("Remove visit")
-                    }
-                }
             }
             .safeAreaInset(edge: .bottom) {
                 // The only way to commit the booking, and it sits where the
                 // thumb already is. The header briefly carried a Book button
                 // too, which was the same action said twice — the header's job
                 // here is the way out, not the way forward.
-                Button(action: save) {
-                    Text(editing == nil ? "Book a visit" : "Save changes")
-                        .font(.headline)
-                        .foregroundStyle(colorScheme == .dark ? Color(.homeBackground) : .white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(canSave ? Color(.mainText) : Color(.mainText).opacity(0.35),
-                                    in: Capsule())
+                VStack(spacing: 10) {
+                    Button(action: save) {
+                        Text(editing == nil ? "Book a visit" : "Save changes")
+                            .font(.headline)
+                            .foregroundStyle(colorScheme == .dark ? Color(.homeBackground) : .white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(canSave ? Color(.mainText) : Color(.mainText).opacity(0.35),
+                                        in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canSave)
+
+                    // Calling off the visit belongs beside saving it, not up in
+                    // the corner as a trash glyph: both are things you decide
+                    // about the booking in front of you, and a bin icon in a
+                    // toolbar is a guess at what it deletes. Same red-outlined
+                    // shape the visit's own action sheet uses to cancel it, so
+                    // it is recognisably the same decision in both places.
+                    if editing != nil, onDelete != nil {
+                        Button {
+                            confirmingRemoval = true
+                        } label: {
+                            Text("Cancel visit")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(Color(.statusDeclinedText))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .background(Color(.statusDeclinedFill),
+                                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .strokeBorder(Color(.statusDeclinedText).opacity(0.18), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(!canSave)
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
@@ -175,7 +222,7 @@ struct ScheduleVisitSheet: View {
         }
         .background(Color(.homeBackground))
         .sheet(isPresented: $showingClientSheet) {
-            ClientSheet(name: $clientName)
+            ClientSheet(name: clientBinding)
         }
         // Same shape as the delete confirmations on Home: a question, the
         // action named plainly, and Cancel.
@@ -189,29 +236,6 @@ struct ScheduleVisitSheet: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("“\(trimmedTitle.isEmpty ? (editing?.title ?? "This visit") : trimmedTitle)” comes off your upcoming list. Any quotes you've already made are untouched.")
-        }
-        // Dragging the start moves the whole visit and keeps its length: the
-        // user who slides a 90-minute survey from 10 to 11 means it is still 90
-        // minutes. Dragging the end is the only way to change the length.
-        .onChange(of: start) { previous, current in
-            guard hasLoaded else { return }
-            let length = end.timeIntervalSince(previous)
-            end = current.addingTimeInterval(max(length, TimeInterval(ScheduledVisit.minimumDurationMinutes * 60)))
-        }
-        .onChange(of: clientName) { _, name in
-            guard hasLoaded else { return }
-            // A client picked on a visit with no address yet: use the one
-            // already on file for them rather than asking for it again.
-            guard trimmedAddress.isEmpty else { return }
-            let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { return }
-            Task {
-                if let known = try? await QuoteService.customerAddress(named: name),
-                   trimmedAddress.isEmpty {
-                    address = known
-                    showingAddressField = true
-                }
-            }
         }
         .task {
             if let editing {
@@ -228,8 +252,6 @@ struct ScheduleVisitSheet: View {
                 try? await Task.sleep(for: .seconds(0.35))
                 titleFocused = true
             }
-            // Only now does a change to the start mean the user moved it.
-            hasLoaded = true
         }
     }
 
@@ -264,7 +286,7 @@ struct ScheduleVisitSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     DatePicker("Starts",
-                               selection: $start,
+                               selection: startBinding,
                                displayedComponents: [.hourAndMinute])
                         .labelsHidden()
 
@@ -284,7 +306,7 @@ struct ScheduleVisitSheet: View {
                 }
 
                 DatePicker("Day",
-                           selection: $start,
+                           selection: startBinding,
                            in: Calendar.current.startOfDay(for: Date())...,
                            displayedComponents: [.date])
                     .labelsHidden()
