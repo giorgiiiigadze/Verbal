@@ -348,13 +348,13 @@ struct HomeView: View {
             case .new:
                 ScheduleVisitSheet(onSave: addOrUpdate)
                     .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.hidden)
             case .existing(let visit):
                 ScheduleVisitSheet(editing: visit,
                                    onSave: addOrUpdate,
                                    onDelete: remove)
                     .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.hidden)
             }
         }
     }

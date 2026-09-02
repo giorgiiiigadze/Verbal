@@ -65,7 +65,7 @@ struct ScheduleView: View {
             VisitActionSheet(visit: current, action: visitAction(for: current), onPrimary: { performPrimaryAction(for: current) }, onDirections: { openDirections(for: current) }, onCall: { callClient(for: current) }, onReschedule: { editor = .existing(current) }, onCancel: { visitToDelete = current }, onDidNotHappen: { remove(current) }, onOpenQuote: { openRecordedQuote(for: current) })
         }
         .sheet(item: $editor) { editor in
-            switch editor { case .new: ScheduleVisitSheet(onSave: addOrUpdate).presentationDetents([.large]).presentationDragIndicator(.visible); case .existing(let visit): ScheduleVisitSheet(editing: visit, onSave: addOrUpdate, onDelete: remove).presentationDetents([.large]).presentationDragIndicator(.visible) }
+            switch editor { case .new: ScheduleVisitSheet(onSave: addOrUpdate).presentationDetents([.large]).presentationDragIndicator(.hidden); case .existing(let visit): ScheduleVisitSheet(editing: visit, onSave: addOrUpdate, onDelete: remove).presentationDetents([.large]).presentationDragIndicator(.hidden) }
         }
         .alert("Remove this visit?", isPresented: Binding(get: { visitToDelete != nil }, set: { if !$0 { visitToDelete = nil } }), presenting: visitToDelete) { visit in Button("Remove", role: .destructive) { remove(visit) }; Button("Cancel", role: .cancel) {} } message: { visit in Text("“\(visit.title)” comes off your schedule. Any quote you've already made is untouched.") }
         .task { session.visitStore.refresh(); await session.visitStore.sync() }

@@ -14,8 +14,8 @@
 //
 //  So: a native form sheet, read top to bottom in the order the phone call
 //  gives you the facts. What the job is called, when it is and how long for,
-//  who it's for, where. The header carries Cancel and Book, which is the sheet
-//  iOS users already know how to leave.
+//  who it's for, where. The header carries only the way out; booking happens
+//  at the bottom button, under the thumb that has just filled the form in.
 //
 
 import SwiftUI
@@ -44,6 +44,15 @@ struct ScheduleVisitSheet: View {
     @State private var showingClientSheet = false
     /// True while the removal alert is up.
     @State private var confirmingRemoval = false
+    /// False until the sheet has finished populating itself from `editing`.
+    ///
+    /// The rule below that drags the end time along with the start must not
+    /// fire while the sheet is loading a visit: the "previous" start it would
+    /// measure against is the placeholder this view was constructed with, not
+    /// a time the user ever chose, and the length it computed from that
+    /// overwrote the real one. Opening a booked visit to look at it was enough
+    /// to change its duration, and the next save wrote that back.
+    @State private var hasLoaded = false
     @FocusState private var titleFocused: Bool
     @FocusState private var addressFocused: Bool
     @FocusState private var noteFocused: Bool
@@ -123,7 +132,11 @@ struct ScheduleVisitSheet: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    // The system's own close glyph rather than the word
+                    // "Cancel" — nothing has been committed yet, so there is
+                    // nothing to cancel, and the sheets elsewhere in the app
+                    // are left the same way.
+                    Button(role: .close) { dismiss() }
                 }
 
                 if editing != nil, onDelete != nil {
@@ -137,17 +150,12 @@ struct ScheduleVisitSheet: View {
                         .accessibilityLabel("Remove visit")
                     }
                 }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(editing == nil ? "Book" : "Save", action: save)
-                        .fontWeight(.semibold)
-                        .disabled(!canSave)
-                }
             }
             .safeAreaInset(edge: .bottom) {
-                // The same action as the header's, in the place the thumb
-                // already is. The header button is what makes the sheet read as
-                // native; this one is what gets pressed.
+                // The only way to commit the booking, and it sits where the
+                // thumb already is. The header briefly carried a Book button
+                // too, which was the same action said twice — the header's job
+                // here is the way out, not the way forward.
                 Button(action: save) {
                     Text(editing == nil ? "Book a visit" : "Save changes")
                         .font(.headline)
@@ -186,10 +194,12 @@ struct ScheduleVisitSheet: View {
         // user who slides a 90-minute survey from 10 to 11 means it is still 90
         // minutes. Dragging the end is the only way to change the length.
         .onChange(of: start) { previous, current in
+            guard hasLoaded else { return }
             let length = end.timeIntervalSince(previous)
             end = current.addingTimeInterval(max(length, TimeInterval(ScheduledVisit.minimumDurationMinutes * 60)))
         }
         .onChange(of: clientName) { _, name in
+            guard hasLoaded else { return }
             // A client picked on a visit with no address yet: use the one
             // already on file for them rather than asking for it again.
             guard trimmedAddress.isEmpty else { return }
@@ -218,6 +228,8 @@ struct ScheduleVisitSheet: View {
                 try? await Task.sleep(for: .seconds(0.35))
                 titleFocused = true
             }
+            // Only now does a change to the start mean the user moved it.
+            hasLoaded = true
         }
     }
 
