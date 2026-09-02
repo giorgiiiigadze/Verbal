@@ -201,7 +201,7 @@ private struct VisitsTimelineView: View {
                         Rectangle().fill(Color(.separator).opacity(0.6)).frame(height: 0.5).offset(x: labelWidth, y: CGFloat(hour) * hourHeight)
                     }
                     ForEach(placements) { item in
-                        VisitCalendarCard(visit: item.visit).frame(width: max(80, (columnWidth - 12) / CGFloat(item.columnCount) - 4), height: hourHeight - 8, alignment: .topLeading).offset(x: labelWidth + 6 + CGFloat(item.column) * ((columnWidth - 12) / CGFloat(item.columnCount)), y: yPosition(item.visit.date) + 4).onTapGesture { onSelect(item.visit) }
+                        VisitCalendarCard(visit: item.visit).frame(width: max(80, (columnWidth - 12) / CGFloat(item.columnCount) - 4), height: height(for: item.visit), alignment: .topLeading).offset(x: labelWidth + 6 + CGFloat(item.column) * ((columnWidth - 12) / CGFloat(item.columnCount)), y: yPosition(item.visit.date) + 4).onTapGesture { onSelect(item.visit) }
                     }
                     // A periodic timeline keeps the marker live if this page
                     // stays open while the working day moves on.
@@ -254,6 +254,12 @@ private struct VisitsTimelineView: View {
         return slotID(for: (parts.hour ?? 0) * 12 + (parts.minute ?? 0) / 5)
     }
     private func slotID(for slot: Int) -> String { "timeline-slot-\(slot)" }
+    /// A block as tall as the visit is long, so an afternoon that is actually
+    /// full looks full. Floored at a readable height — a fifteen-minute call
+    /// would otherwise be a strip too short to hold its own name.
+    private func height(for visit: ScheduledVisit) -> CGFloat {
+        max(34, CGFloat(visit.durationMinutes) / 60 * hourHeight - 8)
+    }
     private func yPosition(_ date: Date) -> CGFloat { let p = calendar.dateComponents([.hour, .minute], from: date); return CGFloat((p.hour ?? 0) * 60 + (p.minute ?? 0)) / 60 * hourHeight }
     private func hourLabel(_ hour: Int) -> String {
         guard hour < 24 else { return "" }
@@ -266,8 +272,12 @@ private struct VisitPlacement: Identifiable {
     let visit: ScheduledVisit; let column: Int; let columnCount: Int; var id: UUID { visit.id }
     static func make(from visits: [ScheduledVisit]) -> [VisitPlacement] {
         let sorted = visits.sorted { $0.date < $1.date }; var output: [VisitPlacement] = []; var active: [(Date, Int)] = []
-        for visit in sorted { active.removeAll { $0.0 <= visit.date }; let used = Set(active.map(\.1)); let column = (0...).first { !used.contains($0) } ?? 0; active.append((visit.date.addingTimeInterval(3600), column)); output.append(VisitPlacement(visit: visit, column: column, columnCount: active.count)) }
-        return output.map { item in VisitPlacement(visit: item.visit, column: item.column, columnCount: max(1, output.filter { abs($0.visit.date.timeIntervalSince(item.visit.date)) < 3600 }.count)) }
+        for visit in sorted { active.removeAll { $0.0 <= visit.date }; let used = Set(active.map(\.1)); let column = (0...).first { !used.contains($0) } ?? 0; active.append((visit.endDate, column)); output.append(VisitPlacement(visit: visit, column: column, columnCount: active.count)) }
+        // Two visits share the width when their times actually cross, not when
+        // they merely start near each other: a three-hour survey and a call
+        // booked two hours into it overlap, and used to be drawn on top of
+        // one another.
+        return output.map { item in VisitPlacement(visit: item.visit, column: item.column, columnCount: max(1, output.filter { $0.visit.date < item.visit.endDate && item.visit.date < $0.visit.endDate }.count)) }
     }
 }
 
