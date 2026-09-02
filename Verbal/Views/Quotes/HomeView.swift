@@ -958,6 +958,7 @@ struct HomeView: View {
             // turn an empty screen into a choice between identical actions.
             EmptyStateMessage(
                 icon: "waveform",
+                assetIcon: "QuotesEmpty",
                 title: "No quotes right now",
                 message: "Describe the next job out loud and it'll be priced and waiting here."
             ) {
