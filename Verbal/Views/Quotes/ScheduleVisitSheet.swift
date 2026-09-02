@@ -37,15 +37,13 @@ struct ScheduleVisitSheet: View {
     @State private var start = ScheduleVisitSheet.defaultDate
     @State private var end = ScheduleVisitSheet.defaultDate
         .addingTimeInterval(TimeInterval(ScheduledVisit.defaultDurationMinutes * 60))
-    /// True once the address row has been opened, so the field replaces the
-    /// button in place rather than the row carrying an empty field forever.
-    @State private var showingAddressField = false
+    /// Pushes the place search onto this sheet's existing navigation stack.
+    @State private var showingLocationSearch = false
     @State private var showingNoteField = false
     @State private var showingClientSheet = false
     /// True while the removal alert is up.
     @State private var confirmingRemoval = false
     @FocusState private var titleFocused: Bool
-    @FocusState private var addressFocused: Bool
     @FocusState private var noteFocused: Bool
 
     /// Tomorrow at the current time. A visit booked on the phone is nearly
@@ -121,7 +119,6 @@ struct ScheduleVisitSheet: View {
                 if let known = try? await QuoteService.customerAddress(named: name),
                    trimmedAddress.isEmpty {
                     address = known
-                    showingAddressField = true
                 }
             }
         }
@@ -171,6 +168,9 @@ struct ScheduleVisitSheet: View {
                     Button(role: .close) { dismiss() }
                 }
             }
+            .navigationDestination(isPresented: $showingLocationSearch) {
+                LocationSearchView(address: $address)
+            }
             .safeAreaInset(edge: .bottom) {
                 // The only way to commit the booking, and it sits where the
                 // thumb already is. The header briefly carried a Book button
@@ -184,7 +184,7 @@ struct ScheduleVisitSheet: View {
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
                             .background(canSave ? Color(.mainText) : Color(.mainText).opacity(0.35),
-                                        in: Capsule())
+                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSave)
@@ -203,7 +203,7 @@ struct ScheduleVisitSheet: View {
                                 .font(.subheadline.weight(.medium))
                                 .foregroundStyle(Color(.statusDeclinedText))
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 50)
+                                .frame(height: 52)
                                 .background(Color(.statusDeclinedFill),
                                             in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .overlay(
@@ -246,7 +246,6 @@ struct ScheduleVisitSheet: View {
                 phone = editing.phone ?? ""
                 address = editing.address ?? ""
                 note = editing.note ?? ""
-                showingAddressField = !(editing.address ?? "").isEmpty
                 showingNoteField = !(editing.note ?? "").isEmpty
             } else {
                 try? await Task.sleep(for: .seconds(0.35))
@@ -260,7 +259,7 @@ struct ScheduleVisitSheet: View {
     private var divider: some View {
         Divider()
             .overlay(Color(.separator).opacity(0.6))
-            .padding(.leading, 24)
+            .padding(.horizontal, 24)
     }
 
     /// The name, in the size of a heading, because it is the one thing on this
@@ -268,20 +267,20 @@ struct ScheduleVisitSheet: View {
     private var nameField: some View {
         TextField("Quote name", text: $title)
             .textFieldStyle(.plain)
-            .font(.title2.weight(.semibold))
+            .font(.robotoSlab(29, relativeTo: .title))
             .foregroundStyle(Color(.mainText))
             .textInputAutocapitalization(.sentences)
             .submitLabel(.done)
             .focused($titleFocused)
             .padding(.horizontal, 24)
-            .padding(.vertical, 14)
+            .padding(.vertical, 16)
     }
 
     /// When it is and how long for, as one question. A start, an end, and the
     /// length between them stated rather than left to be worked out.
     private var whenBlock: some View {
         HStack(alignment: .top, spacing: 14) {
-            rowIcon("clock")
+            clockIcon
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
@@ -324,7 +323,7 @@ struct ScheduleVisitSheet: View {
             showingClientSheet = true
         } label: {
             HStack(spacing: 14) {
-                rowIcon("person")
+                clientIcon
                 Text(trimmedClient.isEmpty ? "Client" : trimmedClient)
                     .font(.body)
                     .foregroundStyle(trimmedClient.isEmpty ? Color.secondary : Color(.mainText))
@@ -343,33 +342,30 @@ struct ScheduleVisitSheet: View {
     /// and neither is worth a divider of its own.
     private var locationRow: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if showingAddressField {
-                HStack(alignment: .top, spacing: 14) {
-                    rowIcon("mappin.and.ellipse")
-                    TextField("Street, town, or postcode", text: $address, axis: .vertical)
-                        .textFieldStyle(.plain)
+            Button {
+                showingLocationSearch = true
+            } label: {
+                HStack(spacing: 14) {
+                    Image("LocationPin")
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .accessibilityHidden(true)
+                    Text(trimmedAddress.isEmpty ? "Location" : trimmedAddress)
                         .font(.body)
-                        .foregroundStyle(Color(.mainText))
-                        .lineLimit(1...3)
-                        .textInputAutocapitalization(.words)
-                        .focused($addressFocused)
+                        .foregroundStyle(trimmedAddress.isEmpty ? Color.secondary : Color(.mainText))
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
                 }
-            } else {
-                Button {
-                    showingAddressField = true
-                    addressFocused = true
-                } label: {
-                    HStack(spacing: 14) {
-                        rowIcon("mappin.and.ellipse")
-                        Text("Location")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 0)
-                    }
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
+                .contentShape(.rect)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(trimmedAddress.isEmpty ? "Add a location" : "Location, \(trimmedAddress)")
 
             HStack(spacing: 14) {
                 rowIcon("phone")
@@ -391,7 +387,7 @@ struct ScheduleVisitSheet: View {
         Group {
             if showingNoteField {
                 HStack(alignment: .top, spacing: 14) {
-                    rowIcon("text.alignleft")
+                    noteIcon
                     TextField("Anything to remember", text: $note, axis: .vertical)
                         .textFieldStyle(.plain)
                         .font(.body)
@@ -406,7 +402,7 @@ struct ScheduleVisitSheet: View {
                     noteFocused = true
                 } label: {
                     HStack(spacing: 14) {
-                        rowIcon("text.alignleft")
+                        noteIcon
                         Text("Note")
                             .font(.body)
                             .foregroundStyle(.secondary)
@@ -428,6 +424,36 @@ struct ScheduleVisitSheet: View {
             .font(.body)
             .foregroundStyle(.secondary)
             .frame(width: 22, alignment: .leading)
+            .accessibilityHidden(true)
+    }
+
+    private var noteIcon: some View {
+        Image("VisitNote")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .foregroundStyle(.secondary)
+            .frame(width: 22, height: 22)
+            .accessibilityHidden(true)
+    }
+
+    private var clientIcon: some View {
+        Image("VisitClient")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .foregroundStyle(.secondary)
+            .frame(width: 22, height: 22)
+            .accessibilityHidden(true)
+    }
+
+    private var clockIcon: some View {
+        Image("VisitClock")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .foregroundStyle(.secondary)
+            .frame(width: 22, height: 22)
             .accessibilityHidden(true)
     }
 

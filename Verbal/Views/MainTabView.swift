@@ -94,7 +94,7 @@ struct MainTabView: View {
             // Home keeps a compact, scrollable Upcoming card. This is the full
             // working view of the diary: somewhere worth returning to
             // throughout the day, and therefore worth a permanent tab.
-            Tab("Visits", systemImage: "calendar", value: .schedule) {
+            Tab("Calendar", systemImage: "calendar", value: .schedule) {
                 NavigationStack {
                     ScheduleView(showCreate: createBinding,
                                  recordingVisit: $recordingVisit)

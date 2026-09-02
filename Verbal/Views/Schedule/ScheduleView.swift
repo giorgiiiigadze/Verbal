@@ -14,7 +14,7 @@ struct ScheduleView: View {
     @State private var selectedVisit: ScheduledVisit?
     @State private var editor: VisitEditor?
     @State private var visitToDelete: ScheduledVisit?
-    @State private var filter: ScheduleFilter = .toQuote
+    @State private var filter: ScheduleFilter = .all
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @State private var searchText = ""
     @State private var isSearching = false
@@ -43,10 +43,10 @@ struct ScheduleView: View {
             else { calendar }
         }
         .background(Color(.homeBackground))
-        .navigationTitle("Visits").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Calendar").navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color(.homeBackground), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .modifier(SearchWhenAsked(isActive: isSearching, text: $searchText, isPresented: $isSearching, prompt: "Search visits"))
+        .modifier(SearchWhenAsked(isActive: isSearching, text: $searchText, isPresented: $isSearching, prompt: "Search calendar"))
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
                 Button { isSearching = true } label: { Image(systemName: "magnifyingglass") }.accessibilityLabel("Search visits")
@@ -77,7 +77,9 @@ struct ScheduleView: View {
         VStack(spacing: 0) {
             VisitsDaySelector(selectedDay: $selectedDay)
                 .zIndex(1)
-            VisitsTimelineView(day: selectedDay, visits: dayVisits) { selectedVisit = $0 }
+            VisitsTimelineView(day: selectedDay,
+                               visits: dayVisits,
+                               isRecorded: hasRecordedQuote) { selectedVisit = $0 }
                 // Keep the scrolled grid from visually touching the day header.
                 .padding(.top, 10)
         }
@@ -163,7 +165,10 @@ private struct VisitsDaySelector: View {
 }
 
 private struct VisitsTimelineView: View {
-    let day: Date; let visits: [ScheduledVisit]; let onSelect: (ScheduledVisit) -> Void
+    let day: Date
+    let visits: [ScheduledVisit]
+    let isRecorded: (ScheduledVisit) -> Bool
+    let onSelect: (ScheduledVisit) -> Void
     // A dedicated left rail keeps the clock readable while the day pages move
     // horizontally. Short labels avoid the two-line time stamps seen in the
     // earlier calendar layout.
@@ -201,7 +206,7 @@ private struct VisitsTimelineView: View {
                         Rectangle().fill(Color(.separator).opacity(0.6)).frame(height: 0.5).offset(x: labelWidth, y: CGFloat(hour) * hourHeight)
                     }
                     ForEach(placements) { item in
-                        VisitCalendarCard(visit: item.visit).frame(width: max(80, (columnWidth - 12) / CGFloat(item.columnCount) - 4), height: height(for: item.visit), alignment: .topLeading).offset(x: labelWidth + 6 + CGFloat(item.column) * ((columnWidth - 12) / CGFloat(item.columnCount)), y: yPosition(item.visit.date) + 4).onTapGesture { onSelect(item.visit) }
+                        VisitCalendarCard(visit: item.visit, isRecorded: isRecorded(item.visit)).frame(width: max(80, (columnWidth - 12) / CGFloat(item.columnCount) - 4), height: height(for: item.visit), alignment: .topLeading).offset(x: labelWidth + 6 + CGFloat(item.column) * ((columnWidth - 12) / CGFloat(item.columnCount)), y: yPosition(item.visit.date) + 4).onTapGesture { onSelect(item.visit) }
                     }
                     // A periodic timeline keeps the marker live if this page
                     // stays open while the working day moves on.
@@ -281,7 +286,34 @@ private struct VisitPlacement: Identifiable {
     }
 }
 
-private struct VisitCalendarCard: View { let visit: ScheduledVisit; var body: some View { VStack(alignment: .leading, spacing: 2) { Text(visit.title).font(.caption.weight(.semibold)).lineLimit(1); Text(visit.timeRangeText).font(.caption2).lineLimit(1); if let client = visit.clientName, !client.isEmpty { Text(client).font(.caption2).lineLimit(1) } else if let address = visit.address, !address.isEmpty { Text(address).font(.caption2).lineLimit(1) } }.foregroundStyle(Color(.statusWarningText)).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(8).background(Color(.statusWarningFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous)) } }
+private struct VisitCalendarCard: View {
+    let visit: ScheduledVisit
+    let isRecorded: Bool
+
+    private var textColor: Color {
+        Color(isRecorded ? .statusAcceptedText : .statusWarningText)
+    }
+
+    private var fillColor: Color {
+        Color(isRecorded ? .statusAcceptedFill : .statusWarningFill)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(visit.title).font(.caption.weight(.semibold)).lineLimit(1)
+            Text(visit.timeRangeText).font(.caption2).lineLimit(1)
+            if let client = visit.clientName, !client.isEmpty {
+                Text(client).font(.caption2).lineLimit(1)
+            } else if let address = visit.address, !address.isEmpty {
+                Text(address).font(.caption2).lineLimit(1)
+            }
+        }
+        .foregroundStyle(textColor)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(8)
+        .background(fillColor, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
 private struct CurrentTimeIndicator: View {
     let date: Date
     let labelWidth: CGFloat

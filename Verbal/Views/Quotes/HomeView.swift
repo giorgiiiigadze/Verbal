@@ -689,7 +689,27 @@ struct HomeView: View {
             title: "Nothing booked in",
             message: "Put the visits you've got coming up here and each one is a tap from a quote."
         ) {
-            EmptyStatePill(title: "Book a visit", icon: "plus") { visitEditor = .new }
+            Button { visitEditor = .new } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: "plus")
+                        .font(.footnote.weight(.semibold))
+                    Text("Book a visit")
+                        .font(.subheadline.weight(.medium))
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .foregroundStyle(Color(.mainText))
+                .padding(.horizontal, 18)
+                .frame(height: 46)
+                .background(Color(.cardSurface),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                )
+            }
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 26)
         .frame(maxWidth: .infinity)
@@ -1815,50 +1835,136 @@ struct VisitActionSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(visit.title)
-                        .font(.robotoSlab(24, relativeTo: .title3))
-                        .foregroundStyle(Color(.mainText))
-                        .lineLimit(2)
-
-                    Text("\(visit.date.formatted(.dateTime.weekday(.wide).month(.wide).day())) · \(visit.timeRangeText)")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    if let client = visit.clientName?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       !client.isEmpty {
-                        Text(client)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    visitDetails
                 }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    detailRow(label: "Phone", value: visit.phone)
-                    detailRow(label: "Address", value: visit.address)
-                    detailRow(label: "Note", value: visit.note)
-                }
-
-                Spacer(minLength: 0)
-
-                actionButtons
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.systemBackground))
+            .background(Color(.homeBackground))
             .navigationTitle("Visit")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color(.homeBackground), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .close) { dismiss() }
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                actionButtons
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .padding(.bottom, 10)
+                    .background(Color(.homeBackground))
+            }
         }
-        .presentationDetents([.medium])
-        .presentationBackground(Color(.systemBackground))
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(Color(.homeBackground))
+    }
+
+    private var visitDetails: some View {
+        Group {
+            Text(visit.title)
+                .font(.robotoSlab(29, relativeTo: .title))
+                .foregroundStyle(Color(.mainText))
+                .lineLimit(2)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+
+            divider
+
+            HStack(alignment: .top, spacing: 14) {
+                assetIcon("VisitClock")
+                Text("\(visit.date.formatted(.dateTime.weekday(.wide).month(.wide).day())) · \(visit.timeRangeText)")
+                    .font(.body)
+                    .foregroundStyle(Color(.mainText))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+
+            divider
+
+            HStack(spacing: 14) {
+                assetIcon("VisitClient")
+                Text(value(visit.clientName, placeholder: "Client"))
+                    .font(.body)
+                    .foregroundStyle(hasValue(visit.clientName) ? Color(.mainText) : .secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+
+            divider
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 14) {
+                    assetIcon("LocationPin")
+                    Text(value(visit.address, placeholder: "Location"))
+                        .font(.body)
+                        .foregroundStyle(hasValue(visit.address) ? Color(.mainText) : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 14) {
+                    systemIcon("phone")
+                    Text(value(visit.phone, placeholder: "Phone"))
+                        .font(.body)
+                        .foregroundStyle(hasValue(visit.phone) ? Color(.mainText) : .secondary)
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+
+            divider
+
+            HStack(alignment: .top, spacing: 14) {
+                assetIcon("VisitNote")
+                Text(value(visit.note, placeholder: "Note"))
+                    .font(.body)
+                    .foregroundStyle(hasValue(visit.note) ? Color(.mainText) : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+        }
+    }
+
+    private var divider: some View {
+        Divider()
+            .overlay(Color(.separator).opacity(0.6))
+            .padding(.horizontal, 24)
+    }
+
+    private func systemIcon(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .frame(width: 22, alignment: .leading)
+            .accessibilityHidden(true)
+    }
+
+    private func assetIcon(_ name: String) -> some View {
+        Image(name)
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .foregroundStyle(.secondary)
+            .frame(width: 22, height: 22)
+            .accessibilityHidden(true)
+    }
+
+    private func hasValue(_ value: String?) -> Bool {
+        !(value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+
+    private func value(_ value: String?, placeholder: String) -> String {
+        let clean = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return clean.isEmpty ? placeholder : clean
     }
 
     @ViewBuilder
@@ -1920,21 +2026,6 @@ struct VisitActionSheet: View {
         case .passed: return "Record now"
         case .recorded: return "Open quote"
         }
-    }
-
-    private func detailRow(label: String, value: String?) -> some View {
-        let cleanValue = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-            Text(cleanValue.isEmpty ? "Not added" : cleanValue)
-                .font(.subheadline)
-                .foregroundStyle(cleanValue.isEmpty ? .secondary : Color(.mainText))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func secondaryButton(_ title: String,
