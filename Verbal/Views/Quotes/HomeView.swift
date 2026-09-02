@@ -551,7 +551,7 @@ struct HomeView: View {
         // The same 8 the rows already hold off the card's sides, so a row sits
         // the same distance from every edge.
         .padding(.vertical, 8)
-        .background(Color(.visitSurface),
+        .background(Color(.cardSurface),
                     in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -1750,7 +1750,7 @@ struct UpcomingVisitCardRow: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background {
-                rowShape.fill(Color(.visitSurface))
+                rowShape.fill(Color(.cardSurface))
             }
             .overlay(rowShape.strokeBorder(Color(.separator), lineWidth: 0.5))
             .contentShape(.interaction, rowShape)
