@@ -17,8 +17,6 @@ struct HomeView: View {
     @Binding var showCreate: Bool
     @Binding var recordingVisit: ScheduledVisit?
     @Binding var savedRecordingQuoteID: UUID?
-    /// Hands Home's compact Upcoming card over to the full Visits tab.
-    let onShowAllVisits: () -> Void
     @State private var path = NavigationPath()
     @State private var quotes: [QuoteSummary] = []
     @State private var hasLoaded = false
@@ -88,8 +86,9 @@ struct HomeView: View {
         }
     }
 
-    /// How many visits are listed before the rest are folded away.
-    private static let visitPreviewCount = 3
+    /// The number of visits visible in Upcoming before its list scrolls.
+    private static let visibleVisitCount = 4
+    private static let compactVisitRowHeight: CGFloat = 52
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -511,10 +510,8 @@ struct HomeView: View {
         }
     }
 
-    /// The next few. A tradesperson with a full fortnight booked shouldn't have
-    /// to scroll past all of it to reach the quote they came here for.
-    private var shownVisits: [ScheduledVisit] {
-        Array(visits.prefix(Self.visitPreviewCount))
+    private var upcomingVisitsHeight: CGFloat {
+        CGFloat(min(visits.count, Self.visibleVisitCount)) * Self.compactVisitRowHeight
     }
 
     /// Same weight and colour as the day headings below, because it is the same
@@ -531,35 +528,24 @@ struct HomeView: View {
     }
 
     private var upcomingVisitsCard: some View {
-        VStack(spacing: 0) {
-            // One flat run of rows. Grouping by day earned its dividers and its
-            // headings back when the row said only a time; now that each row
-            // says which day it is, the grouping was drawing a structure the
-            // reader no longer had to be told.
-            ForEach(shownVisits) { visit in
-                compactVisitRow(visit, isNext: visit.id == shownVisits.first?.id)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .top)),
-                        removal: .opacity.combined(with: .move(edge: .top))
-                    ))
-            }
-
-            if visits.count > Self.visitPreviewCount {
-                Button {
-                    onShowAllVisits()
-                } label: {
-                    Text("See all \(visits.count) visits →")
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(Color(.blueAccentText))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+        ScrollView(.vertical, showsIndicators: visits.count > Self.visibleVisitCount) {
+            LazyVStack(spacing: 0) {
+                // One flat run of rows. Grouping by day earned its dividers and
+                // headings back when the row said only a time; now that each
+                // row says which day it is, that structure is redundant.
+                ForEach(visits) { visit in
+                    compactVisitRow(visit, isNext: visit.id == visits.first?.id)
+                        .frame(minHeight: Self.compactVisitRowHeight)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .move(edge: .top))
+                        ))
                 }
-                .buttonStyle(.plain)
             }
         }
+        .frame(height: upcomingVisitsHeight)
         // The same 8 the rows already hold off the card's sides, so a row sits
-        // the same distance from every edge. It was 4 above and 8 below, which
-        // on a card holding a single row reads as the row having slipped.
+        // the same distance from every edge.
         .padding(.vertical, 8)
         .background(Color(.cardSurface),
                     in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -567,6 +553,18 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
+        // A quiet continuation cue: it appears only when another visit can be
+        // reached by scrolling, and uses the card's adaptive surface colour.
+        .overlay(alignment: .bottom) {
+            if visits.count > Self.visibleVisitCount {
+                LinearGradient(colors: [.clear, Color(.cardSurface)],
+                               startPoint: .top,
+                               endPoint: .bottom)
+                    .frame(height: 26)
+                    .allowsHitTesting(false)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+        }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
@@ -1059,7 +1057,7 @@ struct HomeView: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 26)
             .frame(height: 50)
-            .background(Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255),
+            .background(Color(.royalBlue600),
                         in: Capsule())
         }
         .buttonStyle(.plain)
@@ -1664,7 +1662,7 @@ struct HomeView: View {
 private struct FloatingRecordInset: ViewModifier {
     private static let height: CGFloat = 50
     private static let bottomSpacing: CGFloat = 12
-    private static let blue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+    private static let blue = Color(.royalBlue600)
 
     let isVisible: Bool
     let action: () -> Void
@@ -1831,7 +1829,7 @@ struct VisitActionSheet: View {
     /// The same bright blue as Home's floating Record control. Visit actions
     /// lead into the very same recording flow, so their primary controls
     /// should not introduce a competing shade of blue.
-    private static let recordBlue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+    private static let recordBlue = Color(.royalBlue600)
 
     let visit: ScheduledVisit
     let action: VisitAction

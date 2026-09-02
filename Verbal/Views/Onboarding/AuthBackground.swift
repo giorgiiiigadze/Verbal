@@ -17,7 +17,7 @@ struct AuthBackground: View {
     @Environment(\.colorScheme) private var scheme
 
     /// The waves are drawn in the action blue, which has no dark variant —
-    /// #305CDE over a #1C1C1E background is dark blue on near-black, so at
+    /// #1D5DE6 over a #1C1C1E background is dark blue on near-black, so at
     /// these opacities the whole drawing simply wasn't there. In dark mode they
     /// invert to white, which is the same gesture read the other way round.
     ///
@@ -25,7 +25,7 @@ struct AuthBackground: View {
     /// lands about as far from it as the navy does from the light one, so the
     /// lines stay as quiet in one appearance as the other.
     private var lineColor: Color {
-        scheme == .dark ? .white : Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+        scheme == .dark ? .white : Color(.royalBlue600)
     }
 
     var body: some View {
@@ -37,8 +37,8 @@ struct AuthBackground: View {
             // ground under it.
             LinearGradient(
                 colors: [
-                    Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255).opacity(0.18),
-                    Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255).opacity(0.06),
+                    Color(.royalBlue600).opacity(0.18),
+                    Color(.royalBlue600).opacity(0.06),
                     .clear
                 ],
                 startPoint: .top,

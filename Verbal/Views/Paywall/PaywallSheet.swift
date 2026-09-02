@@ -304,7 +304,7 @@ struct PaywallSheet: View {
     /// Matches the light blue used by the Share button in `QuoteDetailView`.
     /// This is deliberately separate from the darker home-recording blue.
     private var accent: Color {
-        Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+        Color(.royalBlue600)
     }
 
     private var benefitsBackground: Color {

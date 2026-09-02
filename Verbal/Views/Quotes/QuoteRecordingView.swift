@@ -1072,7 +1072,7 @@ struct QuoteRecordingView: View {
         }
         .foregroundStyle(.white)
         .padding(6)
-        .background(Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255), in: Capsule())
+        .background(Color(.royalBlue600), in: Capsule())
     }
 
     private var activeRecordingBar: some View {
@@ -1118,7 +1118,7 @@ struct QuoteRecordingView: View {
         }
         .foregroundStyle(.white)
         .padding(6)
-        .background(Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255), in: Capsule())
+        .background(Color(.royalBlue600), in: Capsule())
     }
 
     private var idleBottomBar: some View {
@@ -1209,7 +1209,7 @@ struct QuoteRecordingView: View {
                 .padding(.horizontal, 8)
             }
             .buttonStyle(.glassProminent)
-            .tint(Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255))
+            .tint(Color(.royalBlue600))
             .controlSize(.large)
             .disabled(
                 focus == nil &&

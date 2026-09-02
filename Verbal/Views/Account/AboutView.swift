@@ -13,6 +13,9 @@ struct AboutView: View {
     var body: some View {
         List {
             Section {
+                Link(destination: AppInfo.websiteURL) {
+                    Label("Website", systemImage: "globe")
+                }
                 Link(destination: AppInfo.privacyPolicyURL) {
                     Label("Privacy policy", systemImage: "hand.raised")
                 }

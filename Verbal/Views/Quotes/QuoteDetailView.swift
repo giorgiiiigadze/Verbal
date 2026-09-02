@@ -11,7 +11,7 @@ import UIKit
 
 struct QuoteDetailView: View {
     /// Matches the primary Record action used throughout the app.
-    private static let recordBlue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+    private static let recordBlue = Color(.royalBlue600)
 
     @Environment(SessionStore.self) private var session
     @Environment(Store.self) private var store

@@ -101,7 +101,7 @@ struct OnboardingView: View {
 
     private static let otherTrade = "Something else"
     /// Matches the lighter blue used by the paywall and quote-share action.
-    private static let actionBlue = Color(red: 48 / 255, green: 92 / 255, blue: 222 / 255)
+    private static let actionBlue = Color(.royalBlue600)
 
     private static let trades = [
         "Electrician", "Plumber", "Carpenter", "Tiler",

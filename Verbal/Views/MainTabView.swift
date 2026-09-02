@@ -83,8 +83,7 @@ struct MainTabView: View {
             Tab(value: TabItem.home) {
                 HomeView(showCreate: createBinding,
                          recordingVisit: $recordingVisit,
-                         savedRecordingQuoteID: $savedRecordingQuoteID,
-                         onShowAllVisits: { selection = .schedule })
+                         savedRecordingQuoteID: $savedRecordingQuoteID)
             } label: {
                 Label {
                     Text("Home")
@@ -92,9 +91,9 @@ struct MainTabView: View {
                     Image(.homeTab)
                 }
             }
-            // Home keeps the compact Upcoming card for the next few jobs. This
-            // is the full working view of the diary: somewhere worth returning
-            // to throughout the day, and therefore worth a permanent tab.
+            // Home keeps a compact, scrollable Upcoming card. This is the full
+            // working view of the diary: somewhere worth returning to
+            // throughout the day, and therefore worth a permanent tab.
             Tab("Visits", systemImage: "calendar", value: .schedule) {
                 NavigationStack {
                     ScheduleView(showCreate: createBinding,

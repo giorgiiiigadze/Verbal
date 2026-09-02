@@ -79,9 +79,9 @@ struct ScheduleVisitSheet: View {
         address.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// The date and time choices sit directly on the dark sheet surface. A
-    /// white accent makes the current choice and calendar controls legible
-    /// without introducing the recording flow's blue into this quiet wizard.
+    /// The time wheel sits directly on the dark sheet surface. A white accent
+    /// keeps its current choice legible without introducing the recording
+    /// flow's blue into this quiet wizard.
     private var stepAccentColor: Color { .white }
 
     /// The name is the only thing required, and only the step that asks for it
@@ -320,7 +320,9 @@ struct ScheduleVisitSheet: View {
                        displayedComponents: [.date])
                 .labelsHidden()
                 .datePickerStyle(.graphical)
-                .tint(stepAccentColor)
+                // Main text is unambiguous against the pale calendar surface,
+                // making the selected day easy to spot.
+                .tint(Color(.mainText))
                 // Its own inset would sit the grid a step in from everything
                 // else on the sheet.
                 .padding(.horizontal, -8)

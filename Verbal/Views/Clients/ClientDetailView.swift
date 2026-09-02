@@ -2,18 +2,9 @@
 //  ClientDetailView.swift
 //  Verbal
 //
-//  One person, and whether they are worth chasing.
-//
-//  The tab lists who has been quoted and what was sent them; this answers the
-//  question underneath that — how much of it was won, how often they say yes,
-//  and what is still sitting with them unanswered. All of it derived from the
-//  quotes already in the session, so there is nothing to fetch and nothing that
-//  can disagree with the thread at the bottom of the page.
-//
-//  The figure that matters, what it is made of, then the detail. The middle of
-//  those was a chart for a while — a bar per quote, then a running total — and
-//  both drew a history nobody was asking this page for. `ClientMoneyBar` says
-//  the same thing in a fifth of the height.
+//  One person, their value at a glance, recent quotes and useful contact detail.
+//  Quote-derived sections stay live with the session; location and visit data
+//  fill in the client information the quote summary itself does not carry.
 //
 
 import SwiftUI
@@ -79,46 +70,20 @@ struct ClientDetailView: View {
     /// figure below is a filter and a sum over this — one pass over the rates,
     /// and no two numbers on the page that can disagree about a conversion.
     @State private var points: [ClientQuotePoint] = []
-    /// How far back the page is looking. All of it, until they say otherwise.
-    @State private var range: ClientRange = .all
-
-    /// The window in view, and the one before it for comparison.
-    private var visible: [ClientQuotePoint] { points.within(range) }
-    private var previous: [ClientQuotePoint] { points.before(range) }
-
-    /// Quotes for the thread, cut by date rather than by membership of
-    /// `visible` — a quote left out of the figures for want of a published rate
-    /// still exists, and dropping it from the list too would read as deleted.
-    private var visibleQuotes: [QuoteSummary] {
-        guard let cutoff = range.cutoff() else { return client.quotes }
-        return client.quotes.filter { $0.createdAt >= cutoff }
-    }
-
-    private var ranges: [ClientRange] { ClientRange.available(for: points) }
+    @State private var showsAllQuotes = false
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                headline
-
-                if !visible.isEmpty {
-                    ClientMoneyBar(points: visible, currencyCode: currencyCode)
-                }
-                if ranges.count > 1 { rangePicker }
-
-                section("Details") { stats }
-                section("Quotes") {
-                    // The same rows the tab draws, without the rail it hangs
-                    // them from: there the rail ties a run of quotes to the
-                    // client card above it, and here there is one client and
-                    // the page is already about them.
-                    ClientThread(quotes: visibleQuotes, showsRail: false)
-                }
+            VStack(alignment: .leading, spacing: 26) {
+                profileHeader
+                summaryCard
+                quotesSection
+                activitySection
+                clientInformationSection
             }
             .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 36)
         }
         .background(Color(.homeBackground))
         // The name is on the page, in the size it deserves. In the bar it would
@@ -127,18 +92,11 @@ struct ClientDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
-            // Left of the menu, and always there. Hiding it until an address
-            // loads would make the bar rearrange itself a moment after the page
-            // opens — and a client with no address is exactly who needs the
-            // button, because tapping it is how one gets added.
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showMap = true } label: {
-                    Image(systemName: "map")
-                }
-                .accessibilityLabel("Client location")
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button { showMap = true } label: {
+                        Label("View location", systemImage: "map")
+                    }
                     Button {
                         renameText = client.name
                         showRename = true
@@ -201,10 +159,6 @@ struct ClientDetailView: View {
         }
         .task(id: signature) {
             points = await ClientQuotePoint.of(client.quotes, in: currencyCode)
-            // A window that was on offer a moment ago may not be after an edit
-            // or a deletion; landing on one that no longer exists would show an
-            // empty page with no way back to the full history.
-            if !ranges.contains(range) { range = .all }
         }
     }
 
@@ -268,23 +222,24 @@ struct ClientDetailView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Profile
 
-    private var header: some View {
-        HStack(spacing: 14) {
-            InitialsAvatar(name: client.name, size: 64)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(client.name)
-                    .font(.robotoSlab(30, relativeTo: .title))
-                    .foregroundStyle(Color(.mainText))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(span)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
+    private var profileHeader: some View {
+        VStack(spacing: 10) {
+            InitialsAvatar(name: client.name, size: 72)
+
+            Text(client.name)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(Color(.mainText))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+
+            Text(span)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
         }
+        .frame(maxWidth: .infinity)
     }
 
     /// How long they have been a client, and how much they have been sent.
@@ -294,218 +249,274 @@ struct ClientDetailView: View {
         return "Since \(first.formatted(.dateTime.month(.abbreviated).year())) · \(count)"
     }
 
-    // MARK: - The figure
+    // MARK: - Summary
 
-    /// What they are worth, which is what they said yes to — not what they were
-    /// asked for. A quoted total on its own flatters every client equally.
-    private var headline: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(range == .all ? "Won" : "Won · last \(range.spoken ?? "")")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            RollingAmount(value: visible.won.total.amount, code: currencyCode)
-                .font(.robotoSlab(34, relativeTo: .largeTitle).monospacedDigit())
-                .foregroundStyle(Color(.mainText))
-            Text("of \(visible.total.formatted(in: currencyCode)) quoted")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            if let change { changeLine(change) }
+    private var summaryCard: some View {
+        HStack(spacing: 0) {
+            summaryMetric(totalQuotedText, label: "Total quoted")
+            summaryDivider
+            summaryMetric("\(client.quotes.count)", label: "Quotes")
+            summaryDivider
+            summaryMetric(acceptedValueText, label: "Accepted")
         }
-    }
-
-    /// The same window again, one window earlier — the comparison a stock page
-    /// gets for free from yesterday's close.
-    ///
-    /// Only when a window is chosen. Against "all" there is no earlier period
-    /// to hold it up to, and inventing one (the last ninety days, say) would
-    /// put a figure on the page that answers a question the user didn't ask.
-    private var change: Double? {
-        guard range != .all else { return nil }
-        let now = visible.won.total.amount
-        let then = previous.won.total.amount
-        guard now > 0 || then > 0 else { return nil }
-        return now - then
-    }
-
-    private func changeLine(_ delta: Double) -> some View {
-        let rising = delta >= 0
-        let tint = rising ? Color(.statusAcceptedText) : Color(.statusDeclinedText)
-        return HStack(spacing: 4) {
-            Image(systemName: rising ? "arrow.up" : "arrow.down")
-                .font(.caption2.weight(.semibold))
-            Text(AppCurrency.format(abs(delta), code: currencyCode))
-                .font(.footnote.weight(.medium).monospacedDigit())
-            Text("vs previous \(range.spoken ?? "")")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .foregroundStyle(tint)
-        .padding(.top, 2)
-    }
-
-    // MARK: - Range
-
-    /// Only the windows that draw something different from "All" are offered;
-    /// `ClientRange.available` decides, and a client with a short history gets
-    /// no selector rather than four buttons that agree with each other.
-    private var rangePicker: some View {
-        HStack(spacing: 6) {
-            ForEach(ranges) { option in
-                Button {
-                    withAnimation(.snappy(duration: 0.25)) { range = option }
-                } label: {
-                    Text(option.label)
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(option == range ? Color(.mainText) : .secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background {
-                            if option == range {
-                                Capsule().fill(Color(.cardSurface))
-                                Capsule().strokeBorder(Color(.separator), lineWidth: 0.5)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    // MARK: - Sections
-
-    private func section<Content: View>(_ title: String,
-                                        @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-            content()
-        }
-    }
-
-    // MARK: - Stats
-
-    private var stats: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                stat("Accepted", acceptedText, detail: winRateText)
-                divider
-                stat("Average quote", averageText)
-            }
-            Divider()
-            HStack(spacing: 0) {
-                stat("Waiting", waitingText, detail: oldestText)
-                divider
-                stat("Last quoted", lastQuotedText)
-            }
-            Divider()
-            HStack(spacing: 0) {
-                stat("Largest quote", largestText)
-                divider
-                stat("Declined", declinedText)
-            }
-        }
+        .padding(.vertical, 16)
         .background(Color(.cardSurface),
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
     }
 
-    private var divider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(width: 0.5)
-            .frame(maxHeight: .infinity)
-    }
-
-    private func stat(_ label: String, _ value: String, detail: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    private func summaryMetric(_ value: String, label: String) -> some View {
+        VStack(spacing: 5) {
             Text(value)
-                .font(.callout.weight(.medium).monospacedDigit())
+                .font(.headline.monospacedDigit())
                 .foregroundStyle(Color(.mainText))
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            if let detail {
-                Text(detail)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                .minimumScaleFactor(0.65)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 6)
+    }
+
+    private var summaryDivider: some View {
+        Rectangle()
+            .fill(Color(.separator))
+            .frame(width: 0.5, height: 36)
+    }
+
+    private var totalQuotedText: String {
+        guard !points.isEmpty else { return client.singleCurrencyTotal ?? "—" }
+        return points.total.formatted(in: currencyCode)
+    }
+
+    private var acceptedValueText: String {
+        guard !points.isEmpty else { return "—" }
+        let accepted = points.won.total
+        return accepted.counted > 0 ? accepted.formatted(in: currencyCode) : AppCurrency.format(0, code: currencyCode)
+    }
+
+    // MARK: - Quotes
+
+    private var displayedQuotes: [QuoteSummary] {
+        showsAllQuotes ? client.quotes : Array(client.quotes.prefix(3))
+    }
+
+    private var quotesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                sectionHeading("Quotes")
+                Spacer()
+                if client.quotes.count > 3 {
+                    Button(showsAllQuotes ? "Show less" : "See all") {
+                        withAnimation(.snappy(duration: 0.25)) {
+                            showsAllQuotes.toggle()
+                        }
+                    }
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color(.blueAccentText))
+                    .buttonStyle(.plain)
+                }
+            }
+
+            ClientThread(quotes: displayedQuotes, showsRail: false)
+        }
+    }
+
+    // MARK: - Activity
+
+    private struct ActivityEntry: Identifiable {
+        let id: String
+        let title: String
+        let detail: String?
+        let date: Date
+        let tint: Color
+    }
+
+    private var activityEntries: [ActivityEntry] {
+        var entries = client.quotes.prefix(3).map { quote in
+            ActivityEntry(id: quote.id.uuidString,
+                          title: activityTitle(for: quote.effectiveStatus),
+                          detail: quote.displayTitle,
+                          date: quote.createdAt,
+                          tint: QuoteStatusStyle.text(quote.effectiveStatus))
+        }
+        if let first = client.quotes.min(by: { $0.createdAt < $1.createdAt }) {
+            entries.append(ActivityEntry(id: "client-created",
+                                         title: "Client created",
+                                         detail: nil,
+                                         date: first.createdAt,
+                                         tint: Color(.statusMutedText)))
+        }
+        return entries
+    }
+
+    private var activitySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeading("Activity")
+
+            VStack(spacing: 0) {
+                ForEach(Array(activityEntries.enumerated()), id: \.element.id) { index, entry in
+                    activityRow(entry, isLast: index == activityEntries.count - 1)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+            .background(Color(.cardSurface),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+        }
+    }
+
+    private func activityRow(_ entry: ActivityEntry, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(entry.tint)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 6)
+                if !isLast {
+                    Rectangle()
+                        .fill(Color(.separator))
+                        .frame(width: 1, height: 52)
+                }
+            }
+            .frame(width: 10)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(entry.title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color(.mainText))
+                if let detail = entry.detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Text(activityDateLabel(entry.date))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.bottom, isLast ? 10 : 16)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 10)
+    }
+
+    private func activityTitle(for status: String) -> String {
+        switch status {
+        case "viewed": return "Quote viewed"
+        case "sent": return "Quote sent"
+        case "accepted": return "Quote accepted"
+        case "declined": return "Quote declined"
+        case "expired": return "Quote expired"
+        default: return "Quote created"
+        }
+    }
+
+    private func activityDateLabel(_ date: Date) -> String {
+        let seconds = Date().timeIntervalSince(date)
+        if seconds < 86_400 { return quoteRelativeLabel(date) }
+        if Calendar.current.isDateInYesterday(date) { return "Yesterday" }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    // MARK: - Client information
+
+    private var matchingVisits: [ScheduledVisit] {
+        let name = client.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !name.isEmpty else { return [] }
+        return session.visitStore.visits
+            .filter { $0.title.lowercased().contains(name) }
+            .sorted { $0.date > $1.date }
+    }
+
+    private var clientPhone: String? {
+        matchingVisits.compactMap { cleaned($0.phone) }.first
+    }
+
+    private var clientNotes: String? {
+        matchingVisits.compactMap { cleaned($0.note) }.first
+    }
+
+    private var clientInformationSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                sectionHeading("Client information")
+                Spacer()
+                Button("Edit address") { editAddress() }
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color(.blueAccentText))
+                    .buttonStyle(.plain)
+            }
+
+            VStack(spacing: 0) {
+                if let phone = clientPhone {
+                    informationRow("Phone", value: phone)
+                    Divider().padding(.leading, 16)
+                }
+
+                Button { showMap = true } label: {
+                    informationRow("Address",
+                                   value: location.address ?? location.suggestion ?? "Add an address",
+                                   showsDisclosure: true)
+                }
+                .buttonStyle(.plain)
+
+                if let notes = clientNotes {
+                    Divider().padding(.leading, 16)
+                    informationRow("Notes", value: notes)
+                }
+            }
+            .background(Color(.cardSurface),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            )
+        }
+    }
+
+    private func informationRow(_ label: String,
+                                value: String,
+                                showsDisclosure: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(width: 62, alignment: .leading)
+            Text(value)
+                .font(.subheadline)
+                .foregroundStyle(Color(.mainText))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+        .contentShape(.rect)
     }
 
-    /// How many of the client's answered quotes went their way. Not the same
-    /// denominator as the line above it, and deliberately so — see below.
-    private var decided: Int { visible.won.count + visible.declined.count }
-
-    /// Out of everything they have been sent.
-    ///
-    /// It read "1 of 1" against a client holding four quotes, which is true of
-    /// the ones they answered and true of nothing the reader is looking at. The
-    /// figure a page about a client has to survive is the one they can check
-    /// against the list underneath it, so the denominator is every quote in the
-    /// window — the same number the header counts.
-    private var acceptedText: String {
-        guard !visible.isEmpty else { return "—" }
-        return "\(visible.won.count) of \(visible.count)"
+    private func cleaned(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// The rate underneath, over answers rather than over everything.
-    ///
-    /// Both numbers are needed and neither can do the other's job: counting the
-    /// undecided as losses reads as a poor client when they simply haven't
-    /// replied yet, and counting only the decided hides how much is still out
-    /// there. So the line states its own denominator and can't be misread as
-    /// disagreeing with the count above.
-    private var winRateText: String? {
-        guard decided > 0 else {
-            return visible.isEmpty ? nil : "None answered yet"
-        }
-        let rate = Double(visible.won.count) / Double(decided)
-        return rate.formatted(.percent.precision(.fractionLength(0))) + " of answered"
-    }
-
-    private var averageText: String {
-        let total = visible.total
-        guard total.counted > 0 else { return "—" }
-        return AppCurrency.format(total.amount / Double(total.counted), code: currencyCode)
-    }
-
-    private var waitingText: String {
-        let waiting = visible.waiting.total
-        return waiting.counted > 0 ? waiting.formatted(in: currencyCode) : "Nothing"
-    }
-
-    /// Only when something is waiting — an age under "Nothing" would be an age
-    /// of nothing.
-    private var oldestText: String? {
-        guard let oldest = visible.waiting.map(\.date).min() else { return nil }
-        return "Oldest \(oldest.formatted(.relative(presentation: .named)))"
-    }
-
-    private var lastQuotedText: String {
-        visible.map(\.date).max().map { quoteDateLabel($0) } ?? "—"
-    }
-
-    /// The biggest single job they have been quoted, won or not — the ceiling
-    /// on what this client is worth asking for.
-    private var largestText: String {
-        guard let largest = visible.map(\.amount).max() else { return "—" }
-        return AppCurrency.format(largest, code: currencyCode)
-    }
-
-    private var declinedText: String {
-        let declined = visible.declined.total
-        guard declined.counted > 0 else { return "None" }
-        return "\(declined.counted) · \(declined.formatted(in: currencyCode))"
+    private func sectionHeading(_ title: String) -> some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color(.mainText))
     }
 }

@@ -20,15 +20,14 @@ enum AppInfo {
 
     static let supportEmail = "gio.giorgigiorgadze20@gmail.com"
 
-    /// Served by GitHub Pages from `docs/privacy` on main. The path is
-    /// case-sensitive and has to match the repository name exactly — the
-    /// lowercase spelling this used to carry returned a 404.
-    static let privacyPolicyURL = URL(string: "https://giorgiiiigadze.github.io/Verbal/privacy/")!
+    /// Verbal's public home on the web.
+    static let websiteURL = URL(string: "https://www.theverbal.app")!
 
-    /// Same host and the same case-sensitivity trap as the privacy policy.
-    /// Optional in type only now — the row it feeds has to be reachable from
-    /// the paywall once subscriptions ship, and App Review checks.
-    static let termsURL: URL? = URL(string: "https://giorgiiiigadze.github.io/Verbal/terms/")
+    /// The privacy policy shown from onboarding, paywall, and About.
+    static let privacyPolicyURL = URL(string: "https://www.theverbal.app/privacy")!
+
+    /// The terms shown from onboarding, paywall, and About.
+    static let termsURL: URL? = URL(string: "https://www.theverbal.app/terms")
 
     /// Where a shared quote is read. The page is hosted here rather than on the
     /// Supabase function that feeds it because that gateway stamps every

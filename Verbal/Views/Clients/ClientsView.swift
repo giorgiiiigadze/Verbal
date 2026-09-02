@@ -4,10 +4,8 @@
 //
 //  The people you've quoted for, and what you quoted them.
 //
-//  A threaded feed rather than a list of links: each client is a container with
-//  their quotes hanging off it, the way a comment sits above its replies. The
-//  quotes are right there — no tap-through — expanded by default and collapsible
-//  per client.
+//  A quiet, recent-first directory. Each row gives the client's quote count,
+//  quoted value and last activity, then opens their complete history.
 //
 //  Built from the quotes already in the session rather than from a fetch of its
 //  own: the list is preloaded at launch and kept current by Home, so this tab
@@ -21,15 +19,10 @@ import SwiftUI
 
 struct ClientsView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.colorScheme) private var colorScheme
     @State private var searchText = ""
-    /// Clients whose quotes are hidden. Empty by default, so every thread opens
-    /// expanded — the quotes are the point of the screen, not a reveal.
-    @State private var collapsed: Set<Client.ID> = []
 
-    /// How many of a client's quotes the thread shows before it offers the
-    /// rest. Enough to see the shape of recent work, few enough that the next
-    /// client is still on the screen.
-    private static let previewCount = 3
+    private static let cardShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
 
     /// Everyone with a name on at least one quote, most recently quoted first.
     ///
@@ -59,24 +52,6 @@ struct ClientsView: View {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return clients }
         return clients.filter { $0.name.localizedCaseInsensitiveContains(query) }
-    }
-
-    /// While a search is running, matches are shown open regardless of the
-    /// collapse set — hiding the quotes someone is searching for would be odd.
-    private var isSearching: Bool {
-        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private func isExpanded(_ client: Client) -> Bool {
-        isSearching || !collapsed.contains(client.id)
-    }
-
-    private func toggleCollapse(_ client: Client) {
-        if collapsed.contains(client.id) {
-            collapsed.remove(client.id)
-        } else {
-            collapsed.insert(client.id)
-        }
     }
 
     var body: some View {
@@ -117,12 +92,13 @@ struct ClientsView: View {
 
     private var loadingState: some View {
         ScrollView {
-            LazyVStack(spacing: 14) {
+            LazyVStack(spacing: 10) {
                 clientSkeleton(titleWidth: 132, detailWidth: 96)
                 clientSkeleton(titleWidth: 154, detailWidth: 122)
+                clientSkeleton(titleWidth: 104, detailWidth: 86)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 12)
+            .padding(.top, 18)
             .padding(.bottom, 24)
         }
         .shimmer(active: true)
@@ -131,27 +107,22 @@ struct ClientsView: View {
     }
 
     private func clientSkeleton(titleWidth: CGFloat, detailWidth: CGFloat) -> some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .center, spacing: 10) {
             Circle()
                 .fill(Color(.separator))
-                .frame(width: 44, height: 44)
+                .frame(width: 36, height: 36)
             VStack(alignment: .leading, spacing: 8) {
                 skeletonBar(width: titleWidth, height: 15)
                 skeletonBar(width: detailWidth, height: 11)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: 12)
             skeletonBar(width: 18, height: 11)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 8)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.cardSurface),
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        )
+        .background(Color(.cardSurface), in: Self.cardShape)
+        .overlay(Self.cardShape.strokeBorder(Color(.separator), lineWidth: 0.5))
     }
 
     private func skeletonBar(width: CGFloat, height: CGFloat) -> some View {
@@ -161,122 +132,98 @@ struct ClientsView: View {
     }
 
     private var feed: some View {
-        ScrollView {
-            LazyVStack(spacing: 14) {
-                ForEach(filtered) { client in
-                    clientThread(client)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
-        }
-    }
-
-    private func clientThread(_ client: Client) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            clientHeader(client)
-
-            if isExpanded(client) {
-                // Three, then a way through to the rest. The tab is a list of
-                // people; a client with a long history used to bury everyone
-                // after them, and scrolling past one person's back catalogue is
-                // work the client's own page already exists to take.
-                ClientThread(quotes: client.quotes,
-                             limit: Self.previewCount,
-                             seeAll: ClientKey(id: client.id, name: client.name))
-                    .padding(.top, 8)
-                    // A plain cross-fade, no slide. The quotes moving up out of
-                    // the header read as the list glitching; fading them in
-                    // place while the cards below close the gap reads as calm.
-                    .transition(.opacity)
+        List {
+            sectionTitle
+            ForEach(filtered) { client in
+                clientRow(client)
             }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 
-    /// The container: the client, and the shape you tap to fold their quotes
-    /// away. A card so it reads as the parent the thread hangs from.
-    ///
-    /// Two targets in one row. The name opens the client's own page; the
-    /// chevron folds the thread, the way a comment's collapse does. They sit at
-    /// opposite ends with the total between them, so neither is a mis-tap of
-    /// the other — which is why the chevron moved to the trailing edge before
-    /// the page existed.
-    private func clientHeader(_ client: Client) -> some View {
-        HStack(spacing: 12) {
-            // By value, like the quotes below. A closure link would build this
-            // page outside the stack, and the quote destination declared on
-            // this screen would then be out of scope for the thread at the foot
-            // of it — which is how tapping a quote there did nothing at all.
-            NavigationLink(value: ClientKey(id: client.id, name: client.name)) {
-                HStack(spacing: 12) {
-                    // 44, against the ~40 of the two lines beside it. Big enough
-                    // to be the thing you find the row by, and no bigger — past
-                    // that the header outgrows the quote cards hanging off it,
-                    // which is the hierarchy the wrong way up.
-                    InitialsAvatar(name: client.name, size: 44)
+    private var sectionTitle: some View {
+        Text(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+             ? "Recent Clients"
+             : "Search Results")
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.secondary)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 8, trailing: 20))
+    }
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        // Slab, like the headings on Home and a quote's own
-                        // title. A client is a name the app is filed under
-                        // rather than a field on a row, and the serif is what
-                        // the app uses to say so — the quotes hanging beneath
-                        // keep the system face, so the parent and its thread
-                        // stay told apart.
+    private func clientRow(_ client: Client) -> some View {
+        NavigationLink(value: ClientKey(id: client.id, name: client.name)) {
+            HStack(alignment: .center, spacing: 12) {
+                InitialsAvatar(name: client.name, size: 40)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(client.name)
-                            .font(.robotoSlab(17, relativeTo: .headline))
+                            .font(.callout.weight(.medium))
                             .foregroundStyle(Color(.mainText))
                             .lineLimit(1)
-                        Text(client.subtitle)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+
+                        Spacer(minLength: 8)
+
+                        if let total = client.singleCurrencyTotal {
+                            Text(total)
+                                .font(.callout.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(Color(.mainText))
+                                .lineLimit(1)
+                        }
                     }
 
-                    Spacer(minLength: 8)
-
-                    // Only when every one of their quotes is priced in the same
-                    // currency. Adding two currencies into one figure would be a
-                    // number that is true of nothing.
-                    if let total = client.singleCurrencyTotal {
-                        Text(total)
-                            .font(.footnote.weight(.medium).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(meta(for: client))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                // The link takes the whole of its half, blank space included,
-                // or the row only opens where there happens to be ink.
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
 
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) { toggleCollapse(client) }
-            } label: {
-                Image(systemName: isExpanded(client) ? "chevron.down" : "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    // A thumb-sized target around a 12pt glyph. Sharing a row
-                    // with a link, the mark itself is far too small to be the
-                    // whole of it.
-                    .frame(width: 34, height: 34)
-                    .contentShape(.rect)
-                    // No animation on the glyph swap itself — the thread opening
-                    // is the motion; a spinning chevron on top is noise.
-                    .animation(nil, value: isExpanded(client))
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+            .background(Color(.cardSurface), in: Self.cardShape)
+            .overlay(Self.cardShape.strokeBorder(Color(.separator), lineWidth: 0.5))
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.26 : 0.10),
+                    radius: 8, x: 0, y: 3)
+            .contentShape(.contextMenuPreview, Self.cardShape)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 8)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.cardSurface),
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        )
+        .navigationLinkIndicatorVisibility(.hidden)
+        .buttonStyle(CardPressStyle())
+        .accessibilityLabel(accessibilityLabel(for: client))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))
+    }
+
+    private func summary(for client: Client) -> String {
+        let count = "\(client.quotes.count) quote\(client.quotes.count == 1 ? "" : "s")"
+        let value = client.singleCurrencyTotal.map { "\(count) · \($0)" } ?? count
+        guard let activity = activity(for: client) else { return value }
+        return "\(value) · \(activity)"
+    }
+
+    private func meta(for client: Client) -> String {
+        let count = "\(client.quotes.count) quote\(client.quotes.count == 1 ? "" : "s")"
+        guard let activity = activity(for: client) else { return count }
+        return "\(count) · \(activity)"
+    }
+
+    private func activity(for client: Client) -> String? {
+        guard let date = client.lastQuoted else { return nil }
+        let seconds = Date().timeIntervalSince(date)
+        if seconds < 86_400 {
+            return quoteRelativeLabel(date)
+        } else {
+            return date.formatted(.dateTime.month(.abbreviated).day())
+        }
+    }
+
+    private func accessibilityLabel(for client: Client) -> String {
+        "\(client.name), \(summary(for: client))"
     }
 
     // MARK: - Placeholder states
