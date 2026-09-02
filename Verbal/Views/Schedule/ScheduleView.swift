@@ -32,7 +32,7 @@ struct ScheduleView: View {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         return visits.filter { visit in
             let matches = switch filter { case .toQuote: !hasRecordedQuote(for: visit); case .all: true; case .recorded: hasRecordedQuote(for: visit) }
-            return matches && (query.isEmpty || visit.title.localizedCaseInsensitiveContains(query) || (visit.address?.localizedCaseInsensitiveContains(query) ?? false))
+            return matches && (query.isEmpty || visit.title.localizedCaseInsensitiveContains(query) || (visit.clientName?.localizedCaseInsensitiveContains(query) ?? false) || (visit.address?.localizedCaseInsensitiveContains(query) ?? false))
         }
     }
     private var dayVisits: [ScheduledVisit] { filteredVisits.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDay) }.sorted { $0.date < $1.date } }
@@ -89,8 +89,8 @@ struct ScheduleView: View {
     private func liveQuote(_ quote: QuoteSummary) -> QuoteSummary { session.quotes.first { $0.id == quote.id } ?? quote }
     private func recordedQuote(for visit: ScheduledVisit) -> QuoteSummary? {
         if let id = visit.recordedQuoteId { return session.quotes.first { $0.id == id } }
-        let title = visit.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(); guard !title.isEmpty else { return nil }
-        return session.quotes.first { Calendar.current.isDate($0.createdAt, inSameDayAs: visit.date) && ($0.displayTitle.lowercased() == title || $0.clientName?.lowercased() == title) }
+        let key = visit.clientKey; guard !key.isEmpty else { return nil }
+        return session.quotes.first { Calendar.current.isDate($0.createdAt, inSameDayAs: visit.date) && ($0.displayTitle.lowercased() == key || $0.clientName?.lowercased() == key) }
     }
     private func hasRecordedQuote(for visit: ScheduledVisit) -> Bool { visit.recordedQuoteId != nil || recordedQuote(for: visit) != nil }
     private func visitAction(for visit: ScheduledVisit) -> VisitAction { if hasRecordedQuote(for: visit) { return .recorded(recordedQuote(for: visit)) }; let now = Date(); if now >= visit.date.addingTimeInterval(-900), now <= visit.date.addingTimeInterval(1800) { return .happeningNow }; return visit.date < now ? .passed : .future }
@@ -271,7 +271,7 @@ private struct VisitPlacement: Identifiable {
     }
 }
 
-private struct VisitCalendarCard: View { let visit: ScheduledVisit; var body: some View { VStack(alignment: .leading, spacing: 2) { Text(visit.title).font(.caption.weight(.semibold)).lineLimit(1); Text(visit.timeText).font(.caption2).lineLimit(1); if let address = visit.address, !address.isEmpty { Text(address).font(.caption2).lineLimit(1) } }.foregroundStyle(Color(.statusWarningText)).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(8).background(Color(.statusWarningFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous)) } }
+private struct VisitCalendarCard: View { let visit: ScheduledVisit; var body: some View { VStack(alignment: .leading, spacing: 2) { Text(visit.title).font(.caption.weight(.semibold)).lineLimit(1); Text(visit.timeRangeText).font(.caption2).lineLimit(1); if let client = visit.clientName, !client.isEmpty { Text(client).font(.caption2).lineLimit(1) } else if let address = visit.address, !address.isEmpty { Text(address).font(.caption2).lineLimit(1) } }.foregroundStyle(Color(.statusWarningText)).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(8).background(Color(.statusWarningFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous)) } }
 private struct CurrentTimeIndicator: View {
     let date: Date
     let labelWidth: CGFloat

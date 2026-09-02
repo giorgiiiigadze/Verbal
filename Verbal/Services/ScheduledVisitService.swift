@@ -22,7 +22,9 @@ enum ScheduledVisitService {
     private struct Row: Codable {
         let id: UUID
         let title: String
+        let clientName: String?
         let scheduledAt: Date
+        let durationMinutes: Int?
         let phone: String?
         let address: String?
         let note: String?
@@ -32,7 +34,9 @@ enum ScheduledVisitService {
 
         enum CodingKeys: String, CodingKey {
             case id, title, phone, address, note
+            case clientName = "client_name"
             case scheduledAt = "scheduled_at"
+            case durationMinutes = "duration_minutes"
             case recordedQuoteId = "recorded_quote_id"
             case didPromptForMissedVisit = "did_prompt_for_missed_visit"
             case updatedAt = "updated_at"
@@ -41,7 +45,9 @@ enum ScheduledVisitService {
         var visit: ScheduledVisit {
             ScheduledVisit(id: id,
                            title: title,
+                           clientName: clientName,
                            date: scheduledAt,
+                           durationMinutes: durationMinutes ?? ScheduledVisit.defaultDurationMinutes,
                            phone: phone,
                            address: address,
                            note: note,
@@ -56,7 +62,9 @@ enum ScheduledVisitService {
         let id: UUID
         let userId: UUID
         let title: String
+        let clientName: String?
         let scheduledAt: Date
+        let durationMinutes: Int
         let phone: String?
         let address: String?
         let note: String?
@@ -67,7 +75,9 @@ enum ScheduledVisitService {
         enum CodingKeys: String, CodingKey {
             case id, title, phone, address, note
             case userId = "user_id"
+            case clientName = "client_name"
             case scheduledAt = "scheduled_at"
+            case durationMinutes = "duration_minutes"
             case recordedQuoteId = "recorded_quote_id"
             case didPromptForMissedVisit = "did_prompt_for_missed_visit"
             case updatedAt = "updated_at"
@@ -77,7 +87,9 @@ enum ScheduledVisitService {
             id = visit.id
             userId = userID
             title = visit.title
+            clientName = visit.clientName
             scheduledAt = visit.date
+            durationMinutes = visit.durationMinutes
             phone = visit.phone
             address = visit.address
             note = visit.note

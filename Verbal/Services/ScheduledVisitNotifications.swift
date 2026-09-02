@@ -140,9 +140,14 @@ enum ScheduledVisitNotifications {
         guard !privateNotificationContent else {
             return "Upcoming quote reminder"
         }
+        // The client first, if there is one: a notification on a lock screen is
+        // read at a glance, and "Mrs. Patel" tells the user where they are
+        // meant to be in a way "Bathroom rip-out" doesn't.
+        let client = visit.clientName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let title = visit.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return "Your upcoming quote is waiting for you" }
-        return "\(title) is waiting for you"
+        let subject = client.isEmpty ? title : client
+        guard !subject.isEmpty else { return "Your upcoming quote is waiting for you" }
+        return "\(subject) is waiting for you"
     }
 
     nonisolated private static func notificationBody(for visit: ScheduledVisit) -> String {

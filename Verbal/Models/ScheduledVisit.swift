@@ -25,11 +25,22 @@ import Foundation
 
 struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
-    /// What the visit is: a client, a job, or both — "Mrs. Patel — bathroom".
-    /// One field rather than two, because it is written in the ten seconds
-    /// after a phone call and a form asks more than that.
+    /// What the visit is called — "Bathroom rip-out", "Roof survey".
+    ///
+    /// It used to be the client, the job and the label all at once, which is
+    /// why old rows read like names: a visit called "Mrs. Patel" is still a
+    /// perfectly good name for a visit, so nothing had to be rewritten when the
+    /// client moved into `clientName` below.
     var title: String
+    /// Who the visit is for. Free text, because a visit is booked before there
+    /// is a customer row to point at — often before the job is even won.
+    var clientName: String?
+    /// When the visit starts.
     var date: Date
+    /// How long it is booked for. Never zero: a visit with no length is a point
+    /// on the calendar, and two of those an hour apart look the same as two a
+    /// day apart.
+    var durationMinutes: Int
     var phone: String?
     var address: String?
     /// Anything to remember on the way — a gate code, a measurement to take.
@@ -45,13 +56,16 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
     var updatedAt: Date
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, date, phone, address, note, recordedQuoteId, didPromptForMissedVisit
+        case id, title, clientName, date, durationMinutes, phone, address, note
+        case recordedQuoteId, didPromptForMissedVisit
         case updatedAt
     }
 
     init(id: UUID = UUID(),
          title: String,
+         clientName: String? = nil,
          date: Date,
+         durationMinutes: Int = ScheduledVisit.defaultDurationMinutes,
          phone: String? = nil,
          address: String? = nil,
          note: String? = nil,
@@ -60,7 +74,9 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
          updatedAt: Date = .now) {
         self.id = id
         self.title = title
+        self.clientName = clientName
         self.date = date
+        self.durationMinutes = max(ScheduledVisit.minimumDurationMinutes, durationMinutes)
         self.phone = phone
         self.address = address
         self.note = note
@@ -73,7 +89,13 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decode(UUID.self, forKey: .id)
         title = try values.decode(String.self, forKey: .title)
+        clientName = try values.decodeIfPresent(String.self, forKey: .clientName)
         date = try values.decode(Date.self, forKey: .date)
+        // Absent on visits booked before a visit had a length. An hour is the
+        // length of nearly every survey, and it is editable.
+        durationMinutes = max(ScheduledVisit.minimumDurationMinutes,
+                              try values.decodeIfPresent(Int.self, forKey: .durationMinutes)
+                                  ?? ScheduledVisit.defaultDurationMinutes)
         phone = try values.decodeIfPresent(String.self, forKey: .phone)
         address = try values.decodeIfPresent(String.self, forKey: .address)
         note = try values.decodeIfPresent(String.self, forKey: .note)
@@ -85,7 +107,46 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
         updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt) ?? .distantPast
     }
 
+    /// An hour, which is how long a survey takes.
+    static let defaultDurationMinutes = 60
+    /// A quarter of an hour. Short enough for a doorstep look, long enough that
+    /// a mis-drag on the end time can't collapse a visit to nothing.
+    static let minimumDurationMinutes = 15
+
     var isToday: Bool { Calendar.current.isDateInToday(date) }
+
+    /// When the visit is booked until.
+    var endDate: Date { date.addingTimeInterval(TimeInterval(durationMinutes * 60)) }
+
+    /// The person this visit is for, lowercased, for matching against client
+    /// records.
+    ///
+    /// Falls back to the title, which is where the client's name lived before
+    /// it had a field of its own — old visits still find their client.
+    var clientKey: String {
+        let named = clientName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return (named.isEmpty ? title : named)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    /// "1h 30min", "45min", "2h". The quiet label beside the time range —
+    /// the answer to "how long am I there for" without the reader subtracting
+    /// one clock time from another.
+    var durationText: String {
+        let hours = durationMinutes / 60
+        let minutes = durationMinutes % 60
+        switch (hours, minutes) {
+        case (0, _): return "\(minutes)min"
+        case (_, 0): return "\(hours)h"
+        default: return "\(hours)h \(minutes)min"
+        }
+    }
+
+    var endTimeText: String { endDate.formatted(date: .omitted, time: .shortened) }
+
+    /// "09:30 – 11:00".
+    var timeRangeText: String { "\(timeText) – \(endTimeText)" }
 
     /// "Today", "Tomorrow", "Thursday", "Tue 2 Sep".
     ///
@@ -116,6 +177,8 @@ struct ScheduledVisit: Identifiable, Codable, Equatable, Sendable {
 
     var accessibilityText: String {
         let when = date.formatted(.dateTime.weekday(.wide).month(.wide).day().hour().minute())
-        return "\(title), \(when)"
+        let who = clientName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let subject = who.isEmpty ? title : "\(title), for \(who)"
+        return "\(subject), \(when), \(durationText)"
     }
 }

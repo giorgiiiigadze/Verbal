@@ -2,15 +2,20 @@
 //  ScheduleVisitSheet.swift
 //  Verbal
 //
-//  Large-sheet wizard for booking a visit or correcting one already booked.
+//  Books a visit, or corrects one already booked.
 //
-//  Four steps rather than one form: what the job is, where it is, which day,
-//  what time. A visit is written in the ten seconds after a phone call, usually
-//  one-handed on a doorstep, and a single screen asking four things at once is
-//  four decisions to hold at the same time. One question a screen means the answer
-//  is always the only thing under the thumb — and it buys each question the
-//  room for the control it actually wants, a full month on the day step and a
-//  wheel on the time one, neither of which fits a stacked form.
+//  One screen, not four. It was a wizard — what the job is, where it is, which
+//  day, what time — which asked one question at a time on the theory that a
+//  visit is written one-handed in the ten seconds after a phone call. That
+//  theory held for entering a booking and broke for everything else: a user
+//  fixing a time had to walk three screens to reach it, and nobody could see
+//  the whole booking at once to check it against what they'd just been told on
+//  the phone.
+//
+//  So: a native form sheet, read top to bottom in the order the phone call
+//  gives you the facts. What the job is called, when it is and how long for,
+//  who it's for, where. The header carries Cancel and Book, which is the sheet
+//  iOS users already know how to leave.
 //
 
 import SwiftUI
@@ -23,43 +28,29 @@ struct ScheduleVisitSheet: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
-    @State private var step: Step = .details
-    /// Which way the last move went, so the steps slide in from the side they
-    /// came from rather than always from the right.
-    @State private var isAdvancing = true
+
     @State private var title = ""
+    @State private var clientName = ""
     @State private var phone = ""
     @State private var address = ""
     @State private var note = ""
-    @State private var date = ScheduleVisitSheet.defaultDate
-    @State private var recent: [String] = []
+    @State private var start = ScheduleVisitSheet.defaultDate
+    @State private var end = ScheduleVisitSheet.defaultDate
+        .addingTimeInterval(TimeInterval(ScheduledVisit.defaultDurationMinutes * 60))
+    /// True once the address row has been opened, so the field replaces the
+    /// button in place rather than the row carrying an empty field forever.
+    @State private var showingAddressField = false
+    @State private var showingNoteField = false
+    @State private var showingClientSheet = false
     /// True while the removal alert is up.
     @State private var confirmingRemoval = false
     @FocusState private var titleFocused: Bool
     @FocusState private var addressFocused: Bool
-
-    private enum Step: Int, CaseIterable, Identifiable, Comparable {
-        case details, location, day, time
-
-        var id: Int { rawValue }
-
-        static func < (lhs: Step, rhs: Step) -> Bool { lhs.rawValue < rhs.rawValue }
-
-        /// The question, asked in the title bar. The screen underneath is then
-        /// only the answer, and needs no heading of its own.
-        var heading: String {
-            switch self {
-            case .details: return "Who's it for?"
-            case .location: return "Add an address"
-            case .day: return "Which day?"
-            case .time: return "What time?"
-            }
-        }
-    }
+    @FocusState private var noteFocused: Bool
 
     /// Tomorrow at the current time. A visit booked on the phone is nearly
-    /// always "in the next few days", while the time wheel should begin where
-    /// the user already is instead of forcing them back to a fixed morning slot.
+    /// always "in the next few days", and the time should begin where the user
+    /// already is instead of a fixed morning slot.
     private static var defaultDate: Date {
         let calendar = Calendar.current
         let now = Date()
@@ -75,77 +66,64 @@ struct ScheduleVisitSheet: View {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var trimmedClient: String {
+        clientName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var trimmedAddress: String {
         address.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// The time wheel sits directly on the dark sheet surface. A white accent
-    /// keeps its current choice legible without introducing the recording
-    /// flow's blue into this quiet wizard.
-    private var stepAccentColor: Color { .white }
+    /// The name is the only thing a visit can't be booked without. Everything
+    /// else on this sheet is something the user may not know yet.
+    private var canSave: Bool { !trimmedTitle.isEmpty }
 
-    /// The name is the only thing required, and only the step that asks for it
-    /// can be blocked — a day and a time always have an answer in them.
-    private var canContinue: Bool {
-        step != .details || !trimmedTitle.isEmpty
+    /// Minutes between the two time controls, floored at the minimum — the end
+    /// picker can be dragged behind the start, and a negative visit is not a
+    /// thing.
+    private var durationMinutes: Int {
+        let minutes = Int(end.timeIntervalSince(start) / 60)
+        return max(ScheduledVisit.minimumDurationMinutes, minutes)
     }
 
-    /// Names quoted before, offered only while the field is empty. Once there
-    /// is something typed they'd be guessing at a sentence already being
-    /// written.
-    private var suggestions: [String] {
-        trimmedTitle.isEmpty ? Array(recent.prefix(6)) : []
+    /// "1h 30min" — the grey label beside the range. Built from the live state
+    /// rather than the model, because the model doesn't exist until Book.
+    private var durationText: String {
+        let hours = durationMinutes / 60
+        let minutes = durationMinutes % 60
+        switch (hours, minutes) {
+        case (0, _): return "\(minutes)min"
+        case (_, 0): return "\(hours)h"
+        default: return "\(hours)h \(minutes)min"
+        }
     }
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 20) {
-                Group {
-                    switch step {
-                    case .details: detailsStep
-                    case .location: locationStep
-                    case .day: dayStep
-                    case .time: timeStep
-                    }
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    nameField
+                    divider
+                    whenBlock
+                    divider
+                    clientRow
+                    divider
+                    locationRow
+                    divider
+                    noteRow
                 }
-                .transition(.asymmetric(
-                    insertion: .move(edge: isAdvancing ? .trailing : .leading).combined(with: .opacity),
-                    removal: .move(edge: isAdvancing ? .leading : .trailing).combined(with: .opacity)
-                ))
-
-                Spacer(minLength: 0)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
-            .padding(.top, 16)
-            // Inset per step rather than here, so the recent-names row can run
-            // the full width of the sheet while everything else stays in 24.
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .scrollDismissesKeyboard(.interactively)
             .background(Color(.homeBackground))
-            .navigationTitle(step.heading)
+            .navigationTitle(editing == nil ? "New visit" : "Visit")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Color(.homeBackground), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    // Back once there is somewhere to go back to. Closing is
-                    // still a swipe down from anywhere, so the way out isn't
-                    // lost with the button.
-                    if step == .details {
-                        Button(role: .close) { dismiss() }
-                    } else {
-                        Button {
-                            move(to: Step(rawValue: step.rawValue - 1) ?? .details)
-                        } label: {
-                            Image(systemName: "chevron.left")
-                        }
-                        .accessibilityLabel("Back")
-                    }
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Text("\(step.rawValue + 1)/\(Step.allCases.count)")
-                        .font(.subheadline.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Step \(step.rawValue + 1) of \(Step.allCases.count)")
+                    Button("Cancel") { dismiss() }
                 }
 
                 if editing != nil, onDelete != nil {
@@ -159,23 +137,28 @@ struct ScheduleVisitSheet: View {
                         .accessibilityLabel("Remove visit")
                     }
                 }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(editing == nil ? "Book" : "Save", action: save)
+                        .fontWeight(.semibold)
+                        .disabled(!canSave)
+                }
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 10) {
-                    // Keep the forward action distinct from the app's blue
-                    // recording controls: this is a dark, pill-shaped action.
-                    Button(action: primaryAction) {
-                        Text(primaryTitle)
-                            .font(.headline)
-                            .foregroundStyle(colorScheme == .dark ? Color(.homeBackground) : .white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(canContinue ? Color(.mainText) : Color(.mainText).opacity(0.35),
-                                        in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canContinue)
+                // The same action as the header's, in the place the thumb
+                // already is. The header button is what makes the sheet read as
+                // native; this one is what gets pressed.
+                Button(action: save) {
+                    Text(editing == nil ? "Book a visit" : "Save changes")
+                        .font(.headline)
+                        .foregroundStyle(colorScheme == .dark ? Color(.homeBackground) : .white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(canSave ? Color(.mainText) : Color(.mainText).opacity(0.35),
+                                    in: Capsule())
                 }
+                .buttonStyle(.plain)
+                .disabled(!canSave)
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
@@ -183,12 +166,11 @@ struct ScheduleVisitSheet: View {
             }
         }
         .background(Color(.homeBackground))
-        .animation(.easeInOut(duration: 0.2), value: suggestions)
+        .sheet(isPresented: $showingClientSheet) {
+            ClientSheet(name: $clientName)
+        }
         // Same shape as the delete confirmations on Home: a question, the
-        // action named plainly, and Cancel. The swipe on the row itself still
-        // goes straight through — a swipe is already a deliberate gesture,
-        // where this is a button sitting under the thumb that was about to
-        // press Next.
+        // action named plainly, and Cancel.
         .alert("Remove this visit?", isPresented: $confirmingRemoval) {
             Button("Remove", role: .destructive) {
                 if let editing, let onDelete {
@@ -200,238 +182,234 @@ struct ScheduleVisitSheet: View {
         } message: {
             Text("“\(trimmedTitle.isEmpty ? (editing?.title ?? "This visit") : trimmedTitle)” comes off your upcoming list. Any quotes you've already made are untouched.")
         }
+        // Dragging the start moves the whole visit and keeps its length: the
+        // user who slides a 90-minute survey from 10 to 11 means it is still 90
+        // minutes. Dragging the end is the only way to change the length.
+        .onChange(of: start) { previous, current in
+            let length = end.timeIntervalSince(previous)
+            end = current.addingTimeInterval(max(length, TimeInterval(ScheduledVisit.minimumDurationMinutes * 60)))
+        }
+        .onChange(of: clientName) { _, name in
+            // A client picked on a visit with no address yet: use the one
+            // already on file for them rather than asking for it again.
+            guard trimmedAddress.isEmpty else { return }
+            let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return }
+            Task {
+                if let known = try? await QuoteService.customerAddress(named: name),
+                   trimmedAddress.isEmpty {
+                    address = known
+                    showingAddressField = true
+                }
+            }
+        }
         .task {
             if let editing {
                 title = editing.title
-                date = editing.date
+                clientName = editing.clientName ?? ""
+                start = editing.date
+                end = editing.endDate
                 phone = editing.phone ?? ""
                 address = editing.address ?? ""
                 note = editing.note ?? ""
+                showingAddressField = !(editing.address ?? "").isEmpty
+                showingNoteField = !(editing.note ?? "").isEmpty
             } else {
-                recent = (try? await QuoteService.customerNames()) ?? []
                 try? await Task.sleep(for: .seconds(0.35))
                 titleFocused = true
             }
         }
     }
 
-    // MARK: - Steps
+    // MARK: - Blocks
 
-    /// Name and description. Both belong to the same question — what is this
-    /// visit — so they are asked together and nothing else is on the screen.
-    private var detailsStep: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
-                TextField("Who's it for? (e.g. Mrs. Patel — bathroom)", text: $title)
-                    .textFieldStyle(.plain)
-                    .font(.body)
-                    .foregroundStyle(Color(.mainText))
-                    .textInputAutocapitalization(.sentences)
-                    .submitLabel(.next)
-                    .focused($titleFocused)
-                    .onSubmit { if canContinue { move(to: .location) } }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    // Tinted, not white. The sheet behind it is white, so a
-                    // white field was a hairline outline around nothing.
-                    .background(Color(.fieldFill),
-                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color(.royalBlue600).opacity(0.18), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 24)
-
-                if !suggestions.isEmpty { recentNames }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Phone (optional)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField("Client phone number", text: $phone)
-                        .textFieldStyle(.plain)
-                        .font(.body)
-                        .foregroundStyle(Color(.mainText))
-                        .keyboardType(.phonePad)
-                        .textContentType(.telephoneNumber)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                        .background(Color(.fieldFill),
-                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(Color(.separator), lineWidth: 0.5)
-                        )
-                }
-                .padding(.horizontal, 24)
-
-            }
-            // Room for the keyboard, which covers the lower half of the sheet
-            // while this step is the one on screen.
-            .padding(.bottom, 12)
-        }
-        .scrollBounceBehavior(.basedOnSize)
+    private var divider: some View {
+        Divider()
+            .overlay(Color(.separator).opacity(0.6))
+            .padding(.leading, 24)
     }
 
-    private var locationStep: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Address (optional)")
-                        .font(.caption)
+    /// The name, in the size of a heading, because it is the one thing on this
+    /// sheet that titles everything else.
+    private var nameField: some View {
+        TextField("Quote name", text: $title)
+            .textFieldStyle(.plain)
+            .font(.title2.weight(.semibold))
+            .foregroundStyle(Color(.mainText))
+            .textInputAutocapitalization(.sentences)
+            .submitLabel(.done)
+            .focused($titleFocused)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
+    }
+
+    /// When it is and how long for, as one question. A start, an end, and the
+    /// length between them stated rather than left to be worked out.
+    private var whenBlock: some View {
+        HStack(alignment: .top, spacing: 14) {
+            rowIcon("clock")
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    DatePicker("Starts",
+                               selection: $start,
+                               displayedComponents: [.hourAndMinute])
+                        .labelsHidden()
+
+                    Image(systemName: "arrow.right")
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
+
+                    DatePicker("Ends",
+                               selection: $end,
+                               displayedComponents: [.hourAndMinute])
+                        .labelsHidden()
+
+                    Text(durationText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Lasts \(durationText)")
+                }
+
+                DatePicker("Day",
+                           selection: $start,
+                           in: Calendar.current.startOfDay(for: Date())...,
+                           displayedComponents: [.date])
+                    .labelsHidden()
+            }
+            .tint(Color(.blueAccentText))
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+    }
+
+    private var clientRow: some View {
+        Button {
+            showingClientSheet = true
+        } label: {
+            HStack(spacing: 14) {
+                rowIcon("person")
+                Text(trimmedClient.isEmpty ? "Client" : trimmedClient)
+                    .font(.body)
+                    .foregroundStyle(trimmedClient.isEmpty ? Color.secondary : Color(.mainText))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .contentShape(.rect)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(trimmedClient.isEmpty ? "Add a client" : "Client, \(trimmedClient)")
+    }
+
+    /// The address, and the phone with it — both are "how do I reach this job",
+    /// and neither is worth a divider of its own.
+    private var locationRow: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if showingAddressField {
+                HStack(alignment: .top, spacing: 14) {
+                    rowIcon("mappin.and.ellipse")
                     TextField("Street, town, or postcode", text: $address, axis: .vertical)
                         .textFieldStyle(.plain)
                         .font(.body)
                         .foregroundStyle(Color(.mainText))
-                        .lineLimit(1...2)
+                        .lineLimit(1...3)
                         .textInputAutocapitalization(.words)
-                        .submitLabel(.next)
                         .focused($addressFocused)
-                        .onSubmit { move(to: .day) }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                        .background(Color(.fieldFill),
-                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(Color(.separator), lineWidth: 0.5)
-                        )
                 }
-
-                Text("Optional — add it to get directions later.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 12)
-        }
-        .scrollBounceBehavior(.basedOnSize)
-    }
-
-    /// A whole month, because "which day" is a question about where a date sits
-    /// in the week — the compact field answers it as text and makes the user do
-    /// that conversion themselves.
-    private var dayStep: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            DatePicker("",
-                       selection: $date,
-                       in: Calendar.current.startOfDay(for: Date())...,
-                       displayedComponents: [.date])
-                .labelsHidden()
-                .datePickerStyle(.graphical)
-                // Main text is unambiguous against the pale calendar surface,
-                // making the selected day easy to spot.
-                .tint(Color(.mainText))
-                // Its own inset would sit the grid a step in from everything
-                // else on the sheet.
-                .padding(.horizontal, -8)
-        }
-        .padding(.horizontal, 24)
-    }
-
-    /// The wheel rather than the compact field: this step has the screen to
-    /// itself, and a wheel is a thumb-drag where the field is a tap, a popover
-    /// and then a drag.
-    private var timeStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            DatePicker("",
-                       selection: $date,
-                       displayedComponents: [.hourAndMinute])
-                .labelsHidden()
-                .datePickerStyle(.wheel)
-                .tint(stepAccentColor)
-                .frame(maxWidth: .infinity)
-                // A full-height wheel gives the thumb more than one or two
-                // nearby values to compare, which is the entire advantage of
-                // asking time on its own step.
-                .frame(height: 340)
-        }
-        .padding(.horizontal, 24)
-    }
-
-    // MARK: - Chrome
-
-    /// The same offer the client sheet makes, in the same shape: people quoted
-    /// before are one tap rather than typed again.
-    private var recentNames: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Recent")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 24)
-
-            // Full width, with the sheet's inset carried by the chips instead
-            // of the row: the first name lines up with the field above it, and
-            // the rest run off the edge of the screen rather than being cut
-            // short by the padding a chip early.
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(suggestions, id: \.self) { name in
-                        Button {
-                            title = name
-                        } label: {
-                            Text(name)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(Color(.blueAccentText))
-                                .lineLimit(1)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 9)
-                                .background(Color(.royalBlue25), in: Capsule())
-                        }
-                        .buttonStyle(.plain)
+            } else {
+                Button {
+                    showingAddressField = true
+                    addressFocused = true
+                } label: {
+                    HStack(spacing: 14) {
+                        rowIcon("mappin.and.ellipse")
+                        Text("Location")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
                     }
+                    .contentShape(.rect)
                 }
-                .padding(.horizontal, 24)
+                .buttonStyle(.plain)
             }
-            .scrollIndicators(.hidden)
+
+            HStack(spacing: 14) {
+                rowIcon("phone")
+                TextField("Phone", text: $phone)
+                    .textFieldStyle(.plain)
+                    .font(.body)
+                    .foregroundStyle(Color(.mainText))
+                    .keyboardType(.phonePad)
+                    .textContentType(.telephoneNumber)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .transition(.opacity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
     }
 
-    private var primaryTitle: String {
-        switch step {
-        case .details, .day:
-            return "Next"
-        case .location:
-            return trimmedAddress.isEmpty ? "Skip for now" : "Continue"
-        case .time:
-            return editing == nil ? "Book visit" : "Update visit"
+    /// A gate code, a measurement to take. It has always been stored and until
+    /// now there was nowhere to type it.
+    private var noteRow: some View {
+        Group {
+            if showingNoteField {
+                HStack(alignment: .top, spacing: 14) {
+                    rowIcon("text.alignleft")
+                    TextField("Anything to remember", text: $note, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.body)
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1...4)
+                        .textInputAutocapitalization(.sentences)
+                        .focused($noteFocused)
+                }
+            } else {
+                Button {
+                    showingNoteField = true
+                    noteFocused = true
+                } label: {
+                    HStack(spacing: 14) {
+                        rowIcon("text.alignleft")
+                        Text("Note")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
     }
 
-    // MARK: - Moving
-
-    private func primaryAction() {
-        guard canContinue else { return }
-        switch step {
-        case .details: move(to: .location)
-        case .location: move(to: .day)
-        case .day: move(to: .time)
-        case .time: save()
-        }
+    /// Every row starts on the same vertical line, so the icons read as a
+    /// column of what-kind-of-thing markers rather than decoration.
+    private func rowIcon(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .frame(width: 22, alignment: .leading)
+            .accessibilityHidden(true)
     }
 
-    private func move(to next: Step) {
-        isAdvancing = next > step
-        // Text-entry keyboards belong to the first two steps, and left up they
-        // would cover half of the month grid the next one draws.
-        titleFocused = false
-        addressFocused = false
-        withAnimation(.snappy(duration: 0.25)) { step = next }
-    }
+    // MARK: - Saving
 
     private func save() {
-        guard !trimmedTitle.isEmpty else { return }
+        guard canSave else { return }
         let cleanPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         onSave(ScheduledVisit(id: editing?.id ?? UUID(),
                               title: trimmedTitle,
-                              date: date,
+                              clientName: trimmedClient.isEmpty ? nil : trimmedClient,
+                              date: start,
+                              durationMinutes: durationMinutes,
                               phone: cleanPhone.isEmpty ? nil : cleanPhone,
-                              address: cleanAddress.isEmpty ? nil : cleanAddress,
+                              address: trimmedAddress.isEmpty ? nil : trimmedAddress,
                               note: cleanNote.isEmpty ? nil : cleanNote,
                               recordedQuoteId: editing?.recordedQuoteId,
                               didPromptForMissedVisit: editing?.didPromptForMissedVisit ?? false))

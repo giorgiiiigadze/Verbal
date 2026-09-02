@@ -580,12 +580,12 @@ struct HomeView: View {
         if let id = visit.recordedQuoteId {
             return quotes.contains { $0.id == id } || session.quotes.contains { $0.id == id }
         }
-        let visitTitle = visit.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !visitTitle.isEmpty else { return false }
+        let visitKey = visit.clientKey
+        guard !visitKey.isEmpty else { return false }
         return quotes.contains { quote in
             Calendar.current.isDate(quote.createdAt, inSameDayAs: visit.date)
-                && (quote.displayTitle.lowercased() == visitTitle
-                    || quote.clientName?.lowercased() == visitTitle)
+                && (quote.displayTitle.lowercased() == visitKey
+                    || quote.clientName?.lowercased() == visitKey)
         }
     }
 
@@ -603,6 +603,17 @@ struct HomeView: View {
                         .font(.headline)
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(1)
+
+                    // Who it's for, quietly under the name of the job. Only
+                    // when there is one — visits booked before clients had a
+                    // field of their own already say the name in the title.
+                    if let client = visit.clientName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !client.isEmpty {
+                        Text(client)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
 
                     // Today's visit is the only one that changes what the user
                     // does next, so it is the only one that takes the accent.
@@ -751,12 +762,12 @@ struct HomeView: View {
             return quotes.first { $0.id == id } ?? session.quotes.first { $0.id == id }
         }
 
-        let visitTitle = visit.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !visitTitle.isEmpty else { return nil }
+        let visitKey = visit.clientKey
+        guard !visitKey.isEmpty else { return nil }
         return quotes.first { quote in
             Calendar.current.isDate(quote.createdAt, inSameDayAs: visit.date)
-                && (quote.displayTitle.lowercased() == visitTitle
-                    || quote.clientName?.lowercased() == visitTitle)
+                && (quote.displayTitle.lowercased() == visitKey
+                    || quote.clientName?.lowercased() == visitKey)
         }
     }
 
@@ -1766,6 +1777,7 @@ struct UpcomingVisitCardRow: View {
     }
 
     private var subtitle: String {
+        if let client = clean(visit.clientName) { return client }
         if let address = clean(visit.address) { return address }
         if let note = clean(visit.note) { return note }
         return visit.whenText
@@ -1810,9 +1822,16 @@ struct VisitActionSheet: View {
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(2)
 
-                    Text(visit.date.formatted(.dateTime.weekday(.wide).month(.wide).day().hour().minute()))
+                    Text("\(visit.date.formatted(.dateTime.weekday(.wide).month(.wide).day())) · \(visit.timeRangeText)")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
+
+                    if let client = visit.clientName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !client.isEmpty {
+                        Text(client)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 12) {

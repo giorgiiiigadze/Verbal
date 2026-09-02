@@ -436,7 +436,7 @@ struct ClientDetailView: View {
         let name = client.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !name.isEmpty else { return [] }
         return session.visitStore.visits
-            .filter { $0.title.lowercased().contains(name) }
+            .filter { $0.clientKey.contains(name) }
             .sorted { $0.date > $1.date }
     }
 

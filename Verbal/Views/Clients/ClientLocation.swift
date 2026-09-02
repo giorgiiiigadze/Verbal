@@ -171,7 +171,7 @@ final class ClientLocation {
         let needle = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return [] }
         return visits
-            .filter { $0.title.lowercased().contains(needle) }
+            .filter { $0.clientKey.contains(needle) }
             .sorted { $0.date < $1.date }
     }
 
