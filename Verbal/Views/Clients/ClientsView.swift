@@ -21,6 +21,7 @@ struct ClientsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.colorScheme) private var colorScheme
     @State private var searchText = ""
+    @State private var isSearching = false
 
     private static let cardShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
 
@@ -70,15 +71,18 @@ struct ClientsView: View {
         .modifier(ClientsDestinations())
         .navigationTitle("Clients")
         .navigationBarTitleDisplayMode(.inline)
-        // Drawn out across the header, not minimised into a magnifying glass in
-        // the corner. The field is the first thing anyone with more than a
-        // screenful of clients wants, and a button that has to be tapped before
-        // it becomes a field puts a step in front of it. `.always` keeps it
-        // there while the feed scrolls rather than letting it hide on the way
-        // down.
-        .searchable(text: $searchText,
-                    placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Search clients")
+        .modifier(SearchWhenAsked(isActive: isSearching,
+                                  text: $searchText,
+                                  isPresented: $isSearching,
+                                  prompt: "Search clients"))
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { isSearching = true } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("Search clients")
+            }
+        }
         // Asked for on every appearance, so arriving here after recording or
         // deleting a quote shows that, rather than whatever the list happened to
         // hold when the app started. This screen keeps no copy of its own —
@@ -133,7 +137,7 @@ struct ClientsView: View {
 
     private var feed: some View {
         List {
-            sectionTitle
+            directoryHeader
             ForEach(filtered) { client in
                 clientRow(client)
             }
@@ -142,15 +146,22 @@ struct ClientsView: View {
         .scrollContentBackground(.hidden)
     }
 
-    private var sectionTitle: some View {
-        Text(searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-             ? "Recent Clients"
-             : "Search Results")
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(.secondary)
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 8, trailing: 20))
+    private var directoryHeader: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            AvatarView(image: session.avatarImage,
+                       urlString: session.profile?.avatarUrl,
+                       size: 80)
+            Text("Your client list")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color(.mainText))
+            Text("\(clients.count) client\(clients.count == 1 ? "" : "s") you've quoted for")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 16, leading: 20, bottom: 14, trailing: 20))
     }
 
     private func clientRow(_ client: Client) -> some View {
@@ -249,4 +260,5 @@ struct ClientsView: View {
             EmptyView()
         }
     }
+
 }

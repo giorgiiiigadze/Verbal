@@ -466,11 +466,12 @@ struct RateCardView: View {
     /// — the user knows what a rate card is, they just emptied theirs, and the
     /// screen's job is to say so and offer the way back.
     private var noRatesState: some View {
-        // `rectangle.stack` is the tab's own icon unfilled: the bar is showing
-        // the solid version at the same moment, so the hollow one reads as the
-        // same thing with nothing in it.
+        // The rate-card tag is a custom asset rather than an SF Symbol, so the
+        // empty state speaks in the same visual language as the rate-card intro.
         EmptyStateMessage(
             icon: "rectangle.stack",
+            assetIcon: "RateCardIntroTag",
+            assetIconSize: 64,
             title: "No rates saved",
             message: "Add the prices you quote most and they'll fill themselves in next time."
         ) {

@@ -3,8 +3,9 @@
 // GET  /quote/<token>   the quote as JSON, and marks it viewed
 // POST /quote/<token>   { action: "accept" | "decline" }
 //
-// This returns data, not a page, and the page lives on GitHub Pages. Not a
-// preference: Supabase's gateway stamps every function response with
+// This returns data, not a page, and the page lives on the marketing site at
+// theverbal.app.
+// Not a preference: Supabase's gateway stamps every function response with
 // `content-security-policy: default-src 'none'; sandbox` and rewrites the
 // content type to text/plain, so HTML served from *.supabase.co arrives
 // unstyled, unscripted, and with forms disabled. Sensible of them — it is a
@@ -34,7 +35,8 @@ const TOKEN_PATTERN = /^[0-9a-f]{32}$/;
 /// this endpoint changes quote statuses, and any site being able to call it
 /// from a visitor's browser is a wider door than it needs.
 const ALLOWED_ORIGINS = [
-  "https://giorgiiiigadze.github.io",
+  "https://www.theverbal.app", // canonical: the apex redirects here
+  "https://theverbal.app",
 ];
 
 function allowedOrigin(origin: string | null): string | null {

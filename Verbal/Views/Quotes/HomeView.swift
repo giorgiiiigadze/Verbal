@@ -1709,6 +1709,8 @@ struct UpcomingVisitCardRow: View {
     let statusLabel: String
     let onTap: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         let rowShape = RoundedRectangle(cornerRadius: 18, style: .continuous)
 
@@ -1753,6 +1755,8 @@ struct UpcomingVisitCardRow: View {
                 rowShape.fill(Color(.cardSurface))
             }
             .overlay(rowShape.strokeBorder(Color(.separator), lineWidth: 0.5))
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0 : 0.10),
+                    radius: 8, x: 0, y: 3)
             .contentShape(.interaction, rowShape)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(visit.accessibilityText)

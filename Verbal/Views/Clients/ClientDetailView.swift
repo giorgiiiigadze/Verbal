@@ -260,43 +260,33 @@ struct ClientDetailView: View {
     // MARK: - Summary
 
     private var summaryCard: some View {
-        HStack(spacing: 0) {
-            summaryMetric(totalQuotedText, label: "Total quoted")
-            summaryDivider
-            summaryMetric("\(client.quotes.count)", label: "Quotes")
-            summaryDivider
-            summaryMetric(acceptedValueText, label: "Accepted")
+        VStack(spacing: 22) {
+            HStack(alignment: .top, spacing: 38) {
+                summaryMetric(totalQuotedText, label: "Total quoted", alignment: .center)
+                summaryMetric(acceptedValueText, label: "Accepted", alignment: .center)
+            }
+
+            Rectangle()
+                .fill(Color(.separator))
+                .frame(height: 0.5)
         }
-        .padding(.vertical, 16)
-        .background(Color(.cardSurface),
-                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        )
-        .shadow(color: cardShadow, radius: 12, y: 4)
+        .padding(.top, 2)
     }
 
-    private func summaryMetric(_ value: String, label: String) -> some View {
-        VStack(spacing: 5) {
+    private func summaryMetric(_ value: String,
+                               label: String,
+                               alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 5) {
             Text(value)
-                .font(.headline.monospacedDigit())
+                .font(.title3.weight(.semibold).monospacedDigit())
                 .foregroundStyle(Color(.mainText))
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
             Text(label)
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 6)
-    }
-
-    private var summaryDivider: some View {
-        Rectangle()
-            .fill(Color(.separator))
-            .frame(width: 0.5, height: 36)
     }
 
     private var totalQuotedText: String {

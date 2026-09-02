@@ -22,6 +22,8 @@ struct EmptyStateMessage<Actions: View>: View {
     let icon: String
     /// Optional asset for the few empty states that have a custom illustration.
     var assetIcon: String? = nil
+    /// Kept per-state: some illustrations have finer detail than others.
+    var assetIconSize: CGFloat = 44
     let title: String
     let message: String
     @ViewBuilder var actions: Actions
@@ -35,7 +37,7 @@ struct EmptyStateMessage<Actions: View>: View {
                     Image(assetIcon)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 44, height: 44)
+                        .frame(width: assetIconSize, height: assetIconSize)
                         // Custom illustrations need a little more ink than an
                         // SF Symbol to retain their line detail, but remain
                         // quieter than the empty-state title.

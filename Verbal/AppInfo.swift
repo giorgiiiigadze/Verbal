@@ -29,13 +29,19 @@ enum AppInfo {
     /// The terms shown from onboarding, paywall, and About.
     static let termsURL: URL? = URL(string: "https://www.theverbal.app/terms")
 
-    /// Where a shared quote is read. The page is hosted here rather than on the
-    /// Supabase function that feeds it because that gateway stamps every
-    /// response with `content-security-policy: default-src 'none'; sandbox` and
-    /// rewrites the content type to text/plain — sensible on a shared domain,
-    /// but it leaves HTML unstyled and its buttons dead.
+    /// Where a shared quote is read. The page is hosted on the marketing site
+    /// rather than on the Supabase function that feeds it because that gateway
+    /// stamps every response with `content-security-policy: default-src 'none';
+    /// sandbox` and rewrites the content type to text/plain — sensible on a
+    /// shared domain, but it leaves HTML unstyled and its buttons dead.
+    ///
+    /// The origin here must match an entry in the quote function's
+    /// `ALLOWED_ORIGINS`, or the page's fetch is refused by CORS. `www` is the
+    /// canonical host — the apex redirects to it — so this points straight at
+    /// `www` rather than taking a redirect hop that would drop the trailing
+    /// slash and could drop the token in the fragment with it.
     static func shareURL(token: String) -> URL? {
-        URL(string: "https://giorgiiiigadze.github.io/Verbal/q/#\(token)")
+        URL(string: "https://www.theverbal.app/q/#\(token)")
     }
 
     /// Nil until the app is on the App Store and has a numeric id. Until then
