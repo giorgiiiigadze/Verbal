@@ -134,13 +134,11 @@ private struct VisitsDaySelector: View {
             Spacer()
             Text(selectedDay.formatted(.dateTime.weekday(.wide)))
                 .font(.headline.weight(.medium))
-                .foregroundStyle(Color(.mainText))
             Text(selectedDay.formatted(.dateTime.day()))
                 .font(.headline.weight(.semibold))
                 .monospacedDigit()
-                .foregroundStyle(.white)
                 .frame(width: 36, height: 36)
-                .background(Color(.royalBlue600), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .background(.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             Spacer()
 
             Button { moveDay(1) } label: {
@@ -150,11 +148,10 @@ private struct VisitsDaySelector: View {
             }
             .accessibilityLabel("Next day")
         }
+        .foregroundStyle(.white)
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: 56)
-        .background(Color(.fieldFill))
-        .overlay(alignment: .top) { Rectangle().fill(Color(.separator).opacity(0.55)).frame(height: 0.5) }
-        .overlay(alignment: .bottom) { Rectangle().fill(Color(.separator).opacity(0.55)).frame(height: 0.5) }
+        .background(Color("DaySelectorBar"))
         .accessibilityElement(children: .contain)
     }
 
@@ -284,12 +281,12 @@ private struct CurrentTimeIndicator: View {
             Text(date.formatted(date: .omitted, time: .shortened))
                 .font(.caption2.weight(.semibold))
                 .monospacedDigit()
-                .foregroundStyle(.white)
+                .foregroundStyle(Color(.mainText))
                 .lineLimit(1)
                 .frame(width: labelWidth - 12, alignment: .trailing)
                 .padding(.trailing, 12)
-            Circle().fill(.white).frame(width: 6, height: 6)
-            Rectangle().fill(.white).frame(height: 1)
+            Circle().fill(Color(.mainText)).frame(width: 6, height: 6)
+            Rectangle().fill(Color(.mainText)).frame(height: 1)
         }
         .accessibilityLabel("Current time, \(date.formatted(date: .omitted, time: .shortened))")
     }
