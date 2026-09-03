@@ -24,6 +24,11 @@ struct QuoteDocument {
     let title: String
     let number: String?
     let clientName: String?
+    /// Details already known about the recipient. Unlike the business block,
+    /// every one is optional: a quote can still be made before a client gives
+    /// their address or phone number.
+    let clientAddress: String?
+    let clientPhone: String?
     let createdAt: Date
     let validityDate: Date?
     let jobSummary: String?
@@ -54,6 +59,15 @@ struct QuoteDocument {
     /// Contact lines shown under the business name, blank ones dropped.
     var businessContact: [String] {
         [business?.phone, business?.email, business?.address]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// The recipient's address and phone, blank values removed before they get
+    /// a line in the PDF. An address may contain line breaks and should remain
+    /// one text block so it wraps as an address rather than as separate facts.
+    var clientContact: [String] {
+        [clientAddress, clientPhone]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
     }

@@ -1419,6 +1419,8 @@ struct HomeView: View {
             title: quote.displayTitle,
             number: quote.numberText(prefix: session.businessProfile?.quoteNumberPrefix),
             clientName: quote.clientName,
+            clientAddress: clientVisitAddress(for: quote),
+            clientPhone: clientVisitPhone(for: quote),
             createdAt: quote.createdAt,
             validityDate: quote.validityDate,
             jobSummary: quote.jobSummary,
@@ -1432,6 +1434,34 @@ struct HomeView: View {
             business: session.businessProfile,
             logo: session.businessLogo
         )
+    }
+
+    /// Quotes only retain a client's name. A booked visit can also carry the
+    /// address and phone the user has already collected, so reuse those facts
+    /// in a document rather than making the recipient block look unfinished.
+    private func clientVisits(for quote: QuoteSummary) -> [ScheduledVisit] {
+        let name = quote.clientName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        guard !name.isEmpty else { return [] }
+        return visits
+            .filter { $0.clientKey.contains(name) }
+            .sorted { $0.date > $1.date }
+    }
+
+    private func clientVisitAddress(for quote: QuoteSummary) -> String? {
+        clientVisits(for: quote)
+            .compactMap { cleanedClientDetail($0.address) }
+            .first
+    }
+
+    private func clientVisitPhone(for quote: QuoteSummary) -> String? {
+        clientVisits(for: quote)
+            .compactMap { cleanedClientDetail($0.phone) }
+            .first
+    }
+
+    private func cleanedClientDetail(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func shareText(for quote: QuoteSummary) -> String {

@@ -23,7 +23,9 @@ struct ClientsView: View {
     @State private var searchText = ""
     @State private var isSearching = false
     @State private var showingLayoutOptions = false
-    @AppStorage("clientsLayout") private var layoutRawValue = ClientLayout.grid.rawValue
+    // Version the preference so the new grid-first default also reaches people
+    // who previously had the old list-first choice persisted on their device.
+    @AppStorage("clientsLayoutV2") private var layoutRawValue = ClientLayout.grid.rawValue
 
     private static let cardShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
 

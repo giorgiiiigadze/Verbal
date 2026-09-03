@@ -100,6 +100,9 @@ struct QuoteDetailView: View {
     @State private var showLineItems = false
     @State private var showDeleteConfirm = false
     @State private var showClientSheet = false
+    /// Loaded from the saved client record for the recipient block in the PDF.
+    /// A scheduled-visit address remains a local fallback until it is saved.
+    @State private var clientAddress: String?
     /// Seeded from the quote and kept in sync after an edit, so the chip
     /// updates without refetching the list.
     @State private var clientName: String
@@ -120,6 +123,34 @@ struct QuoteDetailView: View {
 
     /// Identifiable wrapper so a picked currency code can drive `.sheet(item:)`.
     private struct CurrencyTarget: Identifiable { let id: String }
+
+    /// Kept outside the main view builder so Swift does not have to infer this
+    /// sheet's closure together with every other sheet, alert and toolbar on
+    /// the quote screen.
+    private func currencyConversionSheet(for target: CurrencyTarget) -> some View {
+        ConvertCurrencySheet(quoteID: quote.id,
+                             lineItems: lineItems,
+                             currentTotal: total,
+                             taxRate: quote.taxRate,
+                             fromCode: currency,
+                             toCode: target.id) { newCurrency, newTotal in
+            applyCurrencyChange(newCurrency, total: newTotal)
+        }
+    }
+
+    private func applyCurrencyChange(_ newCurrency: String, total newTotal: Double?) {
+        currency = newCurrency
+        session.updateQuote(id: quote.id) { $0.currency = newCurrency }
+        if let newTotal {
+            total = newTotal
+            session.updateQuote(id: quote.id) { $0.total = newTotal }
+            // Reload line items to show the converted unit prices.
+            Task { lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? lineItems }
+            toast = Toast(style: .success, message: "Converted to \(newCurrency)")
+        } else {
+            toast = Toast(style: .success, message: "Currency set to \(newCurrency)")
+        }
+    }
 
     /// Statuses offered in the status-chip menu, in workflow order.
     private let selectableStatuses = ["draft", "sent", "viewed", "accepted", "declined", "expired"]
@@ -155,6 +186,27 @@ struct QuoteDetailView: View {
     }
 
     private var missingCount: Int { lineItems.filter(\.isMissingPrice).count }
+
+    private var matchingClientVisits: [ScheduledVisit] {
+        let key = clientName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !key.isEmpty else { return [] }
+        return session.visitStore.visits
+            .filter { $0.clientKey.contains(key) }
+            .sorted { $0.date > $1.date }
+    }
+
+    private var clientPhoneForPDF: String? {
+        matchingClientVisits.compactMap { clean($0.phone) }.first
+    }
+
+    private var clientAddressForPDF: String? {
+        clean(clientAddress) ?? matchingClientVisits.compactMap { clean($0.address) }.first
+    }
+
+    private func clean(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
 
     private var shareText: String {
         var lines = [displayTitle]
@@ -356,6 +408,8 @@ struct QuoteDetailView: View {
             title: displayTitle,
             number: quote.numberText(prefix: session.businessProfile?.quoteNumberPrefix),
             clientName: clientName.isEmpty ? nil : clientName,
+            clientAddress: clientAddressForPDF,
+            clientPhone: clientPhoneForPDF,
             createdAt: quote.createdAt,
             validityDate: validityDate,
             jobSummary: jobSummary.isEmpty ? nil : jobSummary,
@@ -668,6 +722,14 @@ struct QuoteDetailView: View {
                 if let stored = session.lineItems(for: quote.id) { lineItems = stored }
             }
         }
+        .task(id: clientName) {
+            let name = clientName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else {
+                clientAddress = nil
+                return
+            }
+            clientAddress = try? await QuoteService.customerAddress(named: name)
+        }
         // Its own task, so the disk read isn't queued behind the line-item
         // request above. Sharing one meant the transcript waited for that
         // fetch to finish — offline, for it to time out — which is why the
@@ -790,24 +852,7 @@ struct QuoteDetailView: View {
             }
         }
         .sheet(item: $pendingCurrency) { target in
-            ConvertCurrencySheet(quoteID: quote.id,
-                                 lineItems: lineItems,
-                                 currentTotal: total,
-                                 taxRate: quote.taxRate,
-                                 fromCode: currency,
-                                 toCode: target.id) { newCurrency, newTotal in
-                currency = newCurrency
-                session.updateQuote(id: quote.id) { $0.currency = newCurrency }
-                if let newTotal {
-                    total = newTotal
-                    session.updateQuote(id: quote.id) { $0.total = newTotal }
-                    // Reload line items to show the converted unit prices.
-                    Task { lineItems = (try? await QuoteService.fetchLineItems(quoteId: quote.id)) ?? lineItems }
-                    toast = Toast(style: .success, message: "Converted to \(newCurrency)")
-                } else {
-                    toast = Toast(style: .success, message: "Currency set to \(newCurrency)")
-                }
-            }
+            currencyConversionSheet(for: target)
         }
         .navigationBarTitleDisplayMode(.inline)
         .onScrollGeometryChange(for: Bool.self) { geometry in
@@ -891,7 +936,14 @@ struct QuoteDetailView: View {
                     Button {
                         previewPDF()
                     } label: {
-                        Label("View PDF", systemImage: "doc.richtext")
+                        Label {
+                            Text("View PDF")
+                        } icon: {
+                            Image(.quoteDocument)
+                                .resizable()
+                                .renderingMode(.template)
+                                .scaledToFit()
+                        }
                     }
                     Button {
                         showTranscript = true

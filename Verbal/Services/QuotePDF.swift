@@ -212,10 +212,10 @@ enum QuotePDF {
     private enum Layout {
         /// QUOTE mark, metadata, rule, and the two-column sender/recipient panel.
         static let headerBlock: CGFloat = 48
-        // Matches the compact 88 × 30pt logo and 86pt minimum sender/recipient
-        // panel in QuoteDocumentPage. Keeping this in sync prevents pagination
-        // from creating a needless second page for a short quote.
-        static let partiesRow: CGFloat = 150
+        // Matches the 124 × 44pt letterhead logo and the sender/recipient
+        // panel in QuoteDocumentPage. The extra room is reserved here too, so
+        // a larger logo cannot push the table past the bottom of page one.
+        static let partiesRow: CGFloat = 176
         static let sectionRule: CGFloat = 20
         static let blockGap: CGFloat = 18
         static let bodyLine: CGFloat = 14

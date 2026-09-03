@@ -97,7 +97,13 @@ struct ScheduleView: View {
     private func hasRecordedQuote(for visit: ScheduledVisit) -> Bool { visit.recordedQuoteId != nil || recordedQuote(for: visit) != nil }
     private func calendarStatus(for visit: ScheduledVisit) -> CalendarVisitStatus {
         if hasRecordedQuote(for: visit) { return .recorded }
-        return visit.endDate < Date() ? .overdue : .upcoming
+        // Match Home's Upcoming card: once a visit has been underway for two
+        // hours without a recorded quote, it needs attention even if its
+        // booked duration has not ended yet. Using `endDate` here left the
+        // same visit amber in Calendar and red on Home.
+        return Date() >= visit.date.addingTimeInterval(2 * 60 * 60)
+            ? .overdue
+            : .upcoming
     }
     private func visitAction(for visit: ScheduledVisit) -> VisitAction { if hasRecordedQuote(for: visit) { return .recorded(recordedQuote(for: visit)) }; let now = Date(); if now >= visit.date.addingTimeInterval(-900), now <= visit.date.addingTimeInterval(1800) { return .happeningNow }; return visit.date < now ? .passed : .future }
     private func addOrUpdate(_ visit: ScheduledVisit) { let editing = visits.contains { $0.id == visit.id }; session.visitStore.addOrUpdate(visit); Task { await ScheduledVisitNotifications.schedule(visit) }; toast = Toast(style: .success, message: editing ? "Visit saved" : "Visit booked") }

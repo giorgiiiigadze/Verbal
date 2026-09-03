@@ -143,10 +143,10 @@ struct QuoteDocumentPage: View {
                     Image(uiImage: logo)
                         .resizable()
                         .scaledToFit()
-                        // Keep the letterhead compact: a large uploaded logo
-                        // should not be the reason an otherwise short quote
-                        // spills onto a second PDF page.
-                        .frame(maxWidth: 88, maxHeight: 30, alignment: .leading)
+                        // Give the letterhead enough presence to read as a
+                        // proper business mark, while preserving every logo's
+                        // aspect ratio rather than cropping a wide wordmark.
+                        .frame(maxWidth: 124, maxHeight: 44, alignment: .leading)
                 }
                 Text(document.businessName)
                     .font(.system(size: 17, weight: .medium))
@@ -177,6 +177,12 @@ struct QuoteDocumentPage: View {
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(.black)
                     .padding(.top, 4)
+                ForEach(document.clientContact, id: \.self) { line in
+                    Text(line)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.black.opacity(0.65))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.leading, 24)
