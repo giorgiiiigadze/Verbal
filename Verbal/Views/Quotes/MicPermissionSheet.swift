@@ -47,10 +47,14 @@ struct MicPermissionSheet: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            Image(systemName: isBlocked ? "mic.slash.fill" : "mic.fill")
-                .font(.system(size: 38, weight: .medium))
-                .foregroundStyle(Color(.blueAccentText))
-                .frame(height: 46)
+            // Keep the permission sheet in the same illustration family as
+            // the recording introduction, rather than switching to an SF
+            // Symbol just before the user begins recording.
+            Image(.recordingIntro)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(Color(.royalBlue600))
+                .frame(width: 52, height: 52)
 
             Text(isBlocked ? "Microphone is off" : "Let Verbal hear the job")
                 .font(.robotoSlab(24, relativeTo: .title2))
@@ -112,7 +116,7 @@ struct MicPermissionSheet: View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 17))
-                .foregroundStyle(Color(.blueAccentText))
+                .foregroundStyle(Color(.royalBlue600))
                 .frame(width: 26, height: 22)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)

@@ -72,7 +72,10 @@ struct RecordingIntroSheet: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 20)
-                    .frame(height: 90)
+                    // The two-line label needs breathing room, but 90pt made
+                    // this selector read like a second panel rather than a
+                    // compact setting above Continue.
+                    .frame(height: 76)
                     .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 24, style: .continuous)

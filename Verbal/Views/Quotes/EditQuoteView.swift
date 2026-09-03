@@ -26,6 +26,11 @@ struct EditQuoteView: View {
     /// Scope edited as one row per bullet, the way the priced lines are edited;
     /// rows left blank are dropped on save.
     @State private var scope: [ScopeLine]
+    /// The contents as they were when the sheet opened. Keeping the editable
+    /// rows themselves lets the comparison catch text edits, additions, and
+    /// deletions while preserving each row's view-local identity.
+    private let originalJobSummary: String
+    private let originalScope: [ScopeLine]
     @FocusState private var focusedLine: UUID?
     @State private var isSaving = false
     /// Set when a write failed, so the sheet reports it instead of closing on
@@ -41,11 +46,18 @@ struct EditQuoteView: View {
         self.onSaved = onSaved
         self.title = title
         _jobSummary = State(initialValue: jobSummary)
+        originalJobSummary = jobSummary
         // Built with an explicit loop (not `.map`) so the value-type initializer
         // isn't called from a nonisolated map closure under main-actor isolation.
         var built: [ScopeLine] = []
         for item in scope { built.append(ScopeLine(text: item)) }
         _scope = State(initialValue: built)
+        originalScope = built
+    }
+
+    /// Don't issue a no-op update merely because the editor was opened.
+    private var hasChanges: Bool {
+        jobSummary != originalJobSummary || scope != originalScope
     }
 
     var body: some View {
@@ -96,6 +108,7 @@ struct EditQuoteView: View {
                     } else {
                         Button("Save") { Task { await save() } }
                             .fontWeight(.semibold)
+                            .disabled(!hasChanges)
                     }
                 }
             }
@@ -108,6 +121,10 @@ struct EditQuoteView: View {
     }
 
     private func save() async {
+        // Keep the action safe if it is invoked through an accessibility
+        // action or while SwiftUI is updating the disabled state.
+        guard hasChanges else { return }
+
         isSaving = true
         defer { isSaving = false }
 
@@ -139,7 +156,7 @@ struct EditQuoteView: View {
 
 /// One editable bullet. Identity is the view-local id, not the text, so a row
 /// keeps focus while it's being typed into.
-private struct ScopeLine: Identifiable {
+private struct ScopeLine: Identifiable, Equatable {
     let id = UUID()
     var text: String
 }
