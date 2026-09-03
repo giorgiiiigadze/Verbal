@@ -681,8 +681,15 @@ struct QuoteDetailView: View {
         // A run-in label rather than a heading on its own line: the bold lead
         // is the heading. Terms and Notes are short asides at the foot of the
         // document, not sections on the level of the summary and the scope.
-        VStack(alignment: .leading, spacing: 8) {
-            (Text(title).bold() + Text(" — ") + Text(body))
+        // Built as an AttributedString rather than by concatenating `Text`,
+        // which is deprecated, and rather than by interpolating markdown,
+        // which would try to parse whatever the user typed into Terms.
+        var run = AttributedString(title)
+        run.inlinePresentationIntent = .stronglyEmphasized
+        run += AttributedString(" — \(body)")
+
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(run)
                 .font(.quoteDocumentBody)
                 .lineSpacing(8)
                 .foregroundStyle(Color(.mainText))
