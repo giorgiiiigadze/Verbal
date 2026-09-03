@@ -191,6 +191,11 @@ final class SessionStore {
     /// apart from an ordinary token refresh.
     private var cachedUserID: UUID?
 
+    /// The currently loaded account's stable identifier. Views use this only
+    /// to scope harmless device preferences (such as one-time introductions),
+    /// never as an authorization decision.
+    var accountID: UUID? { cachedUserID }
+
     /// Cached line items for a quote, if any have been loaded already.
     func lineItems(for quoteID: UUID) -> [QuoteLineItem]? { lineItemsCache[quoteID] }
 

@@ -95,7 +95,12 @@ final class VisitStore {
         self.userID = userID
         hasCompletedInitialSync = false
 
-        var cache = loadCache(userID: userID) ?? adoptLegacyVisits()
+        // The legacy cache predates account-scoped storage. Once an account
+        // with its own cache opens the app, it claims that old key too, so it
+        // can never later be adopted by a different account on this phone.
+        let storedCache = loadCache(userID: userID)
+        if storedCache != nil { claimLegacyVisits(for: userID) }
+        var cache = storedCache ?? adoptLegacyVisits(for: userID)
         prune(&cache)
         apply(cache)
         save()
@@ -426,6 +431,18 @@ final class VisitStore {
     // MARK: - The old key
 
     private static let legacyKey = "scheduledVisits"
+    private static let legacyOwnerKey = "scheduledVisitsLegacyOwnerID"
+
+    /// A legacy cache has no account id in its shape. Claim it as soon as a
+    /// known account has a scoped cache, even though there is nothing to
+    /// migrate for that account, to stop a later account from inheriting it.
+    private func claimLegacyVisits(for userID: UUID) {
+        let defaults = UserDefaults.standard
+        guard defaults.data(forKey: Self.legacyKey) != nil,
+              defaults.string(forKey: Self.legacyOwnerKey) == nil
+        else { return }
+        defaults.set(userID.uuidString, forKey: Self.legacyOwnerKey)
+    }
 
     /// Visits from before there was a table, taken into the account signing in.
     ///
@@ -436,11 +453,20 @@ final class VisitStore {
     ///
     /// Without this the change would lose the booked week of every user who has
     /// one right now, which is the bug it exists to fix.
-    private func adoptLegacyVisits() -> Cache {
+    private func adoptLegacyVisits(for userID: UUID) -> Cache {
         let defaults = UserDefaults.standard
         guard let data = defaults.data(forKey: Self.legacyKey),
               let stored = try? JSONDecoder().decode([ScheduledVisit].self, from: data)
         else { return Cache() }
+
+        // The shared key is a one-time migration only. It is never safe to
+        // guess that it belongs to a different account that happens to sign
+        // in on this device later.
+        if let owner = defaults.string(forKey: Self.legacyOwnerKey),
+           owner != userID.uuidString {
+            return Cache()
+        }
+        defaults.set(userID.uuidString, forKey: Self.legacyOwnerKey)
         defaults.removeObject(forKey: Self.legacyKey)
 
         let adopted = stored.map { visit -> ScheduledVisit in

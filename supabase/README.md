@@ -89,6 +89,47 @@ New purchases are bound to the current Verbal account by Apple. Existing
 purchases do not have an account token and are claimed once, by the account
 that first reports the verified subscription after this rollout.
 
+## Email sign-in (the six-digit code)
+
+`EmailAuth.swift` signs people in with `signInWithOTP` + `verifyOTP`, so the
+only thing the app can accept out of the mail is `{{ .Token }}`. Supabase's
+stock templates send `{{ .ConfirmationURL }}` and nothing else, which means the
+mail arrives, looks fine, and contains no code — the feature fails in the one
+way nobody notices in code review.
+
+Two templates carry it, because GoTrue picks a different one depending on
+whether the address already has an account:
+
+| Dashboard template | When it's sent | File |
+| --- | --- | --- |
+| Magic Link | The address already has an account | `templates/magic_link.html` |
+| Confirm signup | First time this address signs in | `templates/confirm_signup.html` |
+
+Paste both into **Authentication → Emails** in the dashboard. They are kept
+here rather than only there for the same reason `config.toml` exists: a setting
+the app depends on should be readable in the repo. They are not applied by any
+command — `supabase config push` would write the whole `[auth]` block, including
+providers and redirect URLs this file says nothing about, so the templates are
+copied by hand on purpose.
+
+Neither template links anywhere. Following a magic link spends the token, so a
+mail carrying both a code and a link tells anyone who taps the link that their
+own code is invalid.
+
+Two more settings that decide whether this works in the wild:
+
+- **Custom SMTP.** Supabase's built-in sender is rate limited to a handful of
+  messages an hour across the whole project — fine for a simulator, and a hard
+  stop the first time two tradespeople sign up in the same morning. Set up SMTP
+  before this reaches the App Store.
+- **Email provider enabled**, with *Confirm email* on. The code is the
+  confirmation; the account is created on the first `signInWithOTP` and gets its
+  session only once the code is verified.
+
+`EmailAuth.resendInterval` (60s) mirrors GoTrue's own per-address send window.
+Shorten it in the app and the resend button starts offering a request the server
+refuses.
+
 ## Secrets
 
 | Name | Used by | Notes |

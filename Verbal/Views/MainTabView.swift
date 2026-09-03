@@ -31,6 +31,11 @@ struct MainTabView: View {
     @AppStorage("hasSeenRecordingIntro") private var hasSeenRecordingIntro = false
     @State private var showRecordingIntro = false
     @State private var startRecordingAfterIntro = false
+    /// Calendar is introduced where it is useful: when someone first chooses
+    /// the tab, rather than adding another sheet to the end of sign-in.
+    @State private var showCalendarIntro = false
+    @State private var startBookingAfterCalendarIntro = false
+    @State private var calendarBookingRequest = false
 
     /// Announcements are shown once and never again. A promo that comes back is
     /// how people learn to dismiss your sheets without reading them.
@@ -97,7 +102,8 @@ struct MainTabView: View {
             Tab("Calendar", systemImage: "calendar", value: .schedule) {
                 NavigationStack {
                     ScheduleView(showCreate: createBinding,
-                                 recordingVisit: $recordingVisit)
+                                 recordingVisit: $recordingVisit,
+                                 startBooking: $calendarBookingRequest)
                 }
             }
             Tab("Clients", systemImage: "person.2.fill", value: .clients) {
@@ -149,6 +155,17 @@ struct MainTabView: View {
                 showRecordingIntro = false
             }
         }
+        .sheet(isPresented: $showCalendarIntro, onDismiss: {
+            markCalendarIntroSeen()
+            guard startBookingAfterCalendarIntro else { return }
+            startBookingAfterCalendarIntro = false
+            calendarBookingRequest = true
+        }) {
+            CalendarIntroSheet {
+                startBookingAfterCalendarIntro = true
+                showCalendarIntro = false
+            }
+        }
         .sheet(isPresented: $showCreate, onDismiss: {
             recordingVisit = nil
             // Now that the recorder is actually gone, the paywall has the
@@ -180,6 +197,43 @@ struct MainTabView: View {
             guard quoteId != nil else { return }
             selection = .home
         }
+        .onChange(of: selection) { _, _ in
+            presentCalendarIntroIfNeeded()
+        }
+        .onChange(of: session.visitStore.hasCompletedInitialSync) { _, _ in
+            presentCalendarIntroIfNeeded()
+        }
+    }
+
+    /// One sheet at a time. The intro is deliberately not queued behind an
+    /// announcement or another action; the person can always reach Calendar
+    /// again, while a surprise stack of sheets teaches them to dismiss first.
+    private func presentCalendarIntroIfNeeded() {
+        guard selection == .schedule,
+              !hasSeenCalendarIntro,
+              !showCalendarIntro,
+              session.visitStore.hasCompletedInitialSync,
+              session.visitStore.visits.isEmpty,
+              !showShareLinkNews,
+              !showRecordingIntro,
+              !showCreate,
+              !store.isPaywallPresented
+        else { return }
+        showCalendarIntro = true
+    }
+
+    private var calendarIntroKey: String? {
+        session.accountID.map { "hasSeenCalendarIntro-\($0.uuidString)" }
+    }
+
+    private var hasSeenCalendarIntro: Bool {
+        guard let calendarIntroKey else { return true }
+        return UserDefaults.standard.bool(forKey: calendarIntroKey)
+    }
+
+    private func markCalendarIntroSeen() {
+        guard let calendarIntroKey else { return }
+        UserDefaults.standard.set(true, forKey: calendarIntroKey)
     }
 
     /// The user's own face where there is one, and otherwise a filled person —

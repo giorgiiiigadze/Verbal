@@ -1,0 +1,19 @@
+<!--
+  The email a brand-new address gets the first time it signs in.
+
+  Same code, different template: GoTrue sends the signup mailer when the account
+  does not exist yet and the magic-link one when it does. Both have to carry
+  {{ .Token }}, or email sign-in works for returning users and dead-ends every
+  new one — which is most of the people this screen exists for.
+
+  Code only, no link, for the reason given in `magic_link.html`.
+-->
+<h2>Confirm your email for Verbal</h2>
+
+<p style="font-size:32px;letter-spacing:6px;font-weight:700;margin:16px 0;">{{ .Token }}</p>
+
+<p>Enter this code in Verbal to finish setting up your account. It expires in one hour.</p>
+
+<p style="color:#666;font-size:13px;">
+  If you didn't create a Verbal account, you can ignore this email.
+</p>

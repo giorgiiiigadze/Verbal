@@ -1,0 +1,19 @@
+<!--
+  The email a returning account gets when it asks to sign in by email.
+
+  Code only, no link. The app asks for six digits and never opens a URL, and a
+  link here would be worse than useless: following it spends the token, so
+  anyone who taps it and then types the code is told their own code is invalid.
+
+  Remove {{ .Token }} and "Continue with email" silently stops working — the
+  mail still arrives, and there is nothing in it the app can accept.
+-->
+<h2>Your Verbal sign-in code</h2>
+
+<p style="font-size:32px;letter-spacing:6px;font-weight:700;margin:16px 0;">{{ .Token }}</p>
+
+<p>Enter this code in Verbal to sign in. It expires in one hour.</p>
+
+<p style="color:#666;font-size:13px;">
+  If you didn't ask to sign in, you can ignore this email.
+</p>

@@ -8,7 +8,7 @@ import SwiftUI
 struct AuthView: View {
     @Environment(SessionStore.self) private var session
 
-    @State private var errorMessage: String?
+    @State private var toast: Toast?
     /// Google's sheet is up. The button waits, but the screen behind it stays
     /// exactly as it was — the user is choosing an account, not signing in.
     @State private var isChoosingAccount = false
@@ -18,6 +18,7 @@ struct AuthView: View {
     @State private var isFinishing = false
     @State private var headlineIndex = 0
     @State private var showAppleComingSoon = false
+    @State private var showEmailAuth = false
 
     var body: some View {
         ZStack {
@@ -57,13 +58,6 @@ struct AuthView: View {
 
                 Spacer()
 
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                }
-
                 VStack(spacing: 10) {
                     googleButton
                         .disabled(isChoosingAccount)
@@ -72,6 +66,7 @@ struct AuthView: View {
                         .disabled(isChoosingAccount)
 
                     emailButton
+                        .disabled(isChoosingAccount)
                 }
 
                 authConsent
@@ -86,6 +81,18 @@ struct AuthView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: isFinishing)
+        .toast($toast)
+        .navigationDestination(isPresented: $showEmailAuth) {
+            EmailAuthView {
+                // Order matters: the finishing screen is put up behind the
+                // cover before it goes, so the sign-in buttons never flash back
+                // into view between the code being accepted and the app
+                // appearing.
+                toast = nil
+                isFinishing = true
+                showEmailAuth = false
+            }
+        }
         .alert("Apple sign-in coming soon", isPresented: $showAppleComingSoon) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -162,10 +169,12 @@ struct AuthView: View {
         .accessibilityLabel("Continue with Apple, coming soon")
     }
 
-    /// The email path is intentionally only visual for now. It establishes the
-    /// choice in the sign-in layout without implying an email flow exists yet.
+    /// The way in for anyone without a Google account, or unwilling to hand one
+    /// over to sign into a quoting app. Quieter than the two above it — it is
+    /// the fallback, not the recommendation — so it keeps the card surface
+    /// rather than the black capsule.
     private var emailButton: some View {
-        Button(action: {}) {
+        Button { showEmailAuth = true } label: {
             Text("Continue with email")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Color(.mainText))
@@ -175,7 +184,6 @@ struct AuthView: View {
                 .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Continue with email, coming soon")
     }
 
     private var authConsent: some View {
@@ -238,7 +246,7 @@ struct AuthView: View {
 
     private func signInWithGoogle() {
         isChoosingAccount = true
-        errorMessage = nil
+        toast = nil
         Task {
             do {
                 try await GoogleAuth.signIn {
@@ -256,10 +264,21 @@ struct AuthView: View {
                 // Saying "the user canceled the sign-in flow" in red tells
                 // someone their own choice went wrong.
                 if !GoogleAuth.isCancellation(error) {
-                    errorMessage = error.localizedDescription
+                    toast = Toast(style: .error, message: googleSignInErrorMessage(error))
                 }
             }
         }
+    }
+
+    /// Provider error strings are written for logs and can be bare OAuth codes
+    /// such as `access_denied`. Keep that implementation detail out of the
+    /// sign-in screen while still giving the person a useful next step.
+    private func googleSignInErrorMessage(_ error: Error) -> String {
+        let message = error.localizedDescription.lowercased()
+        if message.contains("access_denied") || message.contains("access denied") {
+            return "Google sign-in was denied. Try another account."
+        }
+        return "Couldn't sign in with Google. Try again."
     }
 }
 

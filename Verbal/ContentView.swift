@@ -140,7 +140,9 @@ struct ContentView: View {
             Color.clear
         case .signedOut:
             if hasSeenOnboarding {
-                AuthView()
+                NavigationStack {
+                    AuthView()
+                }
             } else {
                 OnboardingView {
                     OnboardingMemory.hasSeenOnboarding = true

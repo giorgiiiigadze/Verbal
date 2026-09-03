@@ -9,6 +9,8 @@ struct ScheduleView: View {
     @Environment(\.openURL) private var openURL
     @Binding var showCreate: Bool
     @Binding var recordingVisit: ScheduledVisit?
+    /// Raised by Calendar's one-time intro after its sheet is fully gone.
+    @Binding var startBooking: Bool
 
     @State private var quoteToOpen: QuoteSummary?
     @State private var selectedVisit: ScheduledVisit?
@@ -69,6 +71,11 @@ struct ScheduleView: View {
         }
         .alert("Remove this visit?", isPresented: Binding(get: { visitToDelete != nil }, set: { if !$0 { visitToDelete = nil } }), presenting: visitToDelete) { visit in Button("Remove", role: .destructive) { remove(visit) }; Button("Cancel", role: .cancel) {} } message: { visit in Text("“\(visit.title)” comes off your schedule. Any quote you've already made is untouched.") }
         .task { session.visitStore.refresh(); await session.visitStore.sync() }
+        .onChange(of: startBooking) { _, shouldStartBooking in
+            guard shouldStartBooking else { return }
+            startBooking = false
+            editor = .new
+        }
         .refreshable { await session.visitStore.sync(); await session.refreshQuotes() }
         .toast($toast)
     }
