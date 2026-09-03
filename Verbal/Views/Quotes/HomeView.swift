@@ -1085,7 +1085,10 @@ struct HomeView: View {
             showCreate = true
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "mic.fill")
+                Image("RecordingIntro")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
                 Text("Record a quote").fontWeight(.semibold)
             }
             .foregroundStyle(.white)
