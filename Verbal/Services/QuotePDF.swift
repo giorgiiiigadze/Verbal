@@ -82,7 +82,7 @@ enum QuotePDF {
     /// touch smaller keeps it whole. Past `maxShrink` it genuinely is two pages'
     /// worth of quote and it splits properly.
     private static func singlePageScale(_ document: QuoteDocument) -> CGFloat? {
-        let available = PageMetrics.height - PageMetrics.margin * 2 - Layout.footer
+        let available = PageMetrics.height - PageMetrics.verticalInsets - Layout.footer
         let needed = headerHeight(document)
             + Layout.tableHeader
             + document.lineItems.reduce(0) { $0 + rowHeight($1) }
@@ -147,7 +147,7 @@ enum QuotePDF {
 
     /// Room for line items on a page, before anything specific to it.
     private static let pageBudget: CGFloat =
-        PageMetrics.height - PageMetrics.margin * 2 - Layout.tableHeader - Layout.footer
+        PageMetrics.height - PageMetrics.verticalInsets - Layout.tableHeader - Layout.footer
 
     /// Everything above the table on the first page — the logo, the business
     /// name and its contact lines, the parties row, the summary and the scope.
@@ -161,13 +161,13 @@ enum QuotePDF {
 
         if let summary = document.jobSummary, !summary.isEmpty {
             used += Layout.blockGap + Layout.fieldLabel
-                + CGFloat(lineCount(summary, width: PageMetrics.contentWidth, size: 11))
+                + CGFloat(lineCount(summary, width: PageMetrics.readableWidth, size: 11))
                 * Layout.bodyLine
         }
         if !document.scope.isEmpty {
             used += Layout.blockGap + Layout.fieldLabel
             for line in document.scope {
-                used += CGFloat(lineCount(line, width: PageMetrics.contentWidth - 16, size: 11))
+                used += CGFloat(lineCount(line, width: PageMetrics.readableWidth - 16, size: 11))
                     * Layout.bodyLine + Layout.scopeGap
             }
         }
@@ -182,7 +182,7 @@ enum QuotePDF {
         for text in [document.business?.defaultTerms, document.business?.defaultNotes] {
             guard let text, !text.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
             used += Layout.blockGap + Layout.fieldLabel
-                + CGFloat(lineCount(text, width: PageMetrics.contentWidth, size: 9))
+                + CGFloat(lineCount(text, width: PageMetrics.readableWidth, size: 9))
                 * Layout.smallLine
         }
         return used
@@ -231,7 +231,7 @@ enum QuotePDF {
         static let rowPadding: CGFloat = 15
         static let rowLine: CGFloat = 13
         /// What is left for the description after the three numeric columns.
-        static let descriptionWidth: CGFloat = PageMetrics.contentWidth - 62 - 74 - 74 - 24
+        static let descriptionWidth: CGFloat = PageMetrics.readableWidth - 62 - 74 - 74 - 24
     }
 
     /// First page as an image, for the share panel's preview.

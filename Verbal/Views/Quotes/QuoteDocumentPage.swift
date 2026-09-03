@@ -47,7 +47,8 @@ struct QuoteDocumentPage: View {
 
             pageFooter
         }
-        .padding(PageMetrics.margin)
+        .padding(.top, PageMetrics.topInset)
+        .padding(.bottom, PageMetrics.bottomInset)
         .frame(width: PageMetrics.width, height: PageMetrics.height, alignment: .topLeading)
         .background(.white)
         // The document is a printed artifact: always light, never the app's theme.
@@ -57,7 +58,7 @@ struct QuoteDocumentPage: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             if isFirstPage {
-                header
+                header.padding(.horizontal, PageMetrics.horizontalInset)
                 sectionRule.padding(.top, 16)
                 partiesRow.padding(.top, 18)
                 sectionRule.padding(.top, 18)
@@ -69,9 +70,12 @@ struct QuoteDocumentPage: View {
                             .foregroundStyle(.black.opacity(0.75))
                     }
                     .padding(.top, 18)
+                    .padding(.horizontal, PageMetrics.horizontalInset)
                 }
                 if !document.scope.isEmpty {
-                    scopeSection.padding(.top, 18)
+                    scopeSection
+                        .padding(.top, 18)
+                        .padding(.horizontal, PageMetrics.horizontalInset)
                 }
             }
 
@@ -80,16 +84,24 @@ struct QuoteDocumentPage: View {
             }
 
             if isLastPage {
-                totals.padding(.top, 18)
+                totals
+                    .padding(.top, 18)
+                    .padding(.horizontal, PageMetrics.horizontalInset)
                 if let terms = document.business?.defaultTerms,
                    !terms.trimmingCharacters(in: .whitespaces).isEmpty {
-                    footerBlock(title: "Terms", body: terms).padding(.top, 22)
+                    footerBlock(title: "Terms", body: terms)
+                        .padding(.top, 22)
+                        .padding(.horizontal, PageMetrics.horizontalInset)
                 }
                 if let notes = document.business?.defaultNotes,
                    !notes.trimmingCharacters(in: .whitespaces).isEmpty {
-                    footerBlock(title: "Notes", body: notes).padding(.top, 14)
+                    footerBlock(title: "Notes", body: notes)
+                        .padding(.top, 14)
+                        .padding(.horizontal, PageMetrics.horizontalInset)
                 }
-                acceptance.padding(.top, 22)
+                acceptance
+                    .padding(.top, 22)
+                    .padding(.horizontal, PageMetrics.horizontalInset)
             }
         }
     }
@@ -164,6 +176,7 @@ struct QuoteDocumentPage: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.leading, PageMetrics.horizontalInset)
 
             Rectangle()
                 .fill(.black.opacity(0.20))
@@ -186,6 +199,7 @@ struct QuoteDocumentPage: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.leading, 24)
+            .padding(.trailing, PageMetrics.horizontalInset)
         }
         .frame(minHeight: 86, alignment: .top)
     }
@@ -216,6 +230,7 @@ struct QuoteDocumentPage: View {
             .font(.system(size: 9, weight: .semibold))
             .foregroundStyle(.black.opacity(0.55))
             .padding(.bottom, 7)
+            .padding(.horizontal, PageMetrics.horizontalInset)
 
             tableRule
 
@@ -242,6 +257,7 @@ struct QuoteDocumentPage: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.black.opacity(0.85))
                 .padding(.vertical, 7)
+                .padding(.horizontal, PageMetrics.horizontalInset)
             }
         }
     }
@@ -250,6 +266,7 @@ struct QuoteDocumentPage: View {
         Rectangle()
             .fill(.black.opacity(0.18))
             .frame(height: 1)
+            .padding(.horizontal, PageMetrics.horizontalInset)
     }
 
     /// Deliberate document rules make the sections read as a controlled grid
@@ -350,6 +367,7 @@ struct QuoteDocumentPage: View {
                 }
             }
         }
+        .padding(.horizontal, PageMetrics.horizontalInset)
     }
 
     private func footerBlock(title: String, body: String) -> some View {

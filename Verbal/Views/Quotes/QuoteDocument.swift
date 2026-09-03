@@ -14,8 +14,14 @@ import UIKit
 enum PageMetrics {
     static let width: CGFloat = 595
     static let height: CGFloat = 842
-    static let margin: CGFloat = 44
-    static var contentWidth: CGFloat { width - margin * 2 }
+    /// The page itself is edge-to-edge; each content section applies this
+    /// horizontal inset independently so structural rules can span the page.
+    static let horizontalInset: CGFloat = 44
+    static let topInset: CGFloat = 24
+    static let bottomInset: CGFloat = 44
+    static var verticalInsets: CGFloat { topInset + bottomInset }
+    static var contentWidth: CGFloat { width }
+    static var readableWidth: CGFloat { contentWidth - horizontalInset * 2 }
 }
 
 /// The data a rendered quote needs, gathered from the quote, its line items
