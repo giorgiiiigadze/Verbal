@@ -337,7 +337,8 @@ struct QuoteDetailView: View {
                         isMissingPrice: item.isMissingPrice,
                         lineTotal: item.lineTotal,
                         currencyCode: currency,
-                        confidence: item.confidence
+                        confidence: item.confidence,
+                        documentStyle: true
                     )
                     if item.id != lineItems.last?.id {
                         Divider()
@@ -353,14 +354,23 @@ struct QuoteDetailView: View {
     @ViewBuilder
     private var jobDetailsSection: some View {
         if !jobSummary.isEmpty || !scope.isEmpty {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 24) {
+                // A serif heading in full ink over serif body at loose
+                // leading, matching the way the scope list below is headed.
                 if !jobSummary.isEmpty {
-                    Text(emphasizedSummary(jobSummary))
-                        .foregroundStyle(Color(.mainText))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Summary")
+                            .font(.quoteDocumentHeading)
+                            .foregroundStyle(Color(.mainText))
+                        Text(emphasizedSummary(jobSummary))
+                            .font(.quoteDocumentBody)
+                            .lineSpacing(8)
+                            .foregroundStyle(Color(.mainText))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
 
-                ScopeList(items: scope)
+                ScopeList(items: scope, documentStyle: true)
                     .padding(.top, 4)
             }
         }
@@ -664,15 +674,17 @@ struct QuoteDetailView: View {
         }
     }
 
-    /// Headed the way the scope list above is headed — the label stepped back
-    /// from the words it names, because what the quote says should be the
-    /// darkest thing on the page.
+    /// Set as one paragraph with the label run in bold at its head, so the
+    /// footer reads as a closing remark rather than as two more sections
+    /// competing with the summary and the scope above it.
     private func footerBlock(_ title: String, _ body: String) -> some View {
+        // A run-in label rather than a heading on its own line: the bold lead
+        // is the heading. Terms and Notes are short asides at the foot of the
+        // document, not sections on the level of the summary and the scope.
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(body)
+            (Text(title).bold() + Text(" — ") + Text(body))
+                .font(.quoteDocumentBody)
+                .lineSpacing(8)
                 .foregroundStyle(Color(.mainText))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
