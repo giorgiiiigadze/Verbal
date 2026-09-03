@@ -1920,7 +1920,7 @@ struct VisitActionSheet: View {
                 }
 
                 HStack(spacing: 14) {
-                    systemIcon("phone")
+                    assetIcon("PhoneCall")
                     Text(value(visit.phone, placeholder: "Phone"))
                         .font(.body)
                         .foregroundStyle(hasValue(visit.phone) ? Color(.mainText) : .secondary)

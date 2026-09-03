@@ -146,6 +146,7 @@ private struct VisitsCalendarHeader: View {
 }
 
 private struct VisitsDaySelector: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var selectedDay: Date
     private let calendar = Calendar.current
     var body: some View {
@@ -158,13 +159,19 @@ private struct VisitsDaySelector: View {
             .accessibilityLabel("Previous day")
 
             Spacer()
-            Text(selectedDay.formatted(.dateTime.weekday(.wide)))
-                .font(.headline.weight(.medium))
-            Text(selectedDay.formatted(.dateTime.day()))
-                .font(.headline.weight(.semibold))
-                .monospacedDigit()
-                .frame(width: 36, height: 36)
-                .background(.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            HStack(spacing: 6) {
+                Text(selectedDay.formatted(.dateTime.month(.abbreviated).day()))
+                    .font(.headline.weight(.semibold))
+                    .monospacedDigit()
+                    .padding(.horizontal, 10)
+                    .frame(height: 36)
+                    .background(isToday ? selectedDayBackground : .clear,
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                Text("–")
+                    .foregroundStyle(.secondary)
+                Text(selectedDay.formatted(.dateTime.weekday(.wide)))
+                    .font(.headline.weight(.medium))
+            }
             Spacer()
 
             Button { moveDay(1) } label: {
@@ -174,11 +181,29 @@ private struct VisitsDaySelector: View {
             }
             .accessibilityLabel("Next day")
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(colorScheme == .dark ? .white : Color(.mainText))
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: 56)
-        .background(Color("DaySelectorBar"))
+        .background(colorScheme == .dark ? Color("DaySelectorBar") : Color(.cardSurface))
+        .overlay(alignment: .bottom) {
+            if colorScheme != .dark {
+                Rectangle()
+                    .fill(Color(.separator).opacity(0.65))
+                    .frame(height: 0.5)
+            }
+        }
+        .shadow(color: colorScheme == .dark ? .clear : .black.opacity(0.06),
+                radius: 7,
+                y: 3)
         .accessibilityElement(children: .contain)
+    }
+
+    private var selectedDayBackground: Color {
+        colorScheme == .dark ? .white.opacity(0.16) : Color(.mainText).opacity(0.08)
+    }
+
+    private var isToday: Bool {
+        calendar.isDateInToday(selectedDay)
     }
 
     private func moveDay(_ amount: Int) {
@@ -199,12 +224,14 @@ private struct VisitsTimelineView: View {
     // A fixed gutter gives every hour the same visual anchor and leaves the
     // schedule canvas quiet, without bringing back a visible divider.
     private let hourHeight: CGFloat = 74; private let labelWidth: CGFloat = 78; private let calendar = Calendar.current
+    private let overlappingColumnGap: CGFloat = 8
     private var placements: [VisitPlacement] { VisitPlacement.make(from: visits) }
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
                 GeometryReader { geometry in
                 let columnWidth = geometry.size.width - labelWidth
+                let trackWidth = columnWidth - 12
                 ZStack(alignment: .topLeading) {
                     // These rows give ScrollViewReader real layout positions.
                     // The label/grid views below are visually offset inside the
@@ -230,7 +257,13 @@ private struct VisitsTimelineView: View {
                         Rectangle().fill(Color(.separator).opacity(0.6)).frame(height: 0.5).offset(x: labelWidth, y: CGFloat(hour) * hourHeight)
                     }
                     ForEach(placements) { item in
-                        VisitCalendarCard(visit: item.visit, status: status(item.visit)).frame(width: max(80, (columnWidth - 12) / CGFloat(item.columnCount) - 4), height: height(for: item.visit), alignment: .topLeading).offset(x: labelWidth + 6 + CGFloat(item.column) * ((columnWidth - 12) / CGFloat(item.columnCount)), y: yPosition(item.visit.date) + 4).onTapGesture { onSelect(item.visit) }
+                        let columnCount = CGFloat(item.columnCount)
+                        let width = (trackWidth - overlappingColumnGap * (columnCount - 1)) / columnCount
+                        VisitCalendarCard(visit: item.visit, status: status(item.visit))
+                            .frame(width: width, height: height(for: item.visit), alignment: .topLeading)
+                            .offset(x: labelWidth + 6 + CGFloat(item.column) * (width + overlappingColumnGap),
+                                    y: yPosition(item.visit.date) + 4)
+                            .onTapGesture { onSelect(item.visit) }
                     }
                     // A periodic timeline keeps the marker live if this page
                     // stays open while the working day moves on.
@@ -292,22 +325,53 @@ private struct VisitsTimelineView: View {
     private func yPosition(_ date: Date) -> CGFloat { let p = calendar.dateComponents([.hour, .minute], from: date); return CGFloat((p.hour ?? 0) * 60 + (p.minute ?? 0)) / 60 * hourHeight }
     private func hourLabel(_ hour: Int) -> String {
         guard hour < 24 else { return "" }
-        let displayHour = hour % 12 == 0 ? 12 : hour % 12
-        return "\(displayHour) \(hour < 12 ? "AM" : "PM")"
+        let date = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
+        return date.formatted(.dateTime.hour())
     }
 }
 
 private struct VisitPlacement: Identifiable {
     let visit: ScheduledVisit; let column: Int; let columnCount: Int; var id: UUID { visit.id }
     static func make(from visits: [ScheduledVisit]) -> [VisitPlacement] {
-        let sorted = visits.sorted { $0.date < $1.date }; var output: [VisitPlacement] = []; var active: [(Date, Int)] = []
-        for visit in sorted { active.removeAll { $0.0 <= visit.date }; let used = Set(active.map(\.1)); let column = (0...).first { !used.contains($0) } ?? 0; active.append((visit.endDate, column)); output.append(VisitPlacement(visit: visit, column: column, columnCount: active.count)) }
-        // Two visits share the width when their times actually cross, not when
-        // they merely start near each other: a three-hour survey and a call
-        // booked two hours into it overlap, and used to be drawn on top of
-        // one another.
-        return output.map { item in VisitPlacement(visit: item.visit, column: item.column, columnCount: max(1, output.filter { $0.visit.date < item.visit.endDate && item.visit.date < $0.visit.endDate }.count)) }
+        let sorted = visits.sorted {
+            $0.date == $1.date ? $0.endDate < $1.endDate : $0.date < $1.date
+        }
+
+        // A cluster is one connected set of overlaps. It must be transitive:
+        // a visit can bridge two others that do not themselves overlap.
+        var clusters: [[ScheduledVisit]] = []
+        var clusterEnd: Date?
+        for visit in sorted {
+            if let currentEnd = clusterEnd, visit.date < currentEnd {
+                clusters[clusters.count - 1].append(visit)
+                clusterEnd = max(currentEnd, visit.endDate)
+            } else {
+                clusters.append([visit])
+                clusterEnd = visit.endDate
+            }
+        }
+
+        return clusters.flatMap { cluster in
+            // The first column whose previous visit has finished can be reused.
+            // Every member receives the final cluster width, not a width based
+            // only on the events it directly intersects.
+            var columnEnds: [Date] = []
+            var assigned: [(visit: ScheduledVisit, column: Int)] = []
+            for visit in cluster {
+                let column = columnEnds.firstIndex { $0 <= visit.date } ?? columnEnds.count
+                if column == columnEnds.count {
+                    columnEnds.append(visit.endDate)
+                } else {
+                    columnEnds[column] = visit.endDate
+                }
+                assigned.append((visit, column))
+            }
+            return assigned.map { VisitPlacement(visit: $0.visit,
+                                                 column: $0.column,
+                                                 columnCount: columnEnds.count) }
+        }
     }
+
 }
 
 private struct VisitCalendarCard: View {

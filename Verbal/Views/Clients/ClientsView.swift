@@ -22,8 +22,22 @@ struct ClientsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var searchText = ""
     @State private var isSearching = false
+    @State private var showingLayoutOptions = false
+    @AppStorage("clientsLayout") private var layoutRawValue = ClientLayout.grid.rawValue
 
-    private static let cardShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+    private static let cardShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+
+    private enum ClientLayout: String, CaseIterable, Identifiable, Equatable {
+        case grid, list
+
+        var id: String { rawValue }
+        var label: String { self == .grid ? "Grid" : "List" }
+        var assetName: String { self == .grid ? "ClientGrid" : "ClientList" }
+    }
+
+    private var layout: ClientLayout {
+        ClientLayout(rawValue: layoutRawValue) ?? .grid
+    }
 
     /// Everyone with a name on at least one quote, most recently quoted first.
     ///
@@ -82,6 +96,23 @@ struct ClientsView: View {
                 }
                 .accessibilityLabel("Search clients")
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                if showingLayoutOptions {
+                    HStack(spacing: 4) {
+                        layoutToolbarOption(.grid)
+                        layoutToolbarOption(.list)
+                    }
+                } else {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showingLayoutOptions = true
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel("Choose client layout")
+                }
+            }
         }
         // Asked for on every appearance, so arriving here after recording or
         // deleting a quote shows that, rather than whatever the list happened to
@@ -136,8 +167,42 @@ struct ClientsView: View {
     }
 
     private var feed: some View {
+        Group {
+            if layout == .grid {
+                gridFeed
+            } else {
+                listFeed
+            }
+        }
+    }
+
+    private var gridFeed: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                directoryHeader
+
+                LazyVGrid(columns: [
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12)
+                ], spacing: 12) {
+                    ForEach(filtered) { client in
+                        clientCard(client)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 28)
+        }
+    }
+
+    private var listFeed: some View {
         List {
             directoryHeader
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 16, leading: 20, bottom: 14, trailing: 20))
+
             ForEach(filtered) { client in
                 clientRow(client)
             }
@@ -159,47 +224,96 @@ struct ClientsView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 16, leading: 20, bottom: 14, trailing: 20))
+    }
+
+    private func layoutToolbarOption(_ option: ClientLayout) -> some View {
+        Button {
+            layoutRawValue = option.rawValue
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showingLayoutOptions = false
+            }
+        } label: {
+            Image(option.assetName)
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .foregroundStyle(layout == option ? Color(.blueAccentText) : Color(.mainText))
+                .frame(width: 21, height: 21)
+                .frame(width: 32, height: 32)
+        }
+        .accessibilityLabel("Show clients as \(option.label.lowercased())")
+    }
+
+    private func clientCard(_ client: Client) -> some View {
+        NavigationLink(value: ClientKey(id: client.id, name: client.name)) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    InitialsAvatar(name: client.name, size: 44)
+                    Spacer(minLength: 8)
+                }
+
+                Text(client.name)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color(.mainText))
+                    .lineLimit(2)
+                    .frame(minHeight: 40, alignment: .topLeading)
+
+                Text(meta(for: client))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                if let total = client.singleCurrencyTotal {
+                    Text(total)
+                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 154, alignment: .topLeading)
+            .padding(16)
+            .background(Color(.cardSurface), in: Self.cardShape)
+            .overlay(Self.cardShape.strokeBorder(Color(.separator), lineWidth: 0.5))
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.26 : 0.10),
+                    radius: 8, x: 0, y: 3)
+            .contentShape(.contextMenuPreview, Self.cardShape)
+        }
+        .navigationLinkIndicatorVisibility(.hidden)
+        .buttonStyle(CardPressStyle())
+        .accessibilityLabel(accessibilityLabel(for: client))
     }
 
     private func clientRow(_ client: Client) -> some View {
         NavigationLink(value: ClientKey(id: client.id, name: client.name)) {
-            HStack(alignment: .center, spacing: 12) {
+            HStack(spacing: 12) {
                 InitialsAvatar(name: client.name, size: 40)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(client.name)
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(Color(.mainText))
-                            .lineLimit(1)
-
-                        Spacer(minLength: 8)
-
-                        if let total = client.singleCurrencyTotal {
-                            Text(total)
-                                .font(.callout.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(Color(.mainText))
-                                .lineLimit(1)
-                        }
-                    }
-
+                    Text(client.name)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1)
                     Text(meta(for: client))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
 
+                Spacer(minLength: 8)
+
+                if let total = client.singleCurrencyTotal {
+                    Text(total)
+                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(Color(.mainText))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
             .background(Color(.cardSurface), in: Self.cardShape)
             .overlay(Self.cardShape.strokeBorder(Color(.separator), lineWidth: 0.5))
-            .shadow(color: .black.opacity(colorScheme == .dark ? 0.26 : 0.10),
-                    radius: 8, x: 0, y: 3)
             .contentShape(.contextMenuPreview, Self.cardShape)
         }
         .navigationLinkIndicatorVisibility(.hidden)

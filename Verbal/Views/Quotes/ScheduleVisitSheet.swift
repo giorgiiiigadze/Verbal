@@ -41,10 +41,17 @@ struct ScheduleVisitSheet: View {
     @State private var showingLocationSearch = false
     @State private var showingNoteField = false
     @State private var showingClientSheet = false
+    @State private var activeDatePicker: VisitDatePicker?
     /// True while the removal alert is up.
     @State private var confirmingRemoval = false
     @FocusState private var titleFocused: Bool
     @FocusState private var noteFocused: Bool
+
+    private enum VisitDatePicker: Identifiable, Equatable {
+        case startTime, endTime, day
+
+        var id: Self { self }
+    }
 
     /// Tomorrow at the current time. A visit booked on the phone is nearly
     /// always "in the next few days", and the time should begin where the user
@@ -224,6 +231,11 @@ struct ScheduleVisitSheet: View {
         .sheet(isPresented: $showingClientSheet) {
             ClientSheet(name: clientBinding)
         }
+        .sheet(item: $activeDatePicker) { picker in
+            datePickerSheet(for: picker)
+                .presentationDetents([.height(340)])
+                .presentationDragIndicator(.visible)
+        }
         // Same shape as the delete confirmations on Home: a question, the
         // action named plainly, and Cancel.
         .alert("Remove this visit?", isPresented: $confirmingRemoval) {
@@ -284,19 +296,13 @@ struct ScheduleVisitSheet: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    DatePicker("Starts",
-                               selection: startBinding,
-                               displayedComponents: [.hourAndMinute])
-                        .labelsHidden()
+                    dateControl(timeText(start), picker: .startTime, accessibilityLabel: "Start time")
 
                     Image(systemName: "arrow.right")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
 
-                    DatePicker("Ends",
-                               selection: $end,
-                               displayedComponents: [.hourAndMinute])
-                        .labelsHidden()
+                    dateControl(timeText(end), picker: .endTime, accessibilityLabel: "End time")
 
                     Text(durationText)
                         .font(.subheadline)
@@ -304,18 +310,66 @@ struct ScheduleVisitSheet: View {
                         .accessibilityLabel("Lasts \(durationText)")
                 }
 
-                DatePicker("Day",
-                           selection: startBinding,
-                           in: Calendar.current.startOfDay(for: Date())...,
-                           displayedComponents: [.date])
-                    .labelsHidden()
+                dateControl(dayText, picker: .day, accessibilityLabel: "Visit date")
             }
-            .tint(Color(.blueAccentText))
 
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 14)
+    }
+
+    /// Compact `DatePicker`s draw a fixed system pill which makes this panel
+    /// look heavier than its other rows. The visible control is deliberately
+    /// plain; tapping it still opens a native picker with the same binding.
+    private func dateControl(_ text: String,
+                             picker: VisitDatePicker,
+                             accessibilityLabel: String) -> some View {
+        Button { activeDatePicker = picker } label: {
+            Text(text)
+                .font(.body)
+                .foregroundStyle(Color(.mainText))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(text)
+    }
+
+    private var dayText: String {
+        start.formatted(.dateTime.day().month(.abbreviated).year())
+    }
+
+    private func timeText(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
+    }
+
+    @ViewBuilder
+    private func datePickerSheet(for picker: VisitDatePicker) -> some View {
+        NavigationStack {
+            Group {
+                switch picker {
+                case .startTime:
+                    DatePicker("Start time", selection: startBinding, displayedComponents: [.hourAndMinute])
+                case .endTime:
+                    DatePicker("End time", selection: $end, displayedComponents: [.hourAndMinute])
+                case .day:
+                    DatePicker("Visit date",
+                               selection: startBinding,
+                               in: Calendar.current.startOfDay(for: Date())...,
+                               displayedComponents: [.date])
+                }
+            }
+            .datePickerStyle(.wheel)
+            .labelsHidden()
+            .tint(Color(.blueAccentText))
+            .navigationTitle(picker == .day ? "Visit date" : "Visit time")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { activeDatePicker = nil }
+                }
+            }
+        }
     }
 
     private var clientRow: some View {
@@ -368,7 +422,7 @@ struct ScheduleVisitSheet: View {
             .accessibilityLabel(trimmedAddress.isEmpty ? "Add a location" : "Location, \(trimmedAddress)")
 
             HStack(spacing: 14) {
-                rowIcon("phone")
+                phoneIcon
                 TextField("Phone", text: $phone)
                     .textFieldStyle(.plain)
                     .font(.body)
@@ -429,6 +483,16 @@ struct ScheduleVisitSheet: View {
 
     private var noteIcon: some View {
         Image("VisitNote")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
+            .foregroundStyle(.secondary)
+            .frame(width: 22, height: 22)
+            .accessibilityHidden(true)
+    }
+
+    private var phoneIcon: some View {
+        Image("PhoneCall")
             .resizable()
             .renderingMode(.template)
             .scaledToFit()
