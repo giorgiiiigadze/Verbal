@@ -34,6 +34,11 @@ struct LineItemsSheet: View {
     /// only looked at.
     private let originalByID: [UUID: EditableLineItem]
     private let originalPositionByID: [UUID: Int]
+    /// The whole list as it opened, for the one question Save needs answered:
+    /// is there anything to write? `EditableLineItem` compares on the fields
+    /// that reach the database, so this catches edits, additions, deletions
+    /// and reordering, and ignores the view-local identity.
+    private let originalItems: [EditableLineItem]
     @State private var isSaving = false
     /// Set when a write failed, so the sheet reports it instead of closing on
     /// edits that were never stored.
@@ -64,7 +69,13 @@ struct LineItemsSheet: View {
         }
         originalByID = byID
         originalPositionByID = positionByID
+        originalItems = built
     }
+
+    /// Whether anything has actually been changed. Save is disabled until it
+    /// is true: a sheet opened and closed again shouldn't write a row, bump
+    /// the quote's total, or ask the screen behind it to refetch.
+    private var hasChanges: Bool { items != originalItems }
 
     /// Live subtotal from the currently-entered quantities and prices.
     private var subtotal: Double {
@@ -96,6 +107,16 @@ struct LineItemsSheet: View {
                     } label: {
                         Label("Add item", systemImage: "plus.circle.fill")
                     }
+                } header: {
+                    // The same heading the card on the quote wears: full
+                    // weight, full ink, and not shouted in caps the way a
+                    // plain Form section would set it. Opening the sheet
+                    // should read as the same table getting bigger, not as
+                    // arriving somewhere else.
+                    Text("Line items")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color(.mainText))
+                        .textCase(nil)
                 } footer: {
                     Text("Swipe a line to remove it.")
                 }
@@ -125,6 +146,7 @@ struct LineItemsSheet: View {
                     } else {
                         Button("Save") { Task { await save() } }
                             .fontWeight(.semibold)
+                            .disabled(!hasChanges)
                     }
                 }
             }
@@ -220,7 +242,9 @@ private struct LineItemSummaryRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.description.isEmpty ? "New item" : item.description)
-                    .font(.callout.weight(.medium))
+                    // Serif, as on the quote — see `LineItemRow`'s
+                    // documentStyle. The two tables show the same lines.
+                    .font(.system(.callout, design: .serif).weight(.medium))
                     .foregroundStyle(item.description.isEmpty ? .secondary : Color(.mainText))
                     .lineLimit(1)
                 if let subtitle = item.quantitySubtitle {
@@ -243,7 +267,7 @@ private struct LineItemSummaryRow: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
     }
 }
 
