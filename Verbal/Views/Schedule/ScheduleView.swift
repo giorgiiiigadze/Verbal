@@ -79,7 +79,7 @@ struct ScheduleView: View {
                 .zIndex(1)
             VisitsTimelineView(day: selectedDay,
                                visits: dayVisits,
-                               isRecorded: hasRecordedQuote) { selectedVisit = $0 }
+                               status: calendarStatus) { selectedVisit = $0 }
                 // Keep the scrolled grid from visually touching the day header.
                 .padding(.top, 10)
         }
@@ -95,6 +95,10 @@ struct ScheduleView: View {
         return session.quotes.first { Calendar.current.isDate($0.createdAt, inSameDayAs: visit.date) && ($0.displayTitle.lowercased() == key || $0.clientName?.lowercased() == key) }
     }
     private func hasRecordedQuote(for visit: ScheduledVisit) -> Bool { visit.recordedQuoteId != nil || recordedQuote(for: visit) != nil }
+    private func calendarStatus(for visit: ScheduledVisit) -> CalendarVisitStatus {
+        if hasRecordedQuote(for: visit) { return .recorded }
+        return visit.endDate < Date() ? .overdue : .upcoming
+    }
     private func visitAction(for visit: ScheduledVisit) -> VisitAction { if hasRecordedQuote(for: visit) { return .recorded(recordedQuote(for: visit)) }; let now = Date(); if now >= visit.date.addingTimeInterval(-900), now <= visit.date.addingTimeInterval(1800) { return .happeningNow }; return visit.date < now ? .passed : .future }
     private func addOrUpdate(_ visit: ScheduledVisit) { let editing = visits.contains { $0.id == visit.id }; session.visitStore.addOrUpdate(visit); Task { await ScheduledVisitNotifications.schedule(visit) }; toast = Toast(style: .success, message: editing ? "Visit saved" : "Visit booked") }
     private func remove(_ visit: ScheduledVisit) { selectedVisit = nil; session.visitStore.remove(visit); ScheduledVisitNotifications.cancel(visit); toast = Toast(style: .success, message: "Visit removed") }
@@ -104,6 +108,26 @@ struct ScheduleView: View {
     private func presentRecordedQuote(_ quote: QuoteSummary) async { await session.prefetchLineItems(for: quote.id); try? await Task.sleep(for: .seconds(0.3)); quoteToOpen = quote }
     private func openDirections(for visit: ScheduledVisit) { guard let address = visit.address?.trimmingCharacters(in: .whitespacesAndNewlines), !address.isEmpty, let encoded = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed), let url = URL(string: "http://maps.apple.com/?q=\(encoded)") else { toast = Toast(style: .error, message: "No address saved"); return }; openURL(url) }
     private func callClient(for visit: ScheduledVisit) { guard let phone = visit.phone?.trimmingCharacters(in: .whitespacesAndNewlines), !phone.isEmpty else { toast = Toast(style: .error, message: "No phone number saved"); return }; let dialable = phone.filter { $0.isNumber || $0 == "+" }; guard !dialable.isEmpty, let url = URL(string: "tel:\(dialable)") else { toast = Toast(style: .error, message: "Couldn't call this number"); return }; openURL(url) }
+}
+
+private enum CalendarVisitStatus {
+    case upcoming, recorded, overdue
+
+    var textColor: Color {
+        switch self {
+        case .upcoming: Color(.statusWarningText)
+        case .recorded: Color(.statusAcceptedText)
+        case .overdue: Color(.statusDeclinedText)
+        }
+    }
+
+    var fillColor: Color {
+        switch self {
+        case .upcoming: Color(.statusWarningFill)
+        case .recorded: Color(.statusAcceptedFill)
+        case .overdue: Color(.statusDeclinedFill)
+        }
+    }
 }
 
 private struct VisitsCalendarHeader: View {
@@ -167,7 +191,7 @@ private struct VisitsDaySelector: View {
 private struct VisitsTimelineView: View {
     let day: Date
     let visits: [ScheduledVisit]
-    let isRecorded: (ScheduledVisit) -> Bool
+    let status: (ScheduledVisit) -> CalendarVisitStatus
     let onSelect: (ScheduledVisit) -> Void
     // A dedicated left rail keeps the clock readable while the day pages move
     // horizontally. Short labels avoid the two-line time stamps seen in the
@@ -206,7 +230,7 @@ private struct VisitsTimelineView: View {
                         Rectangle().fill(Color(.separator).opacity(0.6)).frame(height: 0.5).offset(x: labelWidth, y: CGFloat(hour) * hourHeight)
                     }
                     ForEach(placements) { item in
-                        VisitCalendarCard(visit: item.visit, isRecorded: isRecorded(item.visit)).frame(width: max(80, (columnWidth - 12) / CGFloat(item.columnCount) - 4), height: height(for: item.visit), alignment: .topLeading).offset(x: labelWidth + 6 + CGFloat(item.column) * ((columnWidth - 12) / CGFloat(item.columnCount)), y: yPosition(item.visit.date) + 4).onTapGesture { onSelect(item.visit) }
+                        VisitCalendarCard(visit: item.visit, status: status(item.visit)).frame(width: max(80, (columnWidth - 12) / CGFloat(item.columnCount) - 4), height: height(for: item.visit), alignment: .topLeading).offset(x: labelWidth + 6 + CGFloat(item.column) * ((columnWidth - 12) / CGFloat(item.columnCount)), y: yPosition(item.visit.date) + 4).onTapGesture { onSelect(item.visit) }
                     }
                     // A periodic timeline keeps the marker live if this page
                     // stays open while the working day moves on.
@@ -288,17 +312,10 @@ private struct VisitPlacement: Identifiable {
 
 private struct VisitCalendarCard: View {
     let visit: ScheduledVisit
-    let isRecorded: Bool
-
-    private var textColor: Color {
-        Color(isRecorded ? .statusAcceptedText : .statusWarningText)
-    }
-
-    private var fillColor: Color {
-        Color(isRecorded ? .statusAcceptedFill : .statusWarningFill)
-    }
+    let status: CalendarVisitStatus
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         VStack(alignment: .leading, spacing: 2) {
             Text(visit.title).font(.caption.weight(.semibold)).lineLimit(1)
             Text(visit.timeRangeText).font(.caption2).lineLimit(1)
@@ -308,10 +325,19 @@ private struct VisitCalendarCard: View {
                 Text(address).font(.caption2).lineLimit(1)
             }
         }
-        .foregroundStyle(textColor)
+        .foregroundStyle(status.textColor)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(8)
-        .background(fillColor, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .background(status.fillColor, in: shape)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(status.textColor)
+                .frame(width: 4)
+        }
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(status.textColor.opacity(0.18), lineWidth: 0.5))
     }
 }
 private struct CurrentTimeIndicator: View {

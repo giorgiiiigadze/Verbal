@@ -86,8 +86,8 @@ struct HomeView: View {
         }
     }
 
-    /// The number of visits visible in Upcoming before its list scrolls.
-    private static let visibleVisitCount = 4
+    /// Home previews the next two jobs; Calendar holds the complete schedule.
+    private static let visibleVisitCount = 2
     private static let compactVisitRowHeight: CGFloat = 52
 
     var body: some View {
@@ -507,15 +507,27 @@ struct HomeView: View {
     private var upcomingSection: some View {
         upcomingHeader
 
-        if visits.isEmpty {
+        if upcomingVisits.isEmpty {
             upcomingEmpty
         } else {
             upcomingVisitsCard
         }
     }
 
+    /// A quote already recorded for a visit belongs with the quote list, not in
+    /// Home's next-jobs preview. Likewise, a past visit is a Calendar decision
+    /// rather than an upcoming job competing with the next appointment.
+    private var upcomingVisits: [ScheduledVisit] {
+        let now = Date()
+        return visits
+            .filter { $0.endDate >= now && !hasRecordedQuote(for: $0) }
+            .sorted { $0.date < $1.date }
+            .prefix(Self.visibleVisitCount)
+            .map { $0 }
+    }
+
     private var upcomingVisitsHeight: CGFloat {
-        CGFloat(min(visits.count, Self.visibleVisitCount)) * Self.compactVisitRowHeight
+        CGFloat(upcomingVisits.count) * Self.compactVisitRowHeight
     }
 
     /// Same weight and colour as the day headings below, because it is the same
@@ -532,19 +544,17 @@ struct HomeView: View {
     }
 
     private var upcomingVisitsCard: some View {
-        ScrollView(.vertical, showsIndicators: visits.count > Self.visibleVisitCount) {
-            LazyVStack(spacing: 0) {
-                // One flat run of rows. Grouping by day earned its dividers and
-                // headings back when the row said only a time; now that each
-                // row says which day it is, that structure is redundant.
-                ForEach(visits) { visit in
-                    compactVisitRow(visit, isNext: visit.id == visits.first?.id)
-                        .frame(minHeight: Self.compactVisitRowHeight)
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .top)),
-                            removal: .opacity.combined(with: .move(edge: .top))
-                        ))
-                }
+        VStack(spacing: 0) {
+            // One flat run of rows. Grouping by day earned its dividers and
+            // headings back when the row said only a time; now that each
+            // row says which day it is, that structure is redundant.
+            ForEach(upcomingVisits) { visit in
+                compactVisitRow(visit, isNext: visit.id == upcomingVisits.first?.id)
+                    .frame(minHeight: Self.compactVisitRowHeight)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity.combined(with: .move(edge: .top))
+                    ))
             }
         }
         .frame(height: upcomingVisitsHeight)
