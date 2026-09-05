@@ -41,6 +41,24 @@ struct AuthView: View {
 
                 Spacer()
 
+                // Someone arriving straight out of onboarding has just spent
+                // several minutes setting this up, and the reason to sign in is
+                // that work — not the account. A returning user has no draft
+                // waiting, so they keep the headlines that describe the app.
+                if let held = heldSetup {
+                    VStack(spacing: 12) {
+                        Text("Save your\nsetup.")
+                            .font(.robotoSlab(32, relativeTo: .largeTitle))
+                            .foregroundStyle(Color(.mainText))
+                            .multilineTextAlignment(.center)
+                        Text(held)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 12)
+                    }
+                } else {
                 Text(Self.headlines[headlineIndex])
                     .font(.robotoSlab(32, relativeTo: .largeTitle))
                     .foregroundStyle(Color(.mainText))
@@ -55,6 +73,7 @@ struct AuthView: View {
                         removal: .opacity.combined(with: .offset(y: -14))
                     ))
                     .task { await cycleHeadlines() }
+                }
 
                 Spacer()
 
@@ -104,6 +123,25 @@ struct AuthView: View {
     /// sign-in screen that argues a new point every few seconds reads as an
     /// advert, and this one is being looked at by someone who has already
     /// decided to install.
+    /// What onboarding left on the device, said in one line — or nil for
+    /// someone who never went through it, or who skipped every question in it.
+    ///
+    /// Read once, when the screen is built: the draft is cleared as the first
+    /// sign-in writes it into the profile, and a headline that changes to
+    /// something else mid-sign-in reads as the app losing the work.
+    private var heldSetup: String? {
+        guard let draft = OnboardingDraft.load() else { return nil }
+        var parts: [String] = []
+        if !draft.rates.isEmpty {
+            parts.append(draft.rates.count == 1 ? "your rate" : "your \(draft.rates.count) rates")
+        }
+        if (draft.businessName?.isEmpty == false) || draft.taxRate != nil {
+            parts.append("your business details")
+        }
+        guard !parts.isEmpty else { return nil }
+        return "Signing in keeps \(ListFormatter.localizedString(byJoining: parts))."
+    }
+
     private static let headlines = [
         "Speak the job.\nSend the quote.",
         "Describe the work.\nWalk out with it priced.",

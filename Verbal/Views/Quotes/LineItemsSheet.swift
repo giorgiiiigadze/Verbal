@@ -242,9 +242,7 @@ private struct LineItemSummaryRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.description.isEmpty ? "New item" : item.description)
-                    // Serif, as on the quote — see `LineItemRow`'s
-                    // documentStyle. The two tables show the same lines.
-                    .font(.system(.callout, design: .serif).weight(.medium))
+                    .font(.callout.weight(.medium))
                     .foregroundStyle(item.description.isEmpty ? .secondary : Color(.mainText))
                     .lineLimit(1)
                 if let subtitle = item.quantitySubtitle {

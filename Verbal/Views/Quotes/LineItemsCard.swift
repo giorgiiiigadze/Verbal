@@ -18,6 +18,9 @@ import SwiftUI
 /// `surface`, so the card lifts off the page like every other card rather than
 /// sinking into it.
 struct LineItemsCard<Rows: View>: View {
+    /// Quote detail calls this “Line items”; onboarding uses the identical
+    /// container to preview the rate card the person just created.
+    var title = "Line items"
     /// Present only where the items can actually be edited — the recording
     /// review is showing a quote that hasn't been saved yet.
     var onExpand: (() -> Void)?
@@ -30,7 +33,7 @@ struct LineItemsCard<Rows: View>: View {
                 // are the point of the document; as a grey footnote it was the
                 // quietest label on a screen where it should be among the
                 // loudest.
-                Text("Line items")
+                Text(title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color(.mainText))
                 Spacer()

@@ -4,16 +4,21 @@
 //
 //  The screens between installing the app and signing in.
 //
-//  Deliberately not a carousel of promises. The first screen shows the app
-//  doing its one trick, because a voice-to-quote app is easier to prove than to
-//  describe; the rest ask the only questions worth asking before there is an
-//  account — and every one of those answers does real work rather than being
-//  collected for its own sake.
+//  Three acts rather than a queue of questions. The introduction names the
+//  problem and prices it in the user's own numbers; the climax hands them the
+//  app and lets them make a quote by speaking, before anyone has signed up for
+//  anything; the conclusion says what they came for, what it costs, and how the
+//  reminders keep it happening.
 //
-//  They run before auth, so there is no user to save anything to. Both answers
-//  are held on the device and written to the profile on the first sign-in.
+//  It is longer than it was, on purpose. The setup questions were always here —
+//  answered cold they are a form, and answered after someone has watched what
+//  quoting costs them in a year they are the first thing being done about it.
+//
+//  It all runs before auth, so there is no user to save anything to. The
+//  answers are held on the device and written to the profile on first sign-in.
 //
 
+import StoreKit
 import SwiftUI
 import UserNotifications
 
@@ -21,106 +26,76 @@ struct OnboardingView: View {
     /// Called when the last step is finished, to hand over to the auth screen.
     var onContinue: () -> Void
 
-    @AppStorage("pendingTrade") private var pendingTrade = ""
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
+    @Environment(Store.self) private var store
+    @Environment(\.requestReview) private var requestReview
+
+    @State private var model = OnboardingModel()
     @State private var step = 0
-    @Namespace private var glass
+    /// The route can grow when someone chooses a trade with preset jobs. Keep
+    /// the visible bar tied to navigation, not to an answer changing beneath
+    /// the current screen.
+    @State private var displayedProgress = 0.0
+    @FocusState private var focusedField: OnboardingField?
 
-    /// Jobs ticked on the presets step, and the prices typed for them. Held as
-    /// text so a half-typed number doesn't fight the field.
-    @State private var pickedJobs: Set<String> = []
-    @State private var prices: [String: String] = [:]
-    /// True once "Something else" is tapped: the chip stays lit while the field
-    /// below it holds the real answer.
-    @State private var isCustomTrade = false
-    @State private var businessName = ""
-    @State private var taxRate = ""
-    @State private var isTaxRegistered = false
-    @FocusState private var focusedField: Field?
-
-    private enum Step: Hashable {
-        case trade, jobs, prices, business, reveal, notifications, video
-    }
-
-    private enum Field: Hashable {
-        case customTrade
-        case price(String)
-        case businessName
-        case taxRate
-    }
-
-    /// The steps this particular user will see. A trade with no preset list
-    /// skips the jobs question rather than being shown a list that fits nobody,
-    /// and pricing is skipped when nothing was ticked to price.
-    private var steps: [Step] {
-        var list: [Step] = [.video, .trade]
-        if !TradePresets.jobs(for: pendingTrade).isEmpty {
-            list.append(.jobs)
-            if !pickedJobs.isEmpty { list.append(.prices) }
-        }
-        list.append(contentsOf: [.business, .reveal, .notifications])
-        return list
-    }
+    private typealias Step = OnboardingModel.Step
 
     /// Clamped, because `steps` shrinks underneath the index when someone swipes
     /// back and unticks every job.
     private var current: Step {
-        let all = steps
+        let all = model.steps
         return all[min(step, all.count - 1)]
     }
 
     /// Asked of the list rather than compared against one case, so adding a
     /// screen to the end doesn't leave the finishing behaviour on the one
-    /// before it. This is what ENDS onboarding — the button's looks are keyed
-    /// to `isFirstStep` instead.
-    private var isLastStep: Bool {
-        step >= steps.count - 1
-    }
+    /// before it.
+    private var isLastStep: Bool { step >= model.steps.count - 1 }
 
-    /// The opening screen, which is the clip. It carries the invitation into
-    /// all this; every screen after it is a step through it.
+    /// The opening screen, which carries the invitation into all this. Every
+    /// screen after it is a step through it.
     private var isFirstStep: Bool { step == 0 }
 
-    private var pickedList: [TradePresets.Job] {
-        TradePresets.jobs(for: pendingTrade).filter { pickedJobs.contains($0.name) }
-    }
-
-    /// What the user typed, as rates worth saving. A blank or unparseable price
-    /// is left out rather than saved as a rate with no price — the rate card
-    /// exists to avoid exactly that.
-    private var draftRates: [OnboardingDraft.Rate] {
-        pickedList.compactMap { job in
-            let text = (prices[job.name] ?? "").replacingOccurrences(of: ",", with: ".")
-            guard let value = Double(text.trimmingCharacters(in: .whitespaces)), value > 0
-            else { return nil }
-            return OnboardingDraft.Rate(name: job.name, unit: job.unit,
-                                        price: value, type: TradePresets.type)
+    /// The trade is the one answer with no sensible default, and it reaches the
+    /// extraction on every quote. So it is the one question that is asked
+    /// rather than offered — everything else here has a default worth keeping,
+    /// or is not a question at all.
+    ///
+    /// The recording screen is the other gate, and a softer one: Continue waits
+    /// until there is something to carry forward, and Skip in the header is
+    /// always there for someone who would rather not talk to their phone in
+    /// front of a customer.
+    private var canContinue: Bool {
+        switch current {
+        case .method:
+            return model.answers.method != nil
+        case .quoteVolume:
+            return model.answers.quotesPerWeek != nil
+        case .quoteDuration:
+            return model.answers.minutesPerQuote != nil
+        case .trade:
+            return !model.trade.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .jobs:
+            return !model.pickedJobs.isEmpty
+        case .record:
+            return !model.recorder.isSessionActive && model.recorder.hasContent
+        case .commitment:
+            return model.answers.commitment != nil
+        default:
+            return true
         }
     }
 
-    private static let otherTrade = "Something else"
-    /// Matches the lighter blue used by the paywall and quote-share action.
-    private static let actionBlue = Color(.royalBlue600)
-
-    private static let trades = [
-        "Electrician", "Plumber", "Carpenter", "Tiler",
-        "Painter", "Plasterer", "Builder", "Roofer",
-        "Landscaper", otherTrade
-    ]
-
-    /// The trade is the one answer with no sensible default, and it reaches the
-    /// extraction on every quote — "20 mil" means one thing to a plumber and
-    /// another to an electrician. So it is the one question that is asked
-    /// rather than offered. Everything else here has a default worth keeping.
-    private var canContinue: Bool {
+    /// Steps a Skip button belongs on: the ones that collect something the app
+    /// can manage without. Never on a statement screen, where there is nothing
+    /// to skip and the button would just be a second Continue.
+    private var isSkippable: Bool {
         switch current {
-        case .trade:
-            return !pendingTrade.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .reveal:
+        case .method, .quoteVolume, .quoteDuration, .jobs, .prices, .business, .micReason, .record:
             return true
         default:
-            return true
+            return false
         }
     }
 
@@ -142,30 +117,27 @@ struct OnboardingView: View {
                     }
                     ToolbarItem(placement: .principal) {
                         // The opening screen is deliberately just the product
-                        // preview, its two-line promise and Continue. The app
-                        // name returns with the setup questions.
+                        // preview, its promise and Continue. The app name
+                        // returns with the questions.
                         if !isFirstStep {
                             HStack(spacing: 8) {
                                 Image(.brandMark)
                                     .resizable()
                                     .scaledToFit()
                                     .frame(width: 20)
-                                    .foregroundStyle(Self.actionBlue)
+                                    .foregroundStyle(OnboardingStyle.action)
                                 Text("Verbal")
                                     .font(.robotoSlab(18, relativeTo: .headline))
-                                    .foregroundStyle(Self.actionBlue)
+                                    .foregroundStyle(OnboardingStyle.action)
                             }
                         }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         // Never a wall: every question has a sensible answer
                         // already, and nobody should be stuck on the way to the
-                        // thing they installed the app for. Nothing to skip on
-                        // the reveal.
-                        // Absent where the answer is required, so Skip never
-                        // offers a way round a disabled Continue.
-                        if step > 0, current != .reveal, current != .video, current != .trade, current != .notifications {
-                            Button("Skip") { advance(requestingNotifications: false) }
+                        // thing they installed the app for.
+                        if isSkippable {
+                            Button("Skip") { skip() }
                                 .font(.subheadline)
                                 .foregroundStyle(Color(.mainText))
                         }
@@ -187,11 +159,15 @@ struct OnboardingView: View {
                 }
                 .navigationBarTitleDisplayMode(.inline)
         }
+        // Loaded here rather than on the screen that shows the price: StoreKit
+        // takes a moment, and a number that appears after the screen does reads
+        // as the app changing its mind about what it charges.
+        .task { await store.loadProducts() }
     }
 
     private var content: some View {
         ZStack {
-            // Plain ground. These screens ask five questions and show a sample
+            // Plain ground. These screens ask a dozen questions and show a
             // quote, and drawn waves behind a form is decoration competing with
             // the thing being read. The illustration stays on sign-in, where
             // there is nothing to answer and it is the whole of the welcome —
@@ -200,19 +176,20 @@ struct OnboardingView: View {
             Color(.homeBackground).ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 0) {
+                // Eighteen screens is long enough that "how much more of this"
+                // is a fair question, and a hairline answers it without
+                // inviting anyone to stop and count.
+                if !isFirstStep {
+                    OnboardingProgressBar(progress: progress)
+                        .padding(.bottom, 20)
+                        .transition(.opacity)
+                }
+
                 Group {
-                    switch current {
-                    case .trade: tradeStep
-                    case .jobs: jobsStep
-                    case .prices: pricesStep
-                    case .business: businessStep
-                    case .reveal: revealStep
-                    case .notifications: notificationsStep
-                    case .video: videoStep
-                    }
+                    stepView
                 }
                 // Each step arrives from the side it was going, so the sequence
-                // reads as forward motion rather than as three unrelated
+                // reads as forward motion rather than as eighteen unrelated
                 // screens sharing a background.
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .offset(x: 24)),
@@ -239,7 +216,7 @@ struct OnboardingView: View {
         .gesture(
             DragGesture(minimumDistance: 20)
                 .onEnded { drag in
-                    guard step > 0 else { return }
+                    guard step > 0, !model.recorder.isSessionActive else { return }
                     let sideways = drag.translation.width
                     let vertical = abs(drag.translation.height)
                     // Through the same path as the button, so a swipe back and
@@ -249,6 +226,71 @@ struct OnboardingView: View {
         )
     }
 
+    @ViewBuilder
+    private var stepView: some View {
+        switch current {
+        case .hook:
+            OnboardingHookStep(currencyCode: currencyCode)
+        case .method:
+            OnboardingMethodStep(model: model)
+        case .quoteVolume:
+            OnboardingQuoteVolumeStep(model: model)
+        case .quoteDuration:
+            OnboardingQuoteDurationStep(model: model)
+        case .stat:
+            OnboardingStatStep(answers: model.answers)
+        case .trade:
+            OnboardingTradeStep(model: model, focused: $focusedField)
+        case .jobs:
+            OnboardingJobsStep(model: model)
+        case .prices:
+            OnboardingPricesStep(model: model, currencyCode: $currencyCode,
+                                 focused: $focusedField)
+        case .business:
+            OnboardingBusinessStep(model: model, focused: $focusedField)
+        case .summary:
+            OnboardingSummaryStep(model: model)
+        case .micReason:
+            OnboardingMicReasonStep()
+        case .record:
+            OnboardingRecordStep(model: model)
+        case .result:
+            OnboardingResultStep(model: model, currencyCode: currencyCode)
+        case .milestone:
+            OnboardingMilestoneStep(model: model)
+        case .review:
+            OnboardingReviewStep()
+        case .goal:
+            OnboardingGoalStep(answers: model.answers)
+        case .commitment:
+            OnboardingCommitmentStep(model: model)
+        case .expectations:
+            OnboardingExpectationsStep(
+                answers: model.answers,
+                monthlyPrice: store.monthly.map { NSDecimalNumber(decimal: $0.price).doubleValue },
+                monthlyDisplayPrice: store.monthly?.displayPrice
+            )
+        case .notifications:
+            OnboardingNotificationsStep()
+        }
+    }
+
+    private var progress: Double {
+        displayedProgress
+    }
+
+    private func progress(at index: Int) -> Double {
+        let all = model.steps
+        guard all.count > 1 else { return 1 }
+        return Double(min(index, all.count - 1)) / Double(all.count - 1)
+    }
+
+    private func updateDisplayedProgress() {
+        displayedProgress = progress(at: step)
+    }
+
+    // MARK: - The button
+
     /// The app's own ink on the opening screen. It was `.primary`, on the
     /// reasoning that the button wanted to be black and that a literal black
     /// would not invert in the dark — true of `Color.black`, but `mainText` is
@@ -257,36 +299,27 @@ struct OnboardingView: View {
     /// the app drawn from outside its own palette.
     private var barFill: Color {
         if isFirstStep { return Color(.mainText) }
-        return canContinue ? Self.actionBlue : Self.actionBlue.opacity(0.4)
+        return canContinue ? OnboardingStyle.action : OnboardingStyle.action.opacity(0.4)
     }
 
-    /// One button, and only one. Skip moved into the header, where it stops
-    /// reading as a second opinion about the thing directly above it.
+    /// One button, and only one, except on the two screens that ask iOS for
+    /// something. There a plain Continue would be a trick — the button that
+    /// raises a system dialog has to say so, and the way out has to sit beside
+    /// it rather than hide in the header.
     @ViewBuilder
     private var footer: some View {
-        if current == .notifications {
-            VStack(spacing: 10) {
-                Button { advance() } label: {
-                    Text("Turn on notifications")
-                        .font(.headline)
-                        .foregroundStyle(Color(.homeBackground))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 58)
-                        .background(Color(.mainText), in: Capsule())
-                }
-                .buttonStyle(.plain)
-
-                Button { advance(requestingNotifications: false) } label: {
-                    Text("Not now")
-                        .font(.headline)
-                        .foregroundStyle(Color(.mainText))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 58)
-                        .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 1))
-                }
-                .buttonStyle(.plain)
+        switch current {
+        case .notifications:
+            pairedFooter(primary: "Turn on notifications",
+                         secondary: "Not now") { wantsNotifications in
+                finish(requestingNotifications: wantsNotifications)
             }
-        } else {
+        case .review:
+            pairedFooter(primary: "Rate Verbal", secondary: "Not now") { wantsReview in
+                if wantsReview { requestReview() }
+                advance()
+            }
+        default:
             Button {
                 advance()
             } label: {
@@ -303,6 +336,42 @@ struct OnboardingView: View {
         }
     }
 
+    private func pairedFooter(primary: String, secondary: String,
+                              action: @escaping (Bool) -> Void) -> some View {
+        VStack(spacing: 10) {
+            Button { action(true) } label: {
+                Text(primary)
+                    .font(.headline)
+                    .foregroundStyle(Color(.homeBackground))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 58)
+                    .background(Color(.mainText), in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button { action(false) } label: {
+                Text(secondary)
+                    .font(.headline)
+                    .foregroundStyle(Color(.mainText))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 58)
+                    .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var footerTitle: String {
+        switch current {
+        case .hook: return "Get started"
+        case .record: return model.recorder.hasContent ? "That's the one" : "Continue"
+        case .result: return "Nice"
+        default: return "Continue"
+        }
+    }
+
+    // MARK: - Moving
+
     /// Softer than going forward. Both are steps, but one is a decision and the
     /// other is undoing one, and a back that lands as firmly as a Continue makes
     /// the two feel interchangeable.
@@ -310,550 +379,62 @@ struct OnboardingView: View {
         guard step > 0 else { return }
         focusedField = nil
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        withAnimation { step -= 1 }
-    }
-
-    /// Both buttons come through here, so the feedback lives here too rather
-    /// than being attached to each of them separately.
-    private var footerTitle: String {
-        current == .notifications ? "Turn on notifications" : "Continue"
-    }
-
-    private func advance(requestingNotifications: Bool = true) {
-        focusedField = nil
-        if current == .notifications {
-            guard requestingNotifications else {
-                completeOnboarding()
-                return
-            }
-            Task {
-                _ = try? await UNUserNotificationCenter.current().requestAuthorization(
-                    options: [.alert, .sound, .badge]
-                )
-                await MainActor.run { completeOnboarding() }
-            }
-            return
+        withAnimation {
+            step -= 1
+            updateDisplayedProgress()
         }
+    }
+
+    private func advance() {
+        focusedField = nil
         guard !isLastStep else {
-            completeOnboarding()
+            finish(requestingNotifications: false)
             return
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        step += 1
+        withAnimation {
+            step += 1
+            updateDisplayedProgress()
+        }
+    }
+
+    /// Skipping the microphone explanation skips the recording too — the two
+    /// are one decision, and dropping someone who just declined the explanation
+    /// onto a record button is the app asking again in a worse way.
+    private func skip() {
+        focusedField = nil
+        if current == .micReason {
+            let all = model.steps
+            if let resumeAt = all.firstIndex(of: .result) {
+                withAnimation {
+                    step = resumeAt
+                    updateDisplayedProgress()
+                }
+                return
+            }
+        }
+        advance()
+    }
+
+    private func finish(requestingNotifications: Bool) {
+        guard requestingNotifications else {
+            completeOnboarding()
+            return
+        }
+        Task {
+            _ = try? await UNUserNotificationCenter.current().requestAuthorization(
+                options: [.alert, .sound, .badge]
+            )
+            await MainActor.run { completeOnboarding() }
+        }
     }
 
     private func completeOnboarding() {
         // The end of the questions, not another step through them — the
         // heavier notification marks it as arriving somewhere.
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        saveDraft()
+        model.saveDraft()
         onContinue()
-    }
-
-    /// Everything but the trade, which already has its own key and its own
-    /// adoption. Saved on the way out rather than as it's typed: half an answer
-    /// isn't worth carrying into an account.
-    private func saveDraft() {
-        var draft = OnboardingDraft()
-        let name = businessName.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft.businessName = name.isEmpty ? nil : name
-        if isTaxRegistered {
-            let typed = Double(taxRate.replacingOccurrences(of: ",", with: "."))
-            draft.taxRate = typed.map { max(0, $0) }
-        }
-        draft.rates = draftRates
-        if draft.isEmpty { OnboardingDraft.clear() } else { draft.save() }
-    }
-
-    // MARK: - Step 2 · trade
-
-    private var tradeStep: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("What's your trade?")
-                .font(.robotoSlab(32, relativeTo: .largeTitle))
-                .foregroundStyle(Color(.mainText))
-
-            Text("So a quote knows that “20 mil” means your 20 mil.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            // A grid of taps rather than a text field: this is answered once,
-            // standing in a van, and a keyboard is the slowest way to say a
-            // word the app could have offered.
-            FlowLayout(spacing: 8) {
-                ForEach(Self.trades, id: \.self) { trade in
-                    let isOther = trade == Self.otherTrade
-                    let picked = isOther ? isCustomTrade : (!isCustomTrade && pendingTrade == trade)
-                    Button {
-                        if isOther {
-                            // The stored trade is whatever they type, not the
-                            // word "Something else" — that string was being sent
-                            // to the extraction as trade context, where it says
-                            // less than nothing.
-                            isCustomTrade = !isCustomTrade
-                            pendingTrade = ""
-                        } else {
-                            isCustomTrade = false
-                            pendingTrade = picked ? "" : trade
-                        }
-                    } label: {
-                        Text(trade)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(picked ? .white : Color(.mainText))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 11)
-                            .background(picked
-                                        ? Self.actionBlue : Color(.cardSurface),
-                                        in: Capsule())
-                            .overlay(
-                                Capsule().strokeBorder(
-                                    picked ? .clear : Color(.separator),
-                                    lineWidth: 0.5)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .animation(.easeInOut(duration: 0.15), value: pendingTrade)
-            .animation(.easeInOut(duration: 0.15), value: isCustomTrade)
-
-            // Typed rather than tapped, because there is no list of every trade
-            // there is. Whatever goes here reaches the extraction as context —
-            // "Locksmith" tells it something, "Something else" tells it nothing.
-            if isCustomTrade {
-                TextField("Locksmith, glazier, welder…", text: $pendingTrade)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .focused($focusedField, equals: .customTrade)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(Color(.cardSurface),
-                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color(.separator), lineWidth: 0.5)
-                    )
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-    }
-
-    // MARK: - Step 3 · the jobs they do
-
-    /// Ticking, not typing. The point of this screen is that it can be answered
-    /// while holding something in the other hand.
-    private var jobsStep: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Which of these\ndo you do?")
-                .font(.robotoSlab(32, relativeTo: .largeTitle))
-                .foregroundStyle(Color(.mainText))
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text("Verbal prices these for you automatically when you quote them.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            FlowLayout(spacing: 8) {
-                ForEach(TradePresets.jobs(for: pendingTrade)) { job in
-                    let picked = pickedJobs.contains(job.name)
-                    Button {
-                        UISelectionFeedbackGenerator().selectionChanged()
-                        if picked { pickedJobs.remove(job.name) } else { pickedJobs.insert(job.name) }
-                    } label: {
-                        Text(job.name)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(picked ? .white : Color(.mainText))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 11)
-                            .background(picked ? Self.actionBlue : Color(.cardSurface),
-                                        in: Capsule())
-                            .overlay(
-                                Capsule().strokeBorder(picked ? .clear : Color(.separator),
-                                                       lineWidth: 0.5)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .animation(.easeInOut(duration: 0.15), value: pickedJobs)
-        }
-    }
-
-    // MARK: - Step 4 · what they charge
-
-    /// Currency lives here rather than on a screen of its own: it is the same
-    /// question as "what do you charge", asked in the same breath, and it is
-    /// already answered from the device's region for most people.
-    private var pricesStep: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Roughly what\ndo you charge?")
-                .font(.robotoSlab(32, relativeTo: .largeTitle))
-                .foregroundStyle(Color(.mainText))
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text("A rough number beats none — you can correct any of them later.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(AppCurrency.allCases) { option in
-                        Button {
-                            currencyCode = option.rawValue
-                        } label: {
-                            Text("\(option.symbol) \(option.rawValue)")
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(currencyCode == option.rawValue
-                                                 ? .white : Color(.mainText))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(currencyCode == option.rawValue
-                                            ? Self.actionBlue : Color(.cardSurface),
-                                            in: Capsule())
-                                .overlay(
-                                    Capsule().strokeBorder(
-                                        currencyCode == option.rawValue
-                                            ? .clear : Color(.separator),
-                                        lineWidth: 0.5)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
-            // Runs to the edges of the screen rather than stopping at the
-            // page's margin, the same as the quote screen's chips. Clipped to
-            // the margin the row reads as a short list that happens to be cut
-            // off; running out past it, it reads as one that carries on.
-            .scrollClipDisabled()
-
-            ScrollView {
-                VStack(spacing: 8) {
-                    ForEach(pickedList) { job in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(job.name)
-                                    .font(.callout.weight(.medium))
-                                    .foregroundStyle(Color(.mainText))
-                                    .lineLimit(1)
-                                Text("per \(job.unit)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 8)
-                            HStack(spacing: 3) {
-                                Text(AppCurrency.current.symbol)
-                                    .foregroundStyle(.secondary)
-                                TextField("0", text: Binding(
-                                    get: { prices[job.name] ?? "" },
-                                    set: { prices[job.name] = $0 }
-                                ))
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .focused($focusedField, equals: .price(job.name))
-                                .frame(width: 72)
-                            }
-                            .font(.callout.monospacedDigit())
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 11)
-                        .background(Color(.cardSurface),
-                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(Color(.separator), lineWidth: 0.5)
-                        )
-                    }
-                }
-            }
-            .scrollBounceBehavior(.basedOnSize)
-        }
-    }
-
-    // MARK: - Step 5 · the business
-
-    private var businessStep: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("What's your\nbusiness called?")
-                .font(.robotoSlab(32, relativeTo: .largeTitle))
-                .foregroundStyle(Color(.mainText))
-                .fixedSize(horizontal: false, vertical: true)
-
-            // Asked here because the alternative is asking at the worst possible
-            // moment: today the first attempt to share a quote stops to collect
-            // this, with a customer waiting on the other end.
-            Text("It goes at the top of every quote you send.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-            TextField("e.g. Kapanadze Plumbing", text: $businessName)
-                .textInputAutocapitalization(.words)
-                .focused($focusedField, equals: .businessName)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(Color(.cardSurface),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
-
-            Toggle(isOn: $isTaxRegistered.animation(.easeInOut(duration: 0.2))) {
-                Text("I'm tax registered")
-                    .font(.callout)
-                    .foregroundStyle(Color(.mainText))
-            }
-            .tint(Self.actionBlue)
-
-            if isTaxRegistered {
-                HStack(spacing: 8) {
-                    Text("Rate")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    TextField("20", text: $taxRate)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .font(.callout.monospacedDigit())
-                        .focused($focusedField, equals: .taxRate)
-                        .frame(width: 60)
-                    Text("%").foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color(.cardSurface),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-    }
-
-    // MARK: - Step 6 · the reveal
-
-    /// Their own answers, priced, before they have signed up for anything.
-    ///
-    /// Canned on purpose: a live recording here would need the microphone before
-    /// the app has earned it, and a poor first extraction is a poor first
-    /// impression. Everything on this card is real — their trade, their
-    /// currency, the prices they just typed — it simply isn't spoken.
-    private var revealStep: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(revealTitle)
-                .font(.robotoSlab(32, relativeTo: .largeTitle))
-                .foregroundStyle(Color(.mainText))
-                .fixedSize(horizontal: false, vertical: true)
-            VStack(alignment: .leading, spacing: 12) {
-                Text(sampleSpokenLine)
-                    .font(.callout)
-                    .italic()
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Self.actionBlue.opacity(0.5))
-                    .frame(maxWidth: .infinity)
-
-                LineItemsCard {
-                    ForEach(Array(sampleLines.enumerated()), id: \.offset) { index, line in
-                        if index > 0 { Divider() }
-                        LineItemRow(description: line.name,
-                                    quantityText: "\(line.quantity) \(line.unit)",
-                                    isMissingPrice: line.price == nil,
-                                    lineTotal: line.price,
-                                    currencyCode: currencyCode)
-                    }
-                }
-            }
-
-            Text(draftRates.isEmpty
-                 ? "Your rate card is a tab away whenever you want to fill it in."
-                 : "Saved to your rate card. Speak a job and these fill themselves in.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: 0)
-        }
-    }
-
-    // MARK: - Notifications
-
-    /// A permission request needs a reason before the system takes over. These
-    /// examples are deliberately visit reminders — useful work the app already
-    /// does — rather than vague promises about updates.
-    private var notificationsStep: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            notificationPreview
-                .padding(.top, 16)
-
-            Text("Never miss a\nvisit.")
-                .font(.robotoSlab(32, relativeTo: .largeTitle))
-                .foregroundStyle(Color(.mainText))
-                .padding(.top, 34)
-
-            Text("Get a reminder when it’s time to visit a customer and record their quote. You can change this anytime in Settings.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 14)
-
-            Spacer(minLength: 0)
-        }
-    }
-
-    private var notificationPreview: some View {
-        ZStack(alignment: .topTrailing) {
-            previewNotification(icon: "calendar", tint: Color(.royalBlue100),
-                                title: "Visit in 15 minutes",
-                                message: "Bathroom re-tiling · Marina Kapanadze")
-                .padding(.trailing, 12)
-
-            previewNotification(icon: "mic.fill", tint: Color(.royalBlue25),
-                                title: "Ready to record your quote",
-                                message: "Turn the visit into a quote while it’s fresh")
-                .padding(.top, 82)
-                .padding(.leading, 20)
-        }
-        .frame(maxWidth: .infinity, minHeight: 170)
-        .padding(18)
-        .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-    }
-
-    private func previewNotification(icon: String, tint: Color, title: String, message: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title3.weight(.medium))
-                .foregroundStyle(Color(.mainText))
-                .frame(width: 42, height: 42)
-                .background(tint, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color(.mainText))
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    // MARK: - Step 1 · the app, running
-
-    /// The first thing anyone sees: the real app, in a phone, before a single
-    /// question is asked.
-    ///
-    /// Opening here rather than closing on it means the five questions that
-    /// follow are answered by someone who has already seen what they are for.
-    /// Asked cold they are a form; asked after this they are setup.
-    ///
-    /// The frame is here and the film isn't. Until it is, the glass holds a
-    /// quote rather than a play button: a still of the thing itself says more
-    /// than an icon promising one, and it is the real `LineItemsCard`, so it
-    /// can't quietly stop resembling the app.
-    ///
-    /// The clip goes in the same seam. Drop a looping `VideoPlayer` (or an
-    /// `AVPlayerLayer` wrapped in a `UIViewRepresentable`, muted, no controls)
-    /// into `DevicePreview`'s content in place of `OnboardingPhoneScreen` — the
-    /// screen is sized and positioned around whatever goes in there.
-    ///
-    /// Keep it short and silent. This plays before anyone has agreed to
-    /// anything, so it can't ask for attention it hasn't earned, and a clip that
-    /// outlasts its welcome is worse than no clip.
-    /// The phone leads and the words follow it, centred — nothing is being
-    /// asked yet, so the writing is a caption to the thing above it rather than
-    /// a heading over it.
-    private var videoStep: some View {
-        VStack(spacing: 14) {
-            DevicePreview {
-                OnboardingPhoneScreen(currencyCode: currencyCode)
-            }
-            // Held to a share of the width rather than filling it. At full
-            // width the phone crowded its own caption and reached for the
-            // button, which made a screen with three things on it feel full.
-            .frame(width: 264)
-            .frame(maxWidth: .infinity)
-
-            // The flexible gap settles the promise near the bottom without
-            // competing with the phone preview above it.
-            Spacer(minLength: 24)
-                .frame(maxHeight: 72)
-
-            // Keep the two-part promise centred as a unit, then leave a clear
-            // beat before Continue so the message and its action do not read
-            // as one crowded control.
-            VStack(alignment: .center, spacing: 10) {
-                onboardingPromiseLine("Speak it.", icon: "OnboardingSpeak")
-                onboardingPromiseLine("Send it.", icon: "OnboardingSend")
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.bottom, 32)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func onboardingPromiseLine(_ text: String, icon: String) -> some View {
-        HStack(spacing: 10) {
-            Text(text)
-            Image(icon)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 34, height: 34)
-        }
-        .font(.robotoSlab(32, relativeTo: .title))
-        .foregroundStyle(Color(.mainText))
-    }
-
-    /// Skipping every question is a legitimate way through this, and the screen
-    /// has to be honest about it: nothing was set up, so nothing claims to have
-    /// been. It still shows what a spoken job turns into, which is the one thing
-    /// worth knowing before signing in.
-    private var revealTitle: String {
-        return draftRates.isEmpty
-            ? "This is what a job\nturns into."
-            : "Your first quote is\nhalf-written already."
-    }
-
-    /// Two of their own rates and one they didn't price, so the sample shows
-    /// both halves of what the app does — filling prices in, and flagging the
-    /// ones nobody said. With nothing saved it falls back to the same example
-    /// the first screen used, which is an illustration rather than a claim.
-    private var sampleLines: [(name: String, quantity: Int, unit: String, price: Double?)] {
-        guard !draftRates.isEmpty else {
-            // Three, because the sentence above says three. A quantity that
-            // contradicts the line it was supposedly extracted from undermines
-            // the one thing this screen is demonstrating.
-            return [
-                (name: "Remove old toilet and fit new toilet", quantity: 1,
-                 unit: "each", price: 90),
-                (name: "Mixer taps", quantity: 3, unit: "each", price: nil),
-            ]
-        }
-        var lines = draftRates.prefix(2).map {
-            (name: $0.name, quantity: 1, unit: $0.unit, price: Optional($0.price))
-        }
-        lines.append((name: "Materials from the supplier", quantity: 1,
-                      unit: "job", price: nil))
-        return lines
-    }
-
-    private var sampleSpokenLine: String {
-        guard let first = draftRates.first else {
-            return "“Replace the toilet, ninety. Three mixer taps.”"
-        }
-        return "“\(first.name.lowercased()), and the materials from the supplier — I'll price those tomorrow.”"
     }
 }
 
@@ -862,14 +443,9 @@ struct OnboardingView: View {
 //
 // The trade is stored in `UserDefaults`, which the canvas shares with whatever
 // ran last, so each preview sets it explicitly rather than inheriting a chip
-// somebody tapped an hour ago. Setting it also decides which steps exist: a
-// trade with presets is a six-screen run, no trade is four.
+// somebody tapped an hour ago. Setting it also decides which steps exist.
 #Preview("From the start") {
     UserDefaults.standard.removeObject(forKey: "pendingTrade")
     return OnboardingView(onContinue: {})
-}
-
-#Preview("Trade already picked") {
-    UserDefaults.standard.set("Plumber", forKey: "pendingTrade")
-    return OnboardingView(onContinue: {})
+        .environment(Store())
 }

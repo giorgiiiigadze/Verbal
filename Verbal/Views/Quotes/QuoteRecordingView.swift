@@ -814,11 +814,20 @@ struct QuoteRecordingView: View {
         // 20 and 4, exactly as the quote screen — the same document, so the
         // two were not allowed to drift apart by four points.
         VStack(alignment: .leading, spacing: 20) {
-            Text(emphasizedSummary(quote.jobSummary))
-                .foregroundStyle(Color(.mainText))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if !quote.jobSummary.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Summary")
+                        .font(.quoteDocumentHeading)
+                        .foregroundStyle(Color(.mainText))
+                    Text(emphasizedSummary(quote.jobSummary))
+                        .font(.quoteDocumentBody)
+                        .lineSpacing(8)
+                        .foregroundStyle(Color(.mainText))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
 
-            ScopeList(items: quote.scope)
+            ScopeList(items: quote.scope, documentStyle: true)
                 .padding(.top, 4)
 
             if !quote.lineItems.isEmpty {

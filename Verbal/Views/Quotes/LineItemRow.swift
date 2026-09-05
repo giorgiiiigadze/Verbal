@@ -19,11 +19,6 @@ struct LineItemRow: View {
     /// field was persisted, so absence means "nothing to say" rather than
     /// "fine".
     var confidence: String? = nil
-    /// Serif description, matching the document look on the quote detail page
-    /// so the table doesn't read as pasted in from another app. Off everywhere
-    /// else, which shares this row.
-    var documentStyle: Bool = false
-
     /// The one warning colour, shared with everything that flags an unpriced or
     /// low-confidence line — the rate card, the recording review and the list
     /// pill all read it off here so the mark is the same amber everywhere.
@@ -43,9 +38,7 @@ struct LineItemRow: View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(description)
-                    .font(documentStyle
-                          ? .system(.callout, design: .serif).weight(.medium)
-                          : .callout.weight(.medium))
+                    .font(.callout.weight(.medium))
                     .foregroundStyle(Color(.mainText))
                 if let quantityText {
                     Text(quantityText)

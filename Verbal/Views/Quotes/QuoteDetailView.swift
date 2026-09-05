@@ -342,8 +342,7 @@ struct QuoteDetailView: View {
                         isMissingPrice: item.isMissingPrice,
                         lineTotal: item.lineTotal,
                         currencyCode: currency,
-                        confidence: item.confidence,
-                        documentStyle: true
+                        confidence: item.confidence
                     )
                     if item.id != lineItems.last?.id {
                         Divider()
