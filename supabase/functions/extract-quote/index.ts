@@ -1,6 +1,6 @@
 // extract-quote — Step 2 of the AI pipeline (server-side).
 //
-// Input : { transcript, rate_card?, business_defaults?, trade_context? }
+// Input : { transcript, rate_card?, business_defaults?, trade_context?, tax_rate? }
 // Output: strict JSON quote (see the product spec §7).
 //
 // The OpenAI key is read from the OPENAI_API_KEY secret and never leaves the
@@ -80,6 +80,11 @@ interface RequestBody {
   /// ISO 4217 code of the user's main currency (e.g. "GBP"), for any money
   /// referenced in prose like job_summary. Prices themselves stay numeric.
   currency?: string;
+  /// The user's default tax rate as a percentage (20 means 20%). Context only:
+  /// the app still does the arithmetic. The model needs it to know that the
+  /// prices it records are pre-tax, so it can flag a spoken price that already
+  /// had tax in it rather than let the app add it a second time.
+  tax_rate?: number;
 }
 
 /// The caller's user id, taken from the JWT the client sends. verify_jwt already
@@ -184,6 +189,17 @@ Deno.serve(async (req: Request) => {
       }));
   } else {
     body.rate_card = undefined;
+  }
+
+  // Dropped rather than clamped when it makes no sense as a percentage: no tax
+  // context leaves the prompt where it was, while a corrected one would put a
+  // number the user never set into a flag they are asked to act on. Zero is a
+  // real answer — it means this user doesn't charge tax — so it survives.
+  if (
+    typeof body.tax_rate !== "number" || !Number.isFinite(body.tax_rate) ||
+    body.tax_rate < 0 || body.tax_rate > 100
+  ) {
+    body.tax_rate = undefined;
   }
 
   const window = await reserveExtraction(userId);

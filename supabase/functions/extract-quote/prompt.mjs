@@ -86,7 +86,8 @@ Rules:
 - Handle filler words and mid-speech corrections ("actually make that eight outlets") — use the corrected value.
 - Set confidence to "low" for any quantity or price you are unsure about, "high" otherwise.
 - Add a short string to "flags" for anything that needs the user's attention: a missing price, an ambiguous quantity, a scope you could not resolve, two readings you had to choose between. Terms the speaker stated plainly — deposits, validity, payment schedules — are NOT flags. There is nothing to check about them and they are already in job_summary; repeating them there and here puts the same sentence on screen twice. If nothing needs attention, return an empty array.
-- Do NOT compute totals or tax — that is done by the app.
+- Do NOT compute totals or tax — that is done by the app. The user's tax rate is given below, and the app applies it to the total of the lines you return. So every unit_price you record is the price BEFORE tax, and tax NEVER becomes a line item: no "VAT" line, no "tax" line, no "20% on top" line, at any price. It does not belong in "scope" either — it is not work.
+- Because the app adds tax on top, a price the speaker states is taken as pre-tax. When they say a price ALREADY includes it ("600 all in, that's with the VAT"), record the number EXACTLY as spoken — never do the arithmetic to strip the tax out, that is inventing a price — and add a flag saying that figure was given inclusive of tax. Left unflagged, the app taxes it again and the customer is overcharged by a line that looks perfectly ordinary. Flag it the same way when the speaker talks about charging tax but the rate below is none: the quote they are about to send will not carry any.
 - If the transcript does NOT describe a quotable job (e.g. a greeting, small talk, silence, or too little detail to build a quote), return line_items as an EMPTY array and set job_summary to a short, friendly note (one or two sentences) telling the user there wasn't enough to build a quote and inviting them to describe the job — the tasks, quantities, and prices — then try again.
 Return only data that conforms to the provided schema.`;
 
@@ -104,6 +105,13 @@ export function buildUserPrompt(body) {
   }
   if (body.business_defaults) {
     parts.push(`Business defaults: ${JSON.stringify(body.business_defaults)}`);
+  }
+  if (typeof body.tax_rate === "number") {
+    parts.push(
+      body.tax_rate > 0
+        ? `Tax rate: ${body.tax_rate}%. The app adds this to the total of the line items you return, so record pre-tax prices and never make tax a line of its own.`
+        : "Tax rate: none. This user does not charge tax on quotes.",
+    );
   }
   if (body.currency) {
     parts.push(`Currency: ${body.currency}. If you mention any amount in job_summary or flags, use this currency's symbol. Line-item unit_price values must stay plain numbers with no symbol.`);

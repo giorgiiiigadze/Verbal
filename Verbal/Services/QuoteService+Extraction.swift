@@ -17,14 +17,21 @@ extension QuoteService {
     /// holds the preloaded profile, and a round trip here would sit on the
     /// critical path of the one moment the user is watching a spinner.
     static func generate(transcript: String, tradeContext: String?) async throws -> GeneratedQuote {
-        let rateCard = (try? await fetchRateCard(activeOnly: true)) ?? []
+        // Both are round trips, so run them together rather than back to back:
+        // this sits on the critical path of the one moment the user is watching
+        // a spinner.
+        async let rateCardTask = try? await fetchRateCard(activeOnly: true)
+        async let taxRateTask = (try? await BusinessService.fetch())?.defaultTaxRate
+        let rateCard = await rateCardTask ?? []
+        let taxRate = await taxRateTask
         let request = ExtractRequest(
             transcript: transcript,
             rate_card: rateCard.map {
                 RateCardPayload(name: $0.name, unit: $0.unit, unit_price: $0.unitPrice, type: $0.type)
             },
             currency: AppCurrency.current.rawValue,
-            trade_context: tradeContext
+            trade_context: tradeContext,
+            tax_rate: taxRate
         )
         let extraction: ExtractResponse = try await client.functions.invoke(
             "extract-quote",
@@ -61,6 +68,10 @@ private struct ExtractRequest: Encodable {
     /// written and nothing ever filled it — "eight of the 20 mil" is cable to
     /// an electrician and pipe to a plumber, and the model was guessing.
     let trade_context: String?
+    /// The user's default tax rate, so the model can speak to tax in the quote.
+    /// The stored total is still computed from this rate on save, not read back
+    /// out of the response — the LLM is never trusted for math.
+    let tax_rate: Double?
 }
 
 private struct RateCardPayload: Encodable {
