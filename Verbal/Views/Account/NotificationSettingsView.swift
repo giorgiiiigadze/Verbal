@@ -80,7 +80,7 @@ struct NotificationSettingsView: View {
             .listRowBackground(Color(.cardSurface))
         }
         .scrollContentBackground(.hidden)
-        .background(Color(.homeBackground))
+        .background(Color(.accountBackground))
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refreshAuthorizationStatus() }

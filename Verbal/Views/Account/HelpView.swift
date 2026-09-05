@@ -42,7 +42,7 @@ struct HelpView: View {
             .listRowBackground(Color(.cardSurface))
         }
         .scrollContentBackground(.hidden)
-        .background(Color(.homeBackground))
+        .background(Color(.accountBackground))
         .navigationTitle("Help")
         .navigationBarTitleDisplayMode(.inline)
     }

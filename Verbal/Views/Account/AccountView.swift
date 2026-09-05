@@ -42,7 +42,7 @@ struct AccountView: View {
     private static let manageSubscriptionsURL =
         URL(string: "https://apps.apple.com/account/subscriptions")!
 
-    /// "Verbal Pro", or what is left of today. Nil remaining means the count
+/// "Verbal Pro", or what is left of today. Nil remaining means the count
     /// hasn't come back yet, and guessing at it here would show someone a
     /// number that changes under them a second later.
     private var planLabel: String {
@@ -233,8 +233,15 @@ struct AccountView: View {
         // A list opens with room for a large title; this one has a face and a
         // name in that space instead, and the stock inset left it floating.
         .contentMargins(.top, 6, for: .scrollContent)
+        // One shared surface — accountBackground is a soft grey in light mode
+        // and homeBackground's dark tone in dark mode. Every inner page uses
+        // the same colour, so pushing from Account into Quote defaults or
+        // Notifications doesn't jump from one shade to another. The rows sit
+        // on cardSurface, which contrasts against accountBackground in both
+        // modes — the two-white-tones problem the plain list had is gone.
+        .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color(.homeBackground))
+        .background(Color(.accountBackground))
         // The bar names the screen, as it does on every screen this one leads
         // to. The row below it is the account, not the title.
         .navigationTitle("Account")

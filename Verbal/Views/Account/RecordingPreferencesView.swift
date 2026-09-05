@@ -29,7 +29,7 @@ struct RecordingPreferencesView: View {
             .listRowBackground(Color(.cardSurface))
         }
         .scrollContentBackground(.hidden)
-        .background(Color(.homeBackground))
+        .background(Color(.accountBackground))
         .navigationTitle("Recording")
         .navigationBarTitleDisplayMode(.inline)
     }

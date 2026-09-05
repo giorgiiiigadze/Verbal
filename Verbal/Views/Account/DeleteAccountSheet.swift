@@ -48,7 +48,7 @@ struct DeleteAccountSheet: View {
                 }
                 .padding(24)
             }
-            .background(Color(.homeBackground))
+            .background(Color(.accountBackground))
             .navigationTitle("Delete account")
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {

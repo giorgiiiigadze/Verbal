@@ -124,7 +124,7 @@ struct QuoteDefaultsView: View {
 
     var body: some View {
         ZStack {
-            Color(.homeBackground)
+            Color(.accountBackground)
                 .ignoresSafeArea()
 
             ScrollView {

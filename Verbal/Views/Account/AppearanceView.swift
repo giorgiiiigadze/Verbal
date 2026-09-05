@@ -59,7 +59,7 @@ struct AppearanceView: View {
             .listRowBackground(Color(.cardSurface))
         }
         .scrollContentBackground(.hidden)
-        .background(Color(.homeBackground))
+        .background(Color(.accountBackground))
         .navigationTitle("Appearance")
         .navigationBarTitleDisplayMode(.inline)
     }

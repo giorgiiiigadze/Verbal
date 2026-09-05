@@ -61,7 +61,7 @@ struct OtherView: View {
         // Nothing else is worth touching while the account is being removed.
         .disabled(isDeleting)
         .scrollContentBackground(.hidden)
-        .background(Color(.homeBackground))
+        .background(Color(.accountBackground))
         .navigationTitle("Other")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showDeleteSheet) {

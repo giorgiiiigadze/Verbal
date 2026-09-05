@@ -503,7 +503,7 @@ private struct VisitsSearchView: View {
                 emptyState
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 40, leading: 20, bottom: 40, trailing: 20))
+                    .listRowInsets(EdgeInsets(top: 60, leading: 0, bottom: 60, trailing: 0))
             } else {
                 ForEach(sections, id: \.title) { section in
                     Text(section.title)
@@ -536,14 +536,15 @@ private struct VisitsSearchView: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 26, weight: .medium))
-                .foregroundStyle(.secondary)
-            Text(query.isEmpty ? "No visits booked" : "No matches for “\(query)”")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        EmptyStateMessage(
+            icon: "calendar",
+            assetIcon: "VisitsEmpty",
+            title: query.isEmpty ? "Nothing booked in" : "No matches",
+            message: query.isEmpty
+                ? "Put the visits you've got coming up here and each one is a tap from a quote."
+                : "No booked visits match “\(query)”."
+        ) {
+            EmptyView()
         }
-        .frame(maxWidth: .infinity)
     }
 }
