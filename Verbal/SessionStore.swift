@@ -16,6 +16,31 @@ final class SessionStore {
         case ready
     }
 
+    // MARK: - Collaborators
+
+    private let client = SupabaseManager.client
+    private let network: NetworkMonitor
+    /// Only one account preload may publish at a time. Auth events must remain
+    /// free to deliver a revocation while network reads are in flight, so the
+    /// listener schedules this work instead of awaiting it inline.
+    private var bootstrapTask: Task<Void, Never>?
+    private var bootstrapToken: UUID?
+    /// Google must stay connected for the brief window between backend account
+    /// deletion and provider revocation. Every ordinary sign-out clears it.
+    private var isDeletingAccount = false
+
+    /// Booked visits, and the sync that keeps them and `scheduled_visits` in
+    /// step. Owned here because the two things that decide whose visits these
+    /// are — a sign-out and a swap to another account — both happen here.
+    let visitStore: VisitStore
+
+    init(network: NetworkMonitor) {
+        self.network = network
+        self.visitStore = VisitStore(network: network)
+    }
+
+    // MARK: - Published state
+
     private(set) var state: AppState = .loading
     private(set) var profile: Profile?
 
@@ -45,6 +70,8 @@ final class SessionStore {
     /// The business logo, decoded once and held so the profile screen and the
     /// PDF letterhead both draw it without a download each time.
     private(set) var businessLogo: UIImage?
+
+    // MARK: - Business profile & logo
 
     /// Update the cached business profile after the user edits it, so reopening
     /// the profile screen reflects the change without a refetch.
@@ -90,6 +117,8 @@ final class SessionStore {
     }
 
     private static let logoURLKey = "cachedBusinessLogoURL"
+
+    // MARK: - Rate card & spoken prices
 
     /// Keep the cached rate card in step with a list the Rate Card tab just
     /// fetched. Settings reads this to decide whether changing the main
@@ -196,6 +225,8 @@ final class SessionStore {
     /// never as an authorization decision.
     var accountID: UUID? { cachedUserID }
 
+    // MARK: - Quotes
+
     /// Cached line items for a quote, if any have been loaded already.
     func lineItems(for quoteID: UUID) -> [QuoteLineItem]? { lineItemsCache[quoteID] }
 
@@ -272,26 +303,7 @@ final class SessionStore {
         }
     }
 
-    private let client = SupabaseManager.client
-    private let network: NetworkMonitor
-    /// Only one account preload may publish at a time. Auth events must remain
-    /// free to deliver a revocation while network reads are in flight, so the
-    /// listener schedules this work instead of awaiting it inline.
-    private var bootstrapTask: Task<Void, Never>?
-    private var bootstrapToken: UUID?
-    /// Google must stay connected for the brief window between backend account
-    /// deletion and provider revocation. Every ordinary sign-out clears it.
-    private var isDeletingAccount = false
-
-    /// Booked visits, and the sync that keeps them and `scheduled_visits` in
-    /// step. Owned here because the two things that decide whose visits these
-    /// are — a sign-out and a swap to another account — both happen here.
-    let visitStore: VisitStore
-
-    init(network: NetworkMonitor) {
-        self.network = network
-        self.visitStore = VisitStore(network: network)
-    }
+    // MARK: - Bootstrap & auth state
 
     /// Restore a stored session synchronously enough for launch decisions.
     private func restoreStoredSessionForLaunch() -> Bool {
@@ -447,6 +459,8 @@ final class SessionStore {
         await refreshBusinessLogo()
     }
 
+    // MARK: - Onboarding adoption
+
     /// Records that this person has been through onboarding, the moment a
     /// session turns up.
     ///
@@ -516,6 +530,8 @@ final class SessionStore {
     }
 
     private static let pendingTradeKey = "pendingTrade"
+
+    // MARK: - Disk restore
 
     /// Paint from the last known responses before the network is consulted.
     /// Whatever comes back next replaces them; until it does, the user reads
@@ -606,6 +622,8 @@ final class SessionStore {
         }
     }
 
+    // MARK: - Preload
+
     /// Load the Home and Rate Card lists up front so those tabs show data
     /// immediately instead of flashing an empty state while fetching.
     func preloadLists() async {
@@ -657,6 +675,8 @@ final class SessionStore {
         clearUserData()
         state = .signedOut
     }
+
+    // MARK: - Clearing
 
     /// Drop everything belonging to the account that was signed in. The stale
     /// copies matter beyond being wrong on screen: `preloadLists` falls back to
@@ -716,6 +736,8 @@ final class SessionStore {
         listsLoaded = false
         cachedUserID = nil
     }
+
+    // MARK: - Profile & avatar
 
     /// Load the current user's profile (name/avatar from Google) for display.
     func refreshProfile() async {
