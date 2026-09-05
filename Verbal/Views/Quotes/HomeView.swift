@@ -1888,8 +1888,6 @@ struct VisitActionSheet: View {
             .background(Color(.homeBackground))
             .navigationTitle("Visit")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color(.homeBackground), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .close) { dismiss() }
@@ -1903,8 +1901,11 @@ struct VisitActionSheet: View {
                     .background(Color(.homeBackground))
             }
         }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.hidden)
+        // Opens at a mid detent — enough to read the visit's headline facts and
+        // reach the primary actions — with the handle inviting a drag up when
+        // the full note or address needs the room.
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
         .presentationBackground(Color(.homeBackground))
     }
 
@@ -2012,7 +2013,8 @@ struct VisitActionSheet: View {
 
     @ViewBuilder
     private var actionButtons: some View {
-        if case .future = action {
+        switch action {
+        case .future:
             VStack(spacing: 10) {
                 HStack(spacing: 10) {
                     borderedBlueButton("Directions", action: onDirections)
@@ -2021,7 +2023,7 @@ struct VisitActionSheet: View {
                 filledPrimaryButton("Call client", action: onCall)
                 borderedDestructiveButton("Cancel", action: onCancel)
             }
-        } else if case .passed = action {
+        case .passed:
             VStack(spacing: 10) {
                 HStack(spacing: 10) {
                     filledPrimaryButton(primaryTitle, action: onPrimary)
@@ -2029,36 +2031,29 @@ struct VisitActionSheet: View {
                 }
                 borderedDestructiveButton("Didn't happen", action: onDidNotHappen)
             }
-        } else {
-            VStack(spacing: 10) {
-                primaryButton
-                secondaryActions
-            }
-        }
-    }
-
-    private var primaryButton: some View {
-        Group {
-            if case .future = action {
-                borderedBlueButton(primaryTitle, action: onPrimary)
-            } else {
-                filledPrimaryButton(primaryTitle, action: onPrimary)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var secondaryActions: some View {
-        switch action {
-        case .future:
-            EmptyView()
         case .happeningNow:
-            borderedBlueButton("Directions", action: onDirections)
-            filledPrimaryButton("Call client", action: onCall)
-        case .passed:
-            EmptyView()
+            // A visit that is underway can still slip — the client can move it
+            // half an hour on the doorstep, or take a call and stand you down.
+            // Reschedule and Cancel need to reach into this window; the earlier
+            // layout hid both, so the sheet was read-only for up to two hours.
+            VStack(spacing: 10) {
+                filledPrimaryButton(primaryTitle, action: onPrimary)
+                HStack(spacing: 10) {
+                    borderedBlueButton("Directions", action: onDirections)
+                    borderedBlueButton("Reschedule", action: onReschedule)
+                }
+                filledPrimaryButton("Call client", action: onCall)
+                borderedDestructiveButton("Cancel", action: onCancel)
+            }
         case .recorded:
-            EmptyView()
+            // The quote is the durable artefact, but the visit row that lives
+            // beside it can still be wrong — a typo in the client name, the
+            // wrong end time. Let the calendar entry be edited without touching
+            // the quote it's linked to.
+            VStack(spacing: 10) {
+                filledPrimaryButton(primaryTitle, action: onPrimary)
+                borderedBlueButton("Reschedule", action: onReschedule)
+            }
         }
     }
 

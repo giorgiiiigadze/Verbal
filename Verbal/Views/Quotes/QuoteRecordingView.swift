@@ -115,6 +115,14 @@ struct QuoteRecordingView: View {
             ScrollViewReader { scroll in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
+                        // Opened from a booked visit — a blue banner up top
+                        // tells the user which appointment this recording is
+                        // for. Non-interactive; the record control at the
+                        // bottom is still what starts and stops the session.
+                        if let visit = scheduledVisit {
+                            bookedVisitBanner(for: visit)
+                        }
+
                         Group {
                             // Paused counts as mid-session: a call arriving
                             // shouldn't turn the title into an editable field
@@ -959,6 +967,37 @@ struct QuoteRecordingView: View {
         .font(.callout)
         .fontWeight(.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Booked-visit banner
+
+    /// Blue contextual pill shown at the top of the sheet when this recording
+    /// was opened from a scheduled visit. Wears the same royal blue as the
+    /// record control below so the two read as one language.
+    private func bookedVisitBanner(for visit: ScheduledVisit) -> some View {
+        HStack(spacing: 12) {
+            Image("RecordingIntro")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 22, height: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Record booked visit")
+                    .font(.subheadline.weight(.semibold))
+                Text(visit.title)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .background(Color(.royalBlue600),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Recording for booked visit, \(visit.title)")
     }
 
     // MARK: - Bottom bar (record / timer / cancel)

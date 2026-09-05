@@ -235,7 +235,12 @@ struct QuoteDetailView: View {
                         if clientName.isEmpty {
                             Image(systemName: "person.badge.plus")
                         } else {
-                            InitialsAvatar(name: clientName, size: 26)
+                            // Sized to the neighbouring SF Symbols' optical
+                            // height so the client chip's pill looks the same
+                            // size as its siblings — a 26pt avatar filled the
+                            // chip edge-to-edge and read as taller than the
+                            // rest of the row.
+                            InitialsAvatar(name: clientName, size: 22)
                         }
                     }
                 }

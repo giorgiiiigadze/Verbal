@@ -47,11 +47,11 @@ struct QuoteChip<Leading: View>: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 10)
         // Client chips carry a 26pt avatar while the other chips carry a
         // standard symbol. Give the capsule one shared minimum height so the
         // avatar doesn't make that one chip taller than the rest.
-        .frame(minHeight: 46)
+        .frame(minHeight: 36)
         .background(palette?.fill ?? (tinted ? Color(.royalBlue25) : Color(.surface)),
                     in: .capsule)
     }

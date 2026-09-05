@@ -164,8 +164,6 @@ struct ScheduleVisitSheet: View {
             .background(Color(.homeBackground))
             .navigationTitle(editing == nil ? "New visit" : "Visit")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color(.homeBackground), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     // The system's own close glyph rather than the word

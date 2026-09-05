@@ -18,8 +18,7 @@ struct ScheduleView: View {
     @State private var visitToDelete: ScheduledVisit?
     @State private var filter: ScheduleFilter = .all
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
-    @State private var searchText = ""
-    @State private var isSearching = false
+    @State private var showVisitsSearch = false
     @State private var toast: Toast?
 
     private enum VisitEditor: Identifiable { case new, existing(ScheduledVisit); var id: String { switch self { case .new: return "new"; case .existing(let visit): return visit.id.uuidString } } }
@@ -31,10 +30,8 @@ struct ScheduleView: View {
 
     private var visits: [ScheduledVisit] { session.visitStore.visits }
     private var filteredVisits: [ScheduledVisit] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return visits.filter { visit in
-            let matches = switch filter { case .toQuote: !hasRecordedQuote(for: visit); case .all: true; case .recorded: hasRecordedQuote(for: visit) }
-            return matches && (query.isEmpty || visit.title.localizedCaseInsensitiveContains(query) || (visit.clientName?.localizedCaseInsensitiveContains(query) ?? false) || (visit.address?.localizedCaseInsensitiveContains(query) ?? false))
+        visits.filter { visit in
+            switch filter { case .toQuote: !hasRecordedQuote(for: visit); case .all: true; case .recorded: hasRecordedQuote(for: visit) }
         }
     }
     private var dayVisits: [ScheduledVisit] { filteredVisits.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDay) }.sorted { $0.date < $1.date } }
@@ -48,13 +45,17 @@ struct ScheduleView: View {
         .navigationTitle("Calendar").navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color(.homeBackground), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
-        .modifier(SearchWhenAsked(isActive: isSearching, text: $searchText, isPresented: $isSearching, prompt: "Search calendar"))
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
-                Button { isSearching = true } label: { Image(systemName: "magnifyingglass") }.accessibilityLabel("Search visits")
+                Button { showVisitsSearch = true } label: { Image(systemName: "magnifyingglass") }.accessibilityLabel("Search visits")
                 Menu { Picker("Show", selection: $filter) { ForEach(ScheduleFilter.allCases) { Text($0.label).tag($0) } } } label: { Image(.homeFilter).resizable().scaledToFit().frame(width: 22, height: 22) }.accessibilityLabel("Filter visits")
             }
             ToolbarItem(placement: .topBarTrailing) { Button { editor = .new } label: { Image(systemName: "plus") }.accessibilityLabel("Book a visit") }
+        }
+        .navigationDestination(isPresented: $showVisitsSearch) {
+            VisitsSearchView(visits: visits,
+                             status: calendarStatus,
+                             onSelect: { selectedVisit = $0 })
         }
         .navigationDestination(item: $quoteToOpen) { quote in
             QuoteDetailView(quote: liveQuote(quote), initialLineItems: session.lineItems(for: quote.id) ?? [], onDeleted: {
@@ -89,6 +90,18 @@ struct ScheduleView: View {
                                status: calendarStatus) { selectedVisit = $0 }
                 // Keep the scrolled grid from visually touching the day header.
                 .padding(.top, 10)
+                // A single vertical rail dividing hour labels from the schedule
+                // canvas. Overlaid on the whole area rather than drawn inside
+                // the ZStack so it runs the full height of the screen — top to
+                // bottom — instead of stopping at the 24-hour content edge.
+                .overlay(alignment: .topLeading) {
+                    Rectangle()
+                        .fill(Color(.separator).opacity(0.6))
+                        .frame(width: 0.5)
+                        .frame(maxHeight: .infinity)
+                        .offset(x: VisitsTimelineView.railOffset)
+                        .allowsHitTesting(false)
+                }
         }
     }
     private var loadingState: some View {
@@ -162,7 +175,29 @@ private struct VisitsDaySelector: View {
     @Environment(\.colorScheme) private var colorScheme
     @Binding var selectedDay: Date
     private let calendar = Calendar.current
+
     var body: some View {
+        // Rebuilt as one bar: a Rectangle painted edge-to-edge with content
+        // laid over it, then `compositingGroup` before the shadow. The earlier
+        // stack applied `.background(color)` directly to the HStack, which
+        // painted a shape that didn't quite match the outer frame — the shadow
+        // then read that mismatch as a second, thinner strip glued to the
+        // bottom of the bar.
+        content
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background {
+                Rectangle()
+                    .fill(colorScheme == .dark ? Color("DaySelectorBar") : Color(.cardSurface))
+            }
+            .compositingGroup()
+            .shadow(color: colorScheme == .dark ? .clear : .black.opacity(0.06),
+                    radius: 7,
+                    y: 3)
+            .accessibilityElement(children: .contain)
+    }
+
+    private var content: some View {
         HStack(spacing: 14) {
             Button { moveDay(-1) } label: {
                 Image(systemName: "chevron.left")
@@ -195,20 +230,6 @@ private struct VisitsDaySelector: View {
             .accessibilityLabel("Next day")
         }
         .foregroundStyle(colorScheme == .dark ? .white : Color(.mainText))
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: 56)
-        .background(colorScheme == .dark ? Color("DaySelectorBar") : Color(.cardSurface))
-        .overlay(alignment: .bottom) {
-            if colorScheme != .dark {
-                Rectangle()
-                    .fill(Color(.separator).opacity(0.65))
-                    .frame(height: 0.5)
-            }
-        }
-        .shadow(color: colorScheme == .dark ? .clear : .black.opacity(0.06),
-                radius: 7,
-                y: 3)
-        .accessibilityElement(children: .contain)
     }
 
     private var selectedDayBackground: Color {
@@ -236,7 +257,10 @@ private struct VisitsTimelineView: View {
     // earlier calendar layout.
     // A fixed gutter gives every hour the same visual anchor and leaves the
     // schedule canvas quiet, without bringing back a visible divider.
-    private let hourHeight: CGFloat = 74; private let labelWidth: CGFloat = 78; private let calendar = Calendar.current
+    private let hourHeight: CGFloat = 74; private let labelWidth: CGFloat = 52; private let calendar = Calendar.current
+    /// Where the vertical rail separating hour labels from the schedule canvas
+    /// sits, shared with the outer view so the line can be overlaid full-height.
+    static let railOffset: CGFloat = 52
     private let overlappingColumnGap: CGFloat = 8
     private var placements: [VisitPlacement] { VisitPlacement.make(from: visits) }
     var body: some View {
@@ -264,8 +288,8 @@ private struct VisitsTimelineView: View {
                             .font(.caption2.weight(.medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .frame(width: labelWidth - 12, alignment: .trailing)
-                            .padding(.trailing, 12)
+                            .frame(width: labelWidth - 6, alignment: .trailing)
+                            .padding(.trailing, 6)
                             .offset(y: CGFloat(hour) * hourHeight - 7)
                         Rectangle().fill(Color(.separator).opacity(0.6)).frame(height: 0.5).offset(x: labelWidth, y: CGFloat(hour) * hourHeight)
                     }
@@ -428,11 +452,98 @@ private struct CurrentTimeIndicator: View {
                 .monospacedDigit()
                 .foregroundStyle(Color(.mainText))
                 .lineLimit(1)
-                .frame(width: labelWidth - 12, alignment: .trailing)
-                .padding(.trailing, 12)
+                .frame(width: labelWidth - 6, alignment: .trailing)
+                .padding(.trailing, 6)
             Circle().fill(Color(.mainText)).frame(width: 6, height: 6)
             Rectangle().fill(Color(.mainText)).frame(height: 1)
         }
         .accessibilityLabel("Current time, \(date.formatted(date: .omitted, time: .shortened))")
+    }
+}
+
+/// A dedicated search screen for the calendar. Native search bar, one flat list
+/// of every booked visit filtered by the query, grouped by day the way Home
+/// groups quotes — and drawn with the same card the timeline uses so the two
+/// views share one visit language.
+private struct VisitsSearchView: View {
+    let visits: [ScheduledVisit]
+    let status: (ScheduledVisit) -> CalendarVisitStatus
+    let onSelect: (ScheduledVisit) -> Void
+    @State private var searchText = ""
+
+    private var query: String { searchText.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var matches: [ScheduledVisit] {
+        guard !query.isEmpty else { return visits.sorted { $0.date > $1.date } }
+        return visits
+            .filter { visit in
+                visit.title.localizedCaseInsensitiveContains(query)
+                    || (visit.clientName?.localizedCaseInsensitiveContains(query) ?? false)
+                    || (visit.address?.localizedCaseInsensitiveContains(query) ?? false)
+            }
+            .sorted { $0.date > $1.date }
+    }
+
+    /// Grouped by the day the visit is booked for, newest first — the same
+    /// pattern Home uses for its quote list.
+    private var sections: [(title: String, day: Date, visits: [ScheduledVisit])] {
+        let calendar = Calendar.current
+        var buckets: [Date: [ScheduledVisit]] = [:]
+        for visit in matches {
+            buckets[calendar.startOfDay(for: visit.date), default: []].append(visit)
+        }
+        return buckets.keys.sorted(by: >).map { day in
+            (quoteSectionTitle(day), day, buckets[day] ?? [])
+        }
+    }
+
+    var body: some View {
+        List {
+            if matches.isEmpty {
+                emptyState
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 40, leading: 20, bottom: 40, trailing: 20))
+            } else {
+                ForEach(sections, id: \.title) { section in
+                    Text(section.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 0, trailing: 20))
+
+                    ForEach(section.visits) { visit in
+                        Button { onSelect(visit) } label: {
+                            VisitCalendarCard(visit: visit, status: status(visit))
+                                .frame(minHeight: 68)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color(.homeBackground))
+        .navigationTitle("Search visits")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search calendar")
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 26, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text(query.isEmpty ? "No visits booked" : "No matches for “\(query)”")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
