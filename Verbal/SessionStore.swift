@@ -694,7 +694,10 @@ final class SessionStore {
         //
         // The reminders go regardless — account B must never be buzzed about
         // somebody else's Mrs. Patel.
-        ScheduledVisitNotifications.cancelAll(visits: visitStore.visits)
+        // By identifier, not by the visit list: a reminder for a visit this
+        // device never heard was cancelled elsewhere would otherwise survive
+        // the sign-out and buzz the next account.
+        Task { await ScheduledVisitNotifications.cancelAll() }
         visitStore.detach(preservingCache: true)
         quotes = []
         rateCard = []

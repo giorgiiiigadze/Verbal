@@ -86,7 +86,7 @@ enum ScheduledVisitNotifications {
     }
 
     static func rescheduleAll(visits: [ScheduledVisit]) async {
-        cancelAll(visits: visits)
+        await cancelAll()
         guard remindersEnabled else { return }
         for visit in visits {
             await schedule(visit)
@@ -98,10 +98,29 @@ enum ScheduledVisitNotifications {
             .removePendingNotificationRequests(withIdentifiers: [identifier(for: visit)])
     }
 
-    static func cancelAll(visits: [ScheduledVisit]) {
-        let identifiers = visits.map(identifier(for:))
-        UNUserNotificationCenter.current()
-            .removePendingNotificationRequests(withIdentifiers: identifiers)
+    /// Every visit reminder this app has pending, found by its identifier
+    /// rather than by a list of visits.
+    ///
+    /// It used to take the current visits and cancel exactly those, which can
+    /// only cancel reminders for visits the device still knows about. A visit
+    /// cancelled — or quoted — on another phone leaves this one holding a
+    /// reminder for a booking that no longer exists, and nothing in the list
+    /// handed here would ever name it. The prefix does.
+    static func cancelAll() async {
+        let center = UNUserNotificationCenter.current()
+        let identifiers = await pendingRequests(center: center)
+            .map(\.identifier)
+            .filter { $0.hasPrefix(identifierPrefix) }
+        guard !identifiers.isEmpty else { return }
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    private static func pendingRequests(center: UNUserNotificationCenter) async -> [UNNotificationRequest] {
+        await withCheckedContinuation { continuation in
+            center.getPendingNotificationRequests { requests in
+                continuation.resume(returning: requests)
+            }
+        }
     }
 
     static func authorizationStatus() async -> UNAuthorizationStatus {

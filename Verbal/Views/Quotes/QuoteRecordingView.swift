@@ -92,7 +92,20 @@ struct QuoteRecordingView: View {
         self.scheduledVisit = scheduledVisit
         self.onSavedQuote = onSavedQuote
         _title = State(initialValue: "")
-        _clientName = State(initialValue: scheduledVisit?.title ?? "")
+        // The client, not the job. A visit's title is what the work is
+        // ("Bathroom rip-out"); its `clientName` is who it's for. Reading the
+        // title here was right back when a visit had one field for both, and
+        // has since been filing jobs under themselves — and, because
+        // `ScheduledVisit.clientKey` prefers `clientName`, stopping the saved
+        // quote from matching the visit that produced it. The title is still
+        // the fallback, which is exactly where old visits keep their client.
+        _clientName = State(initialValue: QuoteRecordingView.clientName(for: scheduledVisit))
+    }
+
+    private static func clientName(for visit: ScheduledVisit?) -> String {
+        guard let visit else { return "" }
+        let named = visit.clientName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return named.isEmpty ? visit.title : named
     }
 
     private var hasText: Bool {

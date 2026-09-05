@@ -68,8 +68,6 @@ struct HomeView: View {
     @State private var visitToDelete: ScheduledVisit?
     /// The visit whose action sheet is open.
     @State private var selectedVisit: ScheduledVisit?
-    /// A missed visit opened from the prompt. It is cleared only after a quote is saved.
-    @State private var visitToClearAfterRecording: ScheduledVisit?
     /// A red visit that has been sitting for 24h and needs a decision.
     @State private var missedVisitPrompt: ScheduledVisit?
     /// Visits the user tapped "Later" on this session. Kept in memory only so
@@ -327,7 +325,6 @@ struct HomeView: View {
         .modifier(VisitDeleteConfirmation(visit: $visitToDelete, onDelete: remove))
         .modifier(MissedVisitConfirmation(visit: $missedVisitPrompt,
                                            onRecord: { visit in
-            visitToClearAfterRecording = visit
             beginRecording(for: visit)
         },
                                            onDidNotHappen: markPromptedAndClear,
@@ -828,13 +825,25 @@ struct HomeView: View {
         }
     }
 
+    /// A quote has been saved from the recorder.
+    ///
+    /// `MainTabView` has already linked it to the visit it was recorded for —
+    /// that is the one place both Home and Calendar route through. All that is
+    /// left here is to take the prompt down and repaint the row as recorded.
+    ///
+    /// Recording from the missed-visit prompt used to *delete* the visit at
+    /// this point, on top of the link that had just been made: the booking
+    /// vanished from Calendar's Recorded filter, and deleting the quote later
+    /// had no visit left to hand back. The ordinary "Record now" path keeps the
+    /// linked visit until its day is over, and this one now does the same.
     private func handleSavedRecordingQuote(_ quoteId: UUID?) {
         guard quoteId != nil else { return }
+        missedVisitPrompt = nil
         if let recordingVisit {
-            if visitToClearAfterRecording?.id == recordingVisit.id {
-                markPromptedAndClear(recordingVisit)
-                visitToClearAfterRecording = nil
-            }
+            deferredMissedVisitIDs.remove(recordingVisit.id)
+        }
+        withAnimation(Self.rowInsert) {
+            visits = session.visitStore.visits
         }
         savedRecordingQuoteID = nil
     }
@@ -842,7 +851,6 @@ struct HomeView: View {
     private func handleRecorderPresentationChange(isPresented: Bool) {
         guard !isPresented else { return }
         recordingVisit = nil
-        visitToClearAfterRecording = nil
         Task { await load() }
     }
 

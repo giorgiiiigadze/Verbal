@@ -112,6 +112,23 @@ struct ScheduleVisitSheet: View {
         }
     }
 
+    /// The end, floored at the shortest a visit can be.
+    ///
+    /// Dragging it behind the start used to leave the wheel showing one time
+    /// while the label beside it read "15min": the value was clamped when the
+    /// booking was built, so the screen and the saved visit disagreed about
+    /// what had just been set. Clamping here makes the control itself hold the
+    /// line, which is the same rule said where the user can see it happen.
+    private var endBinding: Binding<Date> {
+        Binding {
+            end
+        } set: { moved in
+            let earliest = start.addingTimeInterval(
+                TimeInterval(ScheduledVisit.minimumDurationMinutes * 60))
+            end = max(moved, earliest)
+        }
+    }
+
     /// The client, wired the same way: picking someone fills in an address we
     /// already hold for them, while loading a visit that already names them
     /// leaves its address exactly as booked.
@@ -333,6 +350,25 @@ struct ScheduleVisitSheet: View {
         .accessibilityValue(text)
     }
 
+    /// What the day wheel is allowed to land on: today onwards for a new
+    /// booking, and never later than the day the visit is already on.
+    ///
+    /// Rescheduling is mostly done to visits that have *already* slipped — the
+    /// sheet is reached from "Reschedule" on a passed or recorded visit. With
+    /// the range starting at today, such a visit sits outside it: the wheel
+    /// opens showing today while the row behind it still reads the real date,
+    /// and the clamped value is written straight back through `startBinding`,
+    /// taking the end time with it. Tapping the day to look at it moved the
+    /// booking. Including the visit's own day means the wheel opens where the
+    /// visit actually is, and a date only changes when the user turns it.
+    private var dayRange: PartialRangeFrom<Date> {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        // The live value, not `editing`: a visit dragged back a week and then
+        // re-opened must still show where it now is.
+        return min(today, calendar.startOfDay(for: start))...
+    }
+
     private var dayText: String {
         start.formatted(.dateTime.day().month(.abbreviated).year())
     }
@@ -349,11 +385,11 @@ struct ScheduleVisitSheet: View {
                 case .startTime:
                     DatePicker("Start time", selection: startBinding, displayedComponents: [.hourAndMinute])
                 case .endTime:
-                    DatePicker("End time", selection: $end, displayedComponents: [.hourAndMinute])
+                    DatePicker("End time", selection: endBinding, displayedComponents: [.hourAndMinute])
                 case .day:
                     DatePicker("Visit date",
                                selection: startBinding,
-                               in: Calendar.current.startOfDay(for: Date())...,
+                               in: dayRange,
                                displayedComponents: [.date])
                 }
             }

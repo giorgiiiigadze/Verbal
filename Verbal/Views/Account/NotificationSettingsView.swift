@@ -38,7 +38,7 @@ struct NotificationSettingsView: View {
                             if enabled {
                                 await rescheduleReminders()
                             } else {
-                                ScheduledVisitNotifications.cancelAll(visits: session.visitStore.visits)
+                                await ScheduledVisitNotifications.cancelAll()
                             }
                             await refreshAuthorizationStatus()
                         }
