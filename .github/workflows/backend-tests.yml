@@ -34,6 +34,11 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      # Self-hosted runners can retain a stopped or previous-run Supabase
+      # database. Its published 54322 port prevents this job's clean stack
+      # from starting, so remove only this project's known local container.
+      - name: Clear stale local Supabase database
+        run: docker rm -f supabase_db_rglpwlmkwukezvexyups || true
       - name: Start local Supabase database
         run: supabase db start
       - name: Apply migrations from scratch
