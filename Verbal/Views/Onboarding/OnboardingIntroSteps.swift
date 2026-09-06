@@ -303,49 +303,52 @@ struct OnboardingTradeStep: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            OnboardingHeading(
-                title: "What's your trade?",
-                subtitle: "So a quote knows that “20 mil” means your 20 mil."
-            )
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                OnboardingHeading(
+                    title: "What's your trade?",
+                    subtitle: "So a quote knows that “20 mil” means your 20 mil."
+                )
 
-            // A grid of taps rather than a text field: this is answered once,
-            // standing in a van, and a keyboard is the slowest way to say a
-            // word the app could have offered.
-            FlowLayout(spacing: 8) {
-                ForEach(Self.trades, id: \.self) { trade in
-                    let isOther = trade == Self.otherTrade
-                    let picked = isOther ? model.isCustomTrade
-                                         : (!model.isCustomTrade && model.trade == trade)
-                    OnboardingChip(text: trade, isPicked: picked) {
-                        if isOther {
-                            // The stored trade is whatever they type, not the
-                            // words "Something else" — that string was being
-                            // sent to the extraction as trade context, where it
-                            // says less than nothing.
-                            model.isCustomTrade = true
-                            model.trade = ""
-                        } else {
-                            model.isCustomTrade = false
-                            model.trade = trade
+                // Full-width choices give each trade the same weight as the
+                // answers earlier in the flow. There are more of them, so the
+                // list scrolls instead of shrinking their tap targets.
+                VStack(spacing: 10) {
+                    ForEach(Self.trades, id: \.self) { trade in
+                        let isOther = trade == Self.otherTrade
+                        let picked = isOther ? model.isCustomTrade
+                                             : (!model.isCustomTrade && model.trade == trade)
+                        OnboardingOptionRow(text: trade, isPicked: picked) {
+                            if isOther {
+                                // The stored trade is whatever they type, not the
+                                // words "Something else" — that string was being
+                                // sent to the extraction as trade context, where it
+                                // says less than nothing.
+                                model.isCustomTrade = true
+                                model.trade = ""
+                            } else {
+                                model.isCustomTrade = false
+                                model.trade = trade
+                            }
                         }
                     }
                 }
-            }
-            .animation(.easeInOut(duration: 0.15), value: model.trade)
-            .animation(.easeInOut(duration: 0.15), value: model.isCustomTrade)
+                .animation(.easeInOut(duration: 0.15), value: model.trade)
+                .animation(.easeInOut(duration: 0.15), value: model.isCustomTrade)
 
-            // Typed rather than tapped, because there is no list of every trade
-            // there is. Whatever goes here reaches the extraction as context.
-            if model.isCustomTrade {
-                OnboardingFieldBox {
-                    TextField("Locksmith, glazier, welder…", text: $model.trade)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .focused(focused, equals: .customTrade)
+                // Typed rather than tapped, because there is no list of every trade
+                // there is. Whatever goes here reaches the extraction as context.
+                if model.isCustomTrade {
+                    OnboardingFieldBox {
+                        TextField("Locksmith, glazier, welder…", text: $model.trade)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .focused(focused, equals: .customTrade)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
+            .padding(.bottom, 8)
         }
     }
 }
@@ -363,32 +366,38 @@ struct OnboardingJobsStep: View {
     @Bindable var model: OnboardingModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            OnboardingHeading(
-                title: "Which of these\ndo you do?",
-                subtitle: "Standard work \(OnboardingCopy.article(for: model.trade)). Tick what you actually take on — Verbal prices these for you when you quote them."
-            )
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                OnboardingHeading(
+                    title: "Which of these\ndo you do?",
+                    subtitle: "Standard work \(OnboardingCopy.article(for: model.trade)). Tick what you actually take on — Verbal prices these for you when you quote them."
+                )
 
-            FlowLayout(spacing: 8) {
-                ForEach(TradePresets.jobs(for: model.trade)) { job in
-                    OnboardingChip(text: job.name,
-                                   isPicked: model.pickedJobs.contains(job.name)) {
-                        if model.pickedJobs.contains(job.name) {
-                            model.pickedJobs.remove(job.name)
-                        } else {
-                            model.pickedJobs.insert(job.name)
+                // These are the same deliberate choices as the earlier steps,
+                // so they use the same hierarchy. The list scrolls for trades
+                // with more than a handful of common jobs.
+                VStack(spacing: 10) {
+                    ForEach(TradePresets.jobs(for: model.trade)) { job in
+                        OnboardingOptionRow(text: job.name,
+                                            isPicked: model.pickedJobs.contains(job.name)) {
+                            if model.pickedJobs.contains(job.name) {
+                                model.pickedJobs.remove(job.name)
+                            } else {
+                                model.pickedJobs.insert(job.name)
+                            }
                         }
                     }
                 }
-            }
-            .animation(.easeInOut(duration: 0.15), value: model.pickedJobs)
+                .animation(.easeInOut(duration: 0.15), value: model.pickedJobs)
 
-            if !model.pickedJobs.isEmpty {
-                Text("\(model.pickedJobs.count) ticked — that's most of a rate card already.")
-                    .font(.footnote)
-                    .foregroundStyle(OnboardingStyle.action)
-                    .transition(.opacity)
+                if !model.pickedJobs.isEmpty {
+                    Text("\(model.pickedJobs.count) ticked — that's most of a rate card already.")
+                        .font(.footnote)
+                        .foregroundStyle(OnboardingStyle.action)
+                        .transition(.opacity)
+                }
             }
+            .padding(.bottom, 8)
         }
     }
 }

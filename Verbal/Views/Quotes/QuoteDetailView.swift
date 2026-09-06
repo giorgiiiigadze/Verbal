@@ -103,6 +103,8 @@ struct QuoteDetailView: View {
     /// Loaded from the saved client record for the recipient block in the PDF.
     /// A scheduled-visit address remains a local fallback until it is saved.
     @State private var clientAddress: String?
+    /// Saved on the customer record, separate from any one scheduled visit.
+    @State private var storedClientPhone: String?
     /// Seeded from the quote and kept in sync after an edit, so the chip
     /// updates without refetching the list.
     @State private var clientName: String
@@ -196,7 +198,7 @@ struct QuoteDetailView: View {
     }
 
     private var clientPhoneForPDF: String? {
-        matchingClientVisits.compactMap { clean($0.phone) }.first
+        clean(storedClientPhone) ?? matchingClientVisits.compactMap { clean($0.phone) }.first
     }
 
     private var clientAddressForPDF: String? {
@@ -869,10 +871,15 @@ struct QuoteDetailView: View {
                             title: displayTitle,
                             subtitle: shareSubtitle,
                             shareText: shareText,
-                            document: pdfDocument) {
+                            document: pdfDocument,
+                            messageRecipient: clientPhoneForPDF,
+                            messageBody: "Hi \(clientName), here's your quote: \(displayTitle).") {
                 // Sharing a draft marks it as Sent (don't downgrade later statuses).
                 if status == "draft" { changeStatus(to: "sent") }
             }
+        }
+        .task(id: clientName) {
+            storedClientPhone = try? await QuoteService.customerPhone(named: clientName)
         }
         .sheet(item: $pendingCurrency) { target in
             currencyConversionSheet(for: target)
@@ -966,6 +973,9 @@ struct QuoteDetailView: View {
                                 .resizable()
                                 .renderingMode(.template)
                                 .scaledToFit()
+                                // The hand-drawn document mark is lighter than
+                                // the surrounding SF Symbols at menu size.
+                                .shadow(color: .primary.opacity(0.65), radius: 0.45)
                         }
                     }
                     Button {

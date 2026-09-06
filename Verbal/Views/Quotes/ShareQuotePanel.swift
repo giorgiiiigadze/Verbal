@@ -8,6 +8,7 @@
 
 import SwiftUI
 import UIKit
+import MessageUI
 
 /// Verbal's custom share panel for a quote — a preview plus Share / Copy actions.
 struct ShareQuotePanel: View {
@@ -20,6 +21,10 @@ struct ShareQuotePanel: View {
     /// The quote as a printable document. When present the panel previews the
     /// real page and sends the PDF; without it, it falls back to sharing text.
     var document: QuoteDocument?
+    /// A direct Messages option belongs here only when the quote has a client
+    /// number and this device can send Messages.
+    var messageRecipient: String?
+    var messageBody: String?
     /// Called when the quote is actually shared or copied (used to mark it Sent).
     var onShared: () -> Void
 
@@ -32,8 +37,13 @@ struct ShareQuotePanel: View {
     @State private var pdfURL: URL?
     @State private var isPreviewing = false
     @State private var failedToRender = false
+    @State private var showMessageComposer = false
 
     private var hasPDF: Bool { document != nil && !failedToRender }
+    private var canMessageClient: Bool {
+        messageRecipient != nil && MFMessageComposeViewController.canSendText()
+    }
+    private var messageIsAvailable: Bool { canMessageClient && pdfURL != nil }
 
     @State private var isLinking = false
     @State private var linkFailed = false
@@ -73,7 +83,7 @@ struct ShareQuotePanel: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 22) {
                 // Quote preview — the real first page when we have one, so the user
                 // sees exactly what the client will get before it goes out.
                 HStack(spacing: 14) {
@@ -121,27 +131,47 @@ struct ShareQuotePanel: View {
                 .padding(14)
                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
 
-                // Actions.
-                HStack(spacing: 12) {
-                    actionButton(title: hasPDF ? "Send quote" : "Share via…",
-                                 systemImage: "square.and.arrow.up") {
+                Divider()
+
+                // Each route is present at once — the decision is how to hand
+                // over this particular quote, not whether it can be sent.
+                HStack(alignment: .top, spacing: 0) {
+                    shareAction(title: "Message", systemImage: "message.fill",
+                                isDisabled: !messageIsAvailable) {
+                        showMessageComposer = true
+                    }
+                    shareAction(title: hasPDF ? "Share via" : "Share via…",
+                                systemImage: "square.and.arrow.up") {
                         // A rendered PDF is local. It can be shared through
                         // Messages, Mail or AirDrop without a connection; only
                         // creating a web link needs the server.
                         if !hasPDF, !requireInternetForSharing() { return }
                         showSystemShare = true
                     }
-                    // A link rather than the quote's text, which this used to copy.
-                    // The text was a snapshot that went stale the moment anything
-                    // changed and gave the customer nothing to do; the link is
-                    // always current, tells you when they've opened it, and lets
-                    // them answer.
-                    actionButton(title: linkTitle,
-                                 systemImage: copied ? "checkmark" : "link") {
+                    shareAction(title: linkTitle, systemImage: copied ? "checkmark" : "link",
+                                isDisabled: isLinking) {
                         copyLink()
                     }
-                    .disabled(isLinking)
+                    shareAction(title: "View PDF", systemImage: "doc.text") {
+                        if pdfURL != nil { isPreviewing = true }
+                    }
                 }
+
+                HStack(spacing: 12) {
+                    Image(systemName: "link")
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(Color(.blueAccentText))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Link access")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Text(copied ? "Secure quote link copied." : "Anyone you send the link to can view this quote.")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color(.mainText))
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 4)
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -153,7 +183,7 @@ struct ShareQuotePanel: View {
                 }
             }
         }
-        .presentationDetents([.height(300)])
+        .presentationDetents([.height(390)])
         .presentationBackground(.ultraThinMaterial)
         .toast($toast)
         .task {
@@ -169,6 +199,19 @@ struct ShareQuotePanel: View {
         .sheet(isPresented: $showSystemShare) {
             ShareSheet(items: [pdfURL as Any? ?? shareText].compactMap { $0 }) { completed in
                 if completed {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    onShared()
+                    dismiss()
+                }
+            }
+        }
+        .sheet(isPresented: $showMessageComposer) {
+            if let recipient = messageRecipient, let pdfURL, let document {
+                MessageComposer(recipients: [recipient],
+                                body: messageBody ?? "Here's your quote.",
+                                attachmentURL: pdfURL,
+                                attachmentFilename: document.fileName) { sent in
+                    guard sent else { return }
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     onShared()
                     dismiss()
@@ -195,22 +238,38 @@ struct ShareQuotePanel: View {
         return true
     }
 
-    private func actionButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    private func shareAction(title: String,
+                             systemImage: String,
+                             isDisabled: Bool = false,
+                             action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            VStack(spacing: 9) {
                 Image(systemName: systemImage)
-                Text(title).fontWeight(.medium)
+                    .font(.title3.weight(.medium))
+                    .frame(width: 66, height: 66)
+                    .glassEffect(.regular.interactive(), in: Circle())
+                Text(title)
+                    .font(.footnote.weight(.medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
             }
             .foregroundStyle(Color(.mainText))
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .glassEffect(.regular.interactive(), in: Capsule())
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.38 : 1)
         .accessibilityLabel(title)
-        .accessibilityHint(systemImage == "link"
-            ? "Creates a secure web link for this quote."
-            : "Opens the system share sheet.")
+        .accessibilityHint(shareActionHint(for: systemImage))
+    }
+
+    private func shareActionHint(for systemImage: String) -> String {
+        switch systemImage {
+        case "message.fill": return "Opens Messages with this quote PDF attached."
+        case "link", "checkmark": return "Creates a secure link to this quote."
+        case "doc.text": return "Opens the PDF preview."
+        default: return "Opens the system share sheet."
+        }
     }
 
     private func cleanUpPDF() {

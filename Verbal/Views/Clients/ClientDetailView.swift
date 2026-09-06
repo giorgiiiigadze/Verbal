@@ -44,6 +44,9 @@ struct ClientDetailView: View {
     @State private var editAddressAfterMap = false
     @State private var showAddressEditor = false
     @State private var addressText = ""
+    @State private var storedPhone: String?
+    @State private var showPhoneEditor = false
+    @State private var phoneText = ""
 
     /// This person as the session has them now.
     ///
@@ -117,6 +120,12 @@ struct ClientDetailView: View {
                         Label(location.hasAddress ? "Edit address" : "Add address",
                               systemImage: "mappin.and.ellipse")
                     }
+                    Button {
+                        editPhone()
+                    } label: {
+                        Label(storedPhone == nil ? "Add phone" : "Edit phone",
+                              systemImage: "phone")
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                 }
@@ -160,10 +169,19 @@ struct ClientDetailView: View {
         } message: {
             Text("Where the job is. Leave it empty to remove the address.")
         }
+        .alert("Client phone", isPresented: $showPhoneEditor) {
+            TextField("Mobile number", text: $phoneText)
+                .keyboardType(.phonePad)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { savePhone(phoneText) }
+        } message: {
+            Text("Used to send this client quote PDFs by message. Leave it empty to remove the number.")
+        }
         .toast($toast)
         .task(id: activeKey.id) {
             await location.load(name: client.name, key: activeKey.id,
                                 visits: session.visitStore.visits)
+            storedPhone = try? await QuoteService.customerPhone(named: client.name)
         }
         .task(id: signature) {
             points = await ClientQuotePoint.of(client.quotes, in: currencyCode)
@@ -227,6 +245,27 @@ struct ClientDetailView: View {
                 return
             }
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+
+    private func editPhone() {
+        phoneText = storedPhone ?? clientPhone ?? ""
+        showPhoneEditor = true
+    }
+
+    private func savePhone(_ newPhone: String) {
+        let name = client.name
+        let previous = storedPhone
+        let trimmed = cleaned(newPhone)
+        storedPhone = trimmed
+        Task {
+            do {
+                try await QuoteService.setCustomerPhone(trimmed, forClientNamed: name)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } catch {
+                storedPhone = previous
+                toast = Toast(style: .error, message: "Couldn't save this phone number")
+            }
         }
     }
 
@@ -441,7 +480,7 @@ struct ClientDetailView: View {
     }
 
     private var clientPhone: String? {
-        matchingVisits.compactMap { cleaned($0.phone) }.first
+        storedPhone ?? matchingVisits.compactMap { cleaned($0.phone) }.first
     }
 
     private var clientNotes: String? {
@@ -453,17 +492,19 @@ struct ClientDetailView: View {
             HStack {
                 sectionHeading("Client information")
                 Spacer()
-                Button("Edit address") { editAddress() }
+                Button(storedPhone == nil ? "Add phone" : "Edit phone") { editPhone() }
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Color(.blueAccentText))
                     .buttonStyle(.plain)
             }
 
             VStack(spacing: 0) {
-                if let phone = clientPhone {
-                    informationRow("Phone", value: phone)
-                    Divider().padding(.leading, 16)
+                Button { editPhone() } label: {
+                    informationRow("Phone", value: clientPhone ?? "Add a phone number",
+                                   showsDisclosure: true)
                 }
+                .buttonStyle(.plain)
+                Divider().padding(.leading, 16)
 
                 Button { showMap = true } label: {
                     informationRow("Address",

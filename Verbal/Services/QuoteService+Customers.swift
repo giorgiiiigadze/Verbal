@@ -100,6 +100,26 @@ extension QuoteService {
         return (address?.isEmpty ?? true) ? nil : address
     }
 
+    /// The number kept on the customer's own record. A scheduled visit may
+    /// also have a number, but the customer record is what sending a quote
+    /// should rely on.
+    static func customerPhone(named name: String) async throws -> String? {
+        guard let userID = client.auth.currentUser?.id else { return nil }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        struct Row: Decodable { let phone: String? }
+        let response: PostgrestResponse<[Row]> = try await client
+            .from("customers")
+            .select("phone")
+            .eq("user_id", value: userID)
+            .ilike("name", pattern: escapingLikeWildcards(trimmed))
+            .limit(1)
+            .execute()
+        let phone = response.value.first?.phone?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (phone?.isEmpty ?? true) ? nil : phone
+    }
+
     /// Give a client an address, or take it away.
     ///
     /// Written to every row of theirs rather than the first: two rows can share
@@ -119,6 +139,25 @@ extension QuoteService {
         try await client
             .from("customers")
             .update(Payload(address: (trimmed?.isEmpty ?? true) ? nil : trimmed))
+            .eq("user_id", value: userID)
+            .ilike("name", pattern: escapingLikeWildcards(trimmedName))
+            .execute()
+    }
+
+    /// Give a client a phone number, or clear the one already saved. Updating
+    /// every same-named row matches the address and rename behaviour above.
+    static func setCustomerPhone(_ phone: String?, forClientNamed name: String) async throws {
+        guard let userID = client.auth.currentUser?.id else {
+            throw QuoteError.notSignedIn
+        }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        let trimmed = phone?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        struct Payload: Encodable { let phone: String? }
+        try await client
+            .from("customers")
+            .update(Payload(phone: (trimmed?.isEmpty ?? true) ? nil : trimmed))
             .eq("user_id", value: userID)
             .ilike("name", pattern: escapingLikeWildcards(trimmedName))
             .execute()
