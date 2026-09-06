@@ -60,6 +60,18 @@ final class VisitStore {
         let deletedAt: Date
     }
 
+    /// How long a tombstone is kept once the server has still not accepted its
+    /// delete. Long enough that no ordinary absence reaches it — a phone off
+    /// for a fortnight, a season of no signal — and short enough that the cache
+    /// cannot grow without a ceiling on a device that never syncs again.
+    ///
+    /// The stamp is what makes this possible; before it, `deletedAt` was
+    /// written on every tombstone and read by nothing, so the list only ever
+    /// grew. A tombstone that has failed to deliver for three months is not
+    /// protecting a visit any more, and `prune` will drop whatever it lets
+    /// back in on the next pass anyway.
+    private static let tombstoneLifetime: TimeInterval = 90 * 24 * 60 * 60
+
     private struct Cache: Codable {
         var visits: [ScheduledVisit] = []
         var unsynced: [UUID] = []
@@ -382,6 +394,12 @@ final class VisitStore {
     private func prune(_ cache: inout Cache) {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
+
+        // Tombstones whose delete has had three months to land and never has.
+        // Dropped here rather than in `push`, because this is the one place
+        // that runs on a launch with no network at all.
+        let tombstoneCutoff = Date().addingTimeInterval(-Self.tombstoneLifetime)
+        cache.tombstones.removeAll { $0.deletedAt < tombstoneCutoff }
 
         var kept: [ScheduledVisit] = []
         for visit in cache.visits {

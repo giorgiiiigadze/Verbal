@@ -28,7 +28,7 @@ struct CalendarIntroSheet: View {
                     .padding(.top, 70)
 
                 Text("Plan the work.\nQuote it while it’s fresh.")
-                    .font(.system(size: 38, design: .serif).weight(.medium))
+                    .font(.scaledSystem(38, relativeTo: .largeTitle, weight: .medium, design: .serif))
                     .foregroundStyle(Color(.mainText))
                     .multilineTextAlignment(.center)
                     .padding(.top, 30)

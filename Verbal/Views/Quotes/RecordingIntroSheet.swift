@@ -40,7 +40,7 @@ struct RecordingIntroSheet: View {
                     .padding(.top, 70)
 
                 Text("Create quotes\nusing your voice.")
-                    .font(.system(size: 38, design: .serif).weight(.medium))
+                    .font(.scaledSystem(38, relativeTo: .largeTitle, weight: .medium, design: .serif))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color(.mainText))
                     .padding(.top, 30)

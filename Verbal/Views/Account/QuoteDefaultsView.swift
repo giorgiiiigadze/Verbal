@@ -530,7 +530,12 @@ struct QuoteDefaultsView: View {
                 }
 
                 Text(displayBusinessName)
-                .font(.robotoSlab(16, relativeTo: .headline))
+                // Fixed, like every other size in this card. It is a miniature
+                // of the printed letterhead, not app chrome — the rest of it is
+                // pinned to the PDF's point sizes, and a business name that
+                // alone grew with Dynamic Type pushed the contact lines out of
+                // a preview whose whole job is to show what will be printed.
+                .font(.robotoSlabFixed(16))
                 .foregroundStyle(
                     businessName?.isEmpty == false
                         ? .black

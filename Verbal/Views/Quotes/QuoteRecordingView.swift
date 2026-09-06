@@ -428,9 +428,19 @@ struct QuoteRecordingView: View {
         phraseIndex = 0
         Task {
             defer { isGenerating = false }
-            guard let result = try? await QuoteService.generate(transcript: transcriptText,
-                                                             tradeContext: session.businessProfile?.trade) else {
-                toast = Toast(style: .error, message: "Couldn't generate quote")
+            let result: GeneratedQuote
+            do {
+                result = try await QuoteService.generate(
+                    transcript: transcriptText,
+                    tradeContext: session.businessProfile?.trade)
+            } catch {
+                // A timeout has something specific and reassuring to say — the
+                // recording survived, and trying again is the whole fix. Every
+                // other failure keeps the generic line, because naming a
+                // decoding error to a plumber helps nobody.
+                let message = (error as? QuoteError)?.errorDescription
+                    ?? "Couldn't generate quote"
+                toast = Toast(style: .error, message: message)
                 return
             }
             generatedAt = Date()

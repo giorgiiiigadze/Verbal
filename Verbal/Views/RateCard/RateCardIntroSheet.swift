@@ -25,7 +25,7 @@ struct RateCardIntroSheet: View {
                     .padding(.top, 70)
 
                 Text("Your prices,\nready to quote.")
-                    .font(.system(size: 38, design: .serif).weight(.medium))
+                    .font(.scaledSystem(38, relativeTo: .largeTitle, weight: .medium, design: .serif))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color(.mainText))
                     .padding(.top, 30)

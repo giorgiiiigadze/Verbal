@@ -241,6 +241,10 @@ struct RateCardView: View {
                                 .font(.callout.weight(.semibold).monospacedDigit())
                                 .foregroundStyle(Color(.mainText))
                                 .lineLimit(1)
+                                // A truncated price is worse than a small one:
+                                // "£1,2…" is not a number, and this row shares
+                                // its width with an item name that can be long.
+                                .minimumScaleFactor(0.75)
                         } else {
                             // The same amber a quote uses for a line it couldn't
                             // price, saying the same thing: this one needs you.

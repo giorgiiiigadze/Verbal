@@ -121,7 +121,7 @@ struct TranscriptSheet: View {
                 .disabled(!hasText)
             }
         }
-        .font(.system(size: 15, weight: .semibold))
+        .font(.scaledSystem(15, relativeTo: .subheadline, weight: .semibold))
         .foregroundStyle(Color(.mainText))
         .padding(.top, 4)
     }

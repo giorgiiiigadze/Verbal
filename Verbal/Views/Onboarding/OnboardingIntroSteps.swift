@@ -691,6 +691,7 @@ struct OnboardingSummaryStep: View {
                         .font(.callout.weight(.semibold).monospacedDigit())
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
                 Text("per \(rate.unit)")
                     .font(.footnote)

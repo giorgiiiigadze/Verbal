@@ -83,6 +83,9 @@ final class QuoteRecorder {
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
     private var resultsTask: Task<Void, Never>?
     private var interruptionTask: Task<Void, Never>?
+    /// The teardown currently running, so a second ending joins it rather than
+    /// starting its own. See `teardown()`.
+    private var teardownTask: Task<Void, Never>?
 
     /// Bumped by anything that ends a session. `start()` carries a copy across
     /// its awaits and abandons the attempt if it has moved on, because setting
@@ -200,7 +203,7 @@ final class QuoteRecorder {
                         self.handle(text: text, isFinal: result.isFinal)
                     }
                 } catch {
-                    self.fail(error)
+                    await self.fail(error)
                 }
             }
 
@@ -221,7 +224,7 @@ final class QuoteRecorder {
             startTimer()
             observeInterruptions()
         } catch {
-            fail(error)
+            await fail(error)
         }
     }
 
@@ -248,6 +251,22 @@ final class QuoteRecorder {
     /// finalized text here is what keeps the half-spoken sentence someone was in
     /// the middle of when the phone rang.
     private func teardown() async {
+        // Two endings can now race: `stop()` and a `fail()` raised from the
+        // recognizer's own stream, which is exactly what dying mid-recording
+        // looks like. The second caller must not re-run the finalize below —
+        // it awaits an analyzer the first caller is already finishing — so it
+        // waits for that one and returns.
+        if let inFlight = teardownTask {
+            await inFlight.value
+            return
+        }
+        let task = Task { await performTeardown() }
+        teardownTask = task
+        await task.value
+        teardownTask = nil
+    }
+
+    private func performTeardown() async {
         // Anything in flight in `start()` belongs to a session that is over.
         sessionToken += 1
 
@@ -393,7 +412,16 @@ final class QuoteRecorder {
         }
     }
 
-    private func fail(_ error: Error) {
+    /// End a session that has gone wrong, giving back everything it holds.
+    ///
+    /// The teardown is the point. A failure can arrive with the audio engine
+    /// already running and the session already active — `startAudio` throws
+    /// after `setActive(true)`, or the recognizer's stream dies mid-sentence —
+    /// and simply setting `.idle` over that leaves a tap on the microphone and
+    /// an active `.duckOthers` session behind. The user sees a recorder that
+    /// stopped and hears their music stay quiet until the app is force-quit.
+    private func fail(_ error: Error) async {
+        await teardown()
         errorMessage = error.localizedDescription
         // Never erase a pause. If the session was interrupted while this attempt
         // was in flight, `.interrupted` is the truthful state — dropping to

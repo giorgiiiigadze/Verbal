@@ -4,14 +4,26 @@ This is the release order for Verbal’s monthly and yearly Apple subscriptions.
 Do each check in order. Do not enable the server-side free-tier gate until a
 real Sandbox/TestFlight subscriber is visible as `active` in Supabase.
 
-## Current status — 2 September 2026
+## Current status — 6 September 2026
 
 - [x] StoreKit purchase, restore, and paywall flows are in the app.
 - [x] Supabase verification, ownership binding, quota gate, and notification
   handler are in the repository.
-- [ ] `20260831132905_app_store_notifications.sql` is pending deployment.
-- [ ] `20260902090154_backend_security_hardening.sql` is pending deployment.
+- [x] `20260831132905_app_store_notifications.sql` is deployed.
+- [x] `20260902090154_backend_security_hardening.sql` is deployed.
+- [x] All migrations through `20260906143900` are deployed. Nothing is pending;
+  `supabase migration list --linked` should show no local-only versions.
+- [ ] `app_settings.quota_enforced` is still `false` — the free-tier gate is
+  off by choice, and the client is currently the only thing holding the daily
+  limit. This is the flip described in step 6, and it is the last thing
+  standing between the paywall and a paywall that means something.
 - [ ] Apple Developer Program / App Store Connect setup is not yet available.
+
+> Migration versions are the remote ledger's, not the local clock's. Some of
+> these were applied straight to the project rather than through `db push`, so
+> a local file whose timestamp disagrees with `schema_migrations` will be
+> re-applied on the next push and fail on the second `add column`. Name the
+> file after the version the remote actually recorded.
 
 ## 1. Create the Apple foundation
 

@@ -33,10 +33,22 @@ extension QuoteService {
             trade_context: tradeContext,
             tax_rate: taxRate
         )
-        let extraction: ExtractResponse = try await client.functions.invoke(
-            "extract-quote",
-            options: FunctionInvokeOptions(body: request)
-        )
+        // Measured, not guessed: extraction averages about nine seconds and the
+        // slowest real call on record took twenty-four. Forty-five leaves room
+        // for a bad day on a bad connection and still gives up long before
+        // URLSession's own minute — by which point the user has decided the app
+        // is broken and there is nothing left to salvage.
+        let extraction: ExtractResponse
+        do {
+            extraction = try await withTimeout(.seconds(45)) {
+                try await client.functions.invoke(
+                    "extract-quote",
+                    options: FunctionInvokeOptions(body: request)
+                )
+            }
+        } catch is TimedOutError {
+            throw QuoteError.extractionTimedOut
+        }
         let q = extraction.quote
         return GeneratedQuote(
             title: q.title,
@@ -60,7 +72,7 @@ extension QuoteService {
     }
 }
 
-private struct ExtractRequest: Encodable {
+private nonisolated struct ExtractRequest: Encodable, Sendable {
     let transcript: String
     let rate_card: [RateCardPayload]
     let currency: String
@@ -74,18 +86,18 @@ private struct ExtractRequest: Encodable {
     let tax_rate: Double?
 }
 
-private struct RateCardPayload: Encodable {
+private nonisolated struct RateCardPayload: Encodable, Sendable {
     let name: String
     let unit: String?
     let unit_price: Double?
     let type: String
 }
 
-private struct ExtractResponse: Decodable {
+private nonisolated struct ExtractResponse: Decodable, Sendable {
     let quote: ExtractedQuote
 }
 
-private struct ExtractedQuote: Decodable {
+private nonisolated struct ExtractedQuote: Decodable, Sendable {
     let title: String
     let jobSummary: String
     let scope: [String]
@@ -105,12 +117,12 @@ private struct ExtractedQuote: Decodable {
     }
 }
 
-private struct ExtractedCustomer: Decodable {
+private nonisolated struct ExtractedCustomer: Decodable, Sendable {
     let name: String?
     let address: String?
 }
 
-private struct ExtractedLineItem: Decodable {
+private nonisolated struct ExtractedLineItem: Decodable, Sendable {
     let description: String
     let type: String
     let quantity: Double?
