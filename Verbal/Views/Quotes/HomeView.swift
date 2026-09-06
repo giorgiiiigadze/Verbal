@@ -14,6 +14,7 @@ struct HomeView: View {
     @Environment(NetworkMonitor.self) private var network
     @Environment(AppNotificationRouter.self) private var notificationRouter
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var showCreate: Bool
     @Binding var recordingVisit: ScheduledVisit?
     @Binding var savedRecordingQuoteID: UUID?
@@ -59,6 +60,9 @@ struct HomeView: View {
     /// Someone who deletes every quote still isn't a beginner, and the teaching
     /// card would greet them by explaining their own job back to them.
     @AppStorage("hasEverHadQuotes") private var hasEverHadQuotes = false
+    /// A display preference only. Scheduled visits keep syncing and remain in
+    /// the Schedule tab when this preview is hidden.
+    @AppStorage(HomePreferences.upcomingVisitsVisibleKey) private var upcomingVisitsVisible = true
     /// Visits booked but not quoted yet, soonest first. Held on the device —
     /// see `ScheduledVisit`.
     @State private var visits: [ScheduledVisit] = []
@@ -371,7 +375,7 @@ struct HomeView: View {
         } else if quotes.isEmpty && loadFailed {
             // Don't claim the account is empty when the fetch failed.
             errorState
-        } else if quotes.isEmpty && visits.isEmpty {
+        } else if quotes.isEmpty && (!upcomingVisitsVisible || visits.isEmpty) {
             emptyState
         } else if !quotes.isEmpty && sections.isEmpty {
             // Quotes exist, but the search or filter excluded them all.
@@ -387,7 +391,7 @@ struct HomeView: View {
     /// Showing the floating control beside it creates two identical calls to
     /// action on one screen.
     private var showsFirstQuoteCard: Bool {
-        quotes.isEmpty && visits.isEmpty && hasLoaded && !loadFailed && !hasEverHadQuotes
+        quotes.isEmpty && (!upcomingVisitsVisible || visits.isEmpty) && hasLoaded && !loadFailed && !hasEverHadQuotes
     }
 
     // MARK: - List
@@ -417,7 +421,7 @@ struct HomeView: View {
 
                 // Visits are not quotes, so they stay out of a status-filtered
                 // quote list. They remain available from the Schedule tab.
-                if filter == .all {
+                if filter == .all && upcomingVisitsVisible {
                     upcomingSection
                 }
 
@@ -571,6 +575,8 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.26 : 0.10),
+                radius: 8, x: 0, y: 3)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
@@ -703,27 +709,9 @@ struct HomeView: View {
             title: "Nothing booked in",
             message: "Put the visits you've got coming up here and each one is a tap from a quote."
         ) {
-            Button { visitEditor = .new } label: {
-                HStack(spacing: 9) {
-                    Image(systemName: "plus")
-                        .font(.footnote.weight(.semibold))
-                    Text("Book a visit")
-                        .font(.subheadline.weight(.medium))
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .foregroundStyle(Color(.mainText))
-                .padding(.horizontal, 18)
-                .frame(height: 46)
-                .background(Color(.cardSurface),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                )
+            EmptyStatePill(title: "Book a visit", icon: "plus") {
+                visitEditor = .new
             }
-            .buttonStyle(.plain)
         }
         .padding(.vertical, 26)
         .frame(maxWidth: .infinity)
@@ -1174,10 +1162,12 @@ struct HomeView: View {
                     .padding(.top, 4)
                     .padding(.bottom, 10)
 
-                skeletonSectionHeader(width: 82)
+                if upcomingVisitsVisible {
+                    skeletonSectionHeader(width: 82)
 
-                upcomingCardSkeleton
-                    .padding(.bottom, 8)
+                    upcomingCardSkeleton
+                        .padding(.bottom, 8)
+                }
 
                 skeletonSectionHeader(width: 96)
                     .padding(.top, 2)

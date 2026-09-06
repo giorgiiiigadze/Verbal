@@ -32,6 +32,7 @@ struct AccountView: View {
     @AppStorage(ScheduledVisitNotifications.enabledKey) private var remindersEnabled = true
     @AppStorage(ScheduledVisitNotifications.leadTimeKey) private var reminderLeadTime = ScheduledVisitReminderLeadTime.atTime.rawValue
     @AppStorage(RecordingPreferences.hapticsEnabledKey) private var recordingHapticsEnabled = true
+    @AppStorage(HomePreferences.upcomingVisitsVisibleKey) private var upcomingVisitsVisible = true
     @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
     /// Read only to refresh the row's value when the picker writes it.
     @AppStorage(DictationLanguage.defaultsKey) private var dictationLocale = ""
@@ -158,6 +159,16 @@ struct AccountView: View {
                 } label: {
                     LabeledContent("Appearance", value: appearanceLabel)
                 }
+            }
+            .listRowBackground(Color(.cardSurface))
+
+            Section {
+                Toggle("Show upcoming visits", isOn: $upcomingVisitsVisible)
+                    .tint(.green)
+            } header: {
+                Text("Home")
+            } footer: {
+                Text("Hide the Upcoming section on Home. Your booked visits remain available in Schedule and their reminders are unchanged.")
             }
             .listRowBackground(Color(.cardSurface))
 
