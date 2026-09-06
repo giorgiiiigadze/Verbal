@@ -81,15 +81,25 @@ enum QuotePDF {
     /// — the reader sees an unfinished page, not a full one. Setting the type a
     /// touch smaller keeps it whole. Past `maxShrink` it genuinely is two pages'
     /// worth of quote and it splits properly.
+    @MainActor
     private static func singlePageScale(_ document: QuoteDocument) -> CGFloat? {
         let available = PageMetrics.height - PageMetrics.verticalInsets - Layout.footer
-        let needed = headerHeight(document)
-            + Layout.tableHeader
-            + document.lineItems.reduce(0) { $0 + rowHeight($1) }
-            + tailHeight(document)
-        guard needed > available else { return 1 }
-        let scale = available / needed
-        return scale >= maxShrink ? scale : nil
+        // Measure the actual SwiftUI content, including wrapped text. The old
+        // estimate still reserved space for the removed logo and could split
+        // a short quote despite ample room on the rendered page.
+        let page = QuoteDocumentPage(document: document, items: document.lineItems,
+                                     isFirstPage: true, isLastPage: true,
+                                     pageNumber: 1, pageCount: 1)
+        for step in 0...14 {
+            let scale = 1 - CGFloat(step) / 100
+            let renderer = ImageRenderer(content: page.content
+                .frame(width: PageMetrics.contentWidth / scale)
+                .fixedSize(horizontal: false, vertical: true))
+            var height: CGFloat = .infinity
+            renderer.render { size, _ in height = size.height }
+            if height * scale <= available { return scale }
+        }
+        return nil
     }
 
     /// The smallest the document may be set. 0.86 takes 11pt body text to a
@@ -212,9 +222,7 @@ enum QuotePDF {
     private enum Layout {
         /// QUOTE mark, metadata, rule, and the two-column sender/recipient panel.
         static let headerBlock: CGFloat = 48
-        // Matches the 124 × 44pt letterhead logo and the sender/recipient
-        // panel in QuoteDocumentPage. The extra room is reserved here too, so
-        // a larger logo cannot push the table past the bottom of page one.
+        // Matches the sender/recipient panel in QuoteDocumentPage.
         static let partiesRow: CGFloat = 176
         static let sectionRule: CGFloat = 20
         static let blockGap: CGFloat = 18

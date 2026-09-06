@@ -116,6 +116,13 @@ final class SessionStore {
         UserDefaults.standard.set(urlString, forKey: Self.logoURLKey)
     }
 
+    /// A document must be rendered from the actual logo bytes, not merely the
+    /// profile's URL. Most screens can let this finish in the background; a
+    /// PDF cannot redraw after it has been attached to a message.
+    func ensureBusinessLogoLoaded() async {
+        await refreshBusinessLogo()
+    }
+
     private static let logoURLKey = "cachedBusinessLogoURL"
 
     // MARK: - Rate card & spoken prices

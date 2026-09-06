@@ -40,6 +40,7 @@ struct QuoteDocumentPage: View {
             // only the document above it shrinks.
             content
                 .frame(width: PageMetrics.contentWidth / contentScale, alignment: .topLeading)
+                .fixedSize(horizontal: false, vertical: true)
                 .scaleEffect(contentScale, anchor: .topLeading)
                 .frame(width: PageMetrics.contentWidth, alignment: .topLeading)
 
@@ -55,7 +56,7 @@ struct QuoteDocumentPage: View {
         .environment(\.colorScheme, .light)
     }
 
-    private var content: some View {
+    var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             if isFirstPage {
                 header.padding(.horizontal, PageMetrics.horizontalInset)
@@ -151,15 +152,6 @@ struct QuoteDocumentPage: View {
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 7) {
                 fieldLabel("From")
-                if let logo = document.logo {
-                    Image(uiImage: logo)
-                        .resizable()
-                        .scaledToFit()
-                        // Give the letterhead enough presence to read as a
-                        // proper business mark, while preserving every logo's
-                        // aspect ratio rather than cropping a wide wordmark.
-                        .frame(maxWidth: 124, maxHeight: 44, alignment: .leading)
-                }
                 Text(document.businessName)
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(.black)
@@ -178,11 +170,6 @@ struct QuoteDocumentPage: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(.leading, PageMetrics.horizontalInset)
 
-            Rectangle()
-                .fill(.black.opacity(0.20))
-                .frame(width: 1)
-                .padding(.vertical, -18)
-
             VStack(alignment: .leading, spacing: 7) {
                 fieldLabel("To")
                 Text(document.clientName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -197,11 +184,21 @@ struct QuoteDocumentPage: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // A PDF page proposes its full height to this row. Keeping the
+            // recipient column height-to-content prevents it from consuming
+            // the blank space that the quote table needs below.
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(.leading, 24)
             .padding(.trailing, PageMetrics.horizontalInset)
         }
         .frame(minHeight: 86, alignment: .top)
+        .fixedSize(horizontal: false, vertical: true)
+        .overlay {
+            Rectangle()
+                .fill(.black.opacity(0.20))
+                .frame(width: 1)
+                .padding(.vertical, -18)
+        }
     }
 
     private var scopeSection: some View {

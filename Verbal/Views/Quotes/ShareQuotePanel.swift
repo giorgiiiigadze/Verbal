@@ -30,6 +30,7 @@ struct ShareQuotePanel: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(NetworkMonitor.self) private var network
+    @Environment(SessionStore.self) private var session
     @State private var showSystemShare = false
     @State private var copied = false
     @State private var toast: Toast?
@@ -37,7 +38,13 @@ struct ShareQuotePanel: View {
     @State private var pdfURL: URL?
     @State private var isPreviewing = false
     @State private var failedToRender = false
-    @State private var showMessageComposer = false
+    @State private var messageDraft: MessageDraft?
+
+    /// A new identity on every tap prevents SwiftUI from trying to reuse a
+    /// Messages controller that the system previously declined to initialize.
+    private struct MessageDraft: Identifiable {
+        let id = UUID()
+    }
 
     private var hasPDF: Bool { document != nil && !failedToRender }
     private var canMessageClient: Bool {
@@ -87,21 +94,7 @@ struct ShareQuotePanel: View {
                 // Quote preview — the real first page when we have one, so the user
                 // sees exactly what the client will get before it goes out.
                 HStack(spacing: 14) {
-                    Group {
-                        if let preview {
-                            Image(uiImage: preview)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } else {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color(.royalBlue25))
-                                .overlay(
-                                    Image(systemName: "doc.text")
-                                        .font(.system(size: 20, weight: .semibold))
-                                        .foregroundStyle(Color(.blueAccentText))
-                                )
-                        }
-                    }
+                    previewArtwork
                     .frame(width: 46, height: 60)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
@@ -136,12 +129,12 @@ struct ShareQuotePanel: View {
                 // Each route is present at once — the decision is how to hand
                 // over this particular quote, not whether it can be sent.
                 HStack(alignment: .top, spacing: 0) {
-                    shareAction(title: "Message", systemImage: "message.fill",
+                    shareAction(title: "Message", icon: .messageSketch,
                                 isDisabled: !messageIsAvailable) {
-                        showMessageComposer = true
+                        messageDraft = MessageDraft()
                     }
                     shareAction(title: hasPDF ? "Share via" : "Share via…",
-                                systemImage: "square.and.arrow.up") {
+                                icon: .shareSketch) {
                         // A rendered PDF is local. It can be shared through
                         // Messages, Mail or AirDrop without a connection; only
                         // creating a web link needs the server.
@@ -157,21 +150,6 @@ struct ShareQuotePanel: View {
                     }
                 }
 
-                HStack(spacing: 12) {
-                    Image(systemName: "link")
-                        .font(.title3.weight(.medium))
-                        .foregroundStyle(Color(.blueAccentText))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Link access")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Text(copied ? "Secure quote link copied." : "Anyone you send the link to can view this quote.")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(Color(.mainText))
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 4)
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -183,14 +161,21 @@ struct ShareQuotePanel: View {
                 }
             }
         }
-        .presentationDetents([.height(390)])
+        .presentationDetents([.height(360)])
         .presentationBackground(.ultraThinMaterial)
         .toast($toast)
         .task {
-            guard let document else { return }
-            preview = QuotePDF.thumbnail(document)
+            guard var renderedDocument = document else { return }
+            // A quote may be opened while the session is still fetching the
+            // business mark. Resolve it before creating the immutable PDF;
+            // once the document is attached, there is no later redraw.
+            await session.ensureBusinessLogoLoaded()
+            if let logo = session.businessLogo { renderedDocument.logo = logo }
+            guard !Task.isCancelled else { return }
+
+            preview = QuotePDF.thumbnail(renderedDocument)
             do {
-                pdfURL = try QuotePDF.write(document)
+                pdfURL = try QuotePDF.write(renderedDocument)
             } catch {
                 // Fall back to sharing text rather than blocking the send.
                 failedToRender = true
@@ -205,12 +190,13 @@ struct ShareQuotePanel: View {
                 }
             }
         }
-        .sheet(isPresented: $showMessageComposer) {
+        .sheet(item: $messageDraft) { _ in
             if let recipient = messageRecipient, let pdfURL, let document {
                 MessageComposer(recipients: [recipient],
                                 body: messageBody ?? "Here's your quote.",
                                 attachmentURL: pdfURL,
                                 attachmentFilename: document.fileName) { sent in
+                    messageDraft = nil
                     guard sent else { return }
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     onShared()
@@ -229,6 +215,23 @@ struct ShareQuotePanel: View {
         }
     }
 
+    @ViewBuilder
+    private var previewArtwork: some View {
+        if let preview {
+            Image(uiImage: preview)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        } else {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.royalBlue25))
+                .overlay {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(Color(.blueAccentText))
+                }
+        }
+    }
+
     private func requireInternetForSharing() -> Bool {
         guard network.isOnline else {
             toast = Toast(style: .error, message: "Internet required for sharing")
@@ -239,14 +242,25 @@ struct ShareQuotePanel: View {
     }
 
     private func shareAction(title: String,
-                             systemImage: String,
+                             systemImage: String? = nil,
+                             icon: ImageResource? = nil,
                              isDisabled: Bool = false,
                              action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 9) {
-                Image(systemName: systemImage)
-                    .font(.title3.weight(.medium))
-                    .frame(width: 66, height: 66)
+                Group {
+                    if let icon {
+                        Image(icon)
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(width: 30, height: 30)
+                    } else if let systemImage {
+                        Image(systemName: systemImage)
+                            .font(.title3.weight(.medium))
+                    }
+                }
+                    .frame(width: 74, height: 74)
                     .glassEffect(.regular.interactive(), in: Circle())
                 Text(title)
                     .font(.footnote.weight(.medium))
@@ -260,14 +274,15 @@ struct ShareQuotePanel: View {
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.38 : 1)
         .accessibilityLabel(title)
-        .accessibilityHint(shareActionHint(for: systemImage))
+        .accessibilityHint(shareActionHint(for: title))
     }
 
-    private func shareActionHint(for systemImage: String) -> String {
-        switch systemImage {
-        case "message.fill": return "Opens Messages with this quote PDF attached."
-        case "link", "checkmark": return "Creates a secure link to this quote."
-        case "doc.text": return "Opens the PDF preview."
+    private func shareActionHint(for title: String) -> String {
+        switch title {
+        case "Message": return "Opens Messages with this quote PDF attached."
+        case "Copy link", "Link copied", "Getting link…", "Try again":
+            return "Creates a secure link to this quote."
+        case "View PDF": return "Opens the PDF preview."
         default: return "Opens the system share sheet."
         }
     }
