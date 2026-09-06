@@ -309,6 +309,10 @@ struct OnboardingView: View {
     @ViewBuilder
     private var footer: some View {
         switch current {
+        case .record:
+            OnboardingRecordingBar(model: model) {
+                advance()
+            }
         case .notifications:
             pairedFooter(primary: "Turn on notifications",
                          secondary: "Not now") { wantsNotifications in

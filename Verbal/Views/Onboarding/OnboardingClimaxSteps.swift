@@ -100,9 +100,6 @@ struct OnboardingRecordStep: View {
             transcriptPane
 
             Spacer(minLength: 0)
-
-            recordControl
-                .frame(maxWidth: .infinity)
         }
         // Nothing starts on its own. A screen that is already listening when it
         // appears is a screen nobody agreed to.
@@ -154,52 +151,82 @@ struct OnboardingRecordStep: View {
         return settled + guessing
     }
 
-    private var recordControl: some View {
-        VStack(spacing: 12) {
-            Button {
-                Task {
+}
+
+/// The same compact control used by the signed-in recorder: one place to start,
+/// pause, see the live voice level and turn the words into a quote. Keeping it
+/// in the footer gives it the familiar, thumb-reachable position and replaces
+/// the generic Continue action with the action this step actually needs.
+struct OnboardingRecordingBar: View {
+    @Bindable var model: OnboardingModel
+    var onGenerate: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Button {
+                    Task {
+                        if model.recorder.isRecording {
+                            await model.recorder.stop()
+                        } else {
+                            model.levels.removeAll()
+                            await model.recorder.start()
+                        }
+                    }
+                } label: {
+                    Image(systemName: model.recorder.isRecording ? "pause.fill" : "play.fill")
+                        .font(.title3.weight(.bold))
+                        .frame(width: 48, height: 48)
+                        .background(.white.opacity(0.22), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(model.recorder.state == .preparing)
+                .accessibilityLabel(model.recorder.isRecording ? "Pause recording" : "Start recording")
+
+                HStack(spacing: 8) {
                     if model.recorder.isRecording {
-                        await model.finishRecording()
+                        LevelTrace(levels: model.levels, color: .white)
+                            .frame(width: 82, height: 22)
+                            .clipped()
                     } else {
-                        model.levels.removeAll()
-                        await model.recorder.start()
+                        Text(model.recorder.hasContent ? "Ready" : "Tap to speak")
+                            .font(.footnote.weight(.medium))
+                            .lineLimit(1)
+                    }
+                    Text(model.recorder.elapsedText)
+                        .font(.body.monospacedDigit().weight(.semibold))
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+
+                Button("Generate") {
+                    Task {
+                        await model.finishRecording()
+                        onGenerate()
                     }
                 }
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(model.recorder.isRecording
-                              ? Color(.statusDeclinedText) : OnboardingStyle.action)
-                        .frame(width: 76, height: 76)
-                    Image(systemName: model.recorder.isRecording ? "stop.fill" : "mic.fill")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.white)
-                }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(canGenerate ? Color(.royalBlue600) : Color(.homeBackground))
+                .frame(width: 108, height: 48)
+                .background(.white.opacity(canGenerate ? 1 : 0.86), in: Capsule())
+                .buttonStyle(.plain)
+                .disabled(!canGenerate)
             }
-            .buttonStyle(.plain)
-            .disabled(model.recorder.state == .preparing)
-            .accessibilityLabel(model.recorder.isRecording ? "Stop recording" : "Start recording")
+            .foregroundStyle(.white)
+            .padding(6)
+            .background(Color(.royalBlue600), in: Capsule())
 
-            if model.recorder.isRecording {
-                HStack(spacing: 10) {
-                    LevelTrace(levels: model.levels)
-                    Text(model.recorder.elapsedText)
-                        .font(.footnote.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                .transition(.opacity)
-            } else if let message = model.recorder.errorMessage {
+            if let message = model.recorder.errorMessage {
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(LineItemRow.amber)
                     .multilineTextAlignment(.center)
-            } else {
-                Text(model.recorder.hasContent ? "Tap to record again" : "Tap and speak")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: model.recorder.isRecording)
+    }
+
+    private var canGenerate: Bool {
+        model.recorder.hasContent && !model.recorder.isRecording
     }
 }
 

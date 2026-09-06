@@ -194,64 +194,153 @@ struct OnboardingStatStep: View {
     let answers: OnboardingAnswers
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            if let perMonth = answers.hoursPerMonth, answers.hoursSavedPerYear != nil {
-                // This is a conclusion, not another form. Centre the three
-                // parts as one thought so the user's own number owns the page.
-                VStack(spacing: 0) {
-                    Text("That's \(OnboardingAnswers.spoken(hours: perMonth))\na month.")
-                        .font(.robotoSlab(32, relativeTo: .largeTitle))
-                        .foregroundStyle(Color(.mainText))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity)
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 28) {
+                if let saved = answers.hoursSavedPerYear,
+                   let perMonth = answers.hoursPerMonth,
+                   let minutes = answers.minutesPerQuote {
+                    savingsContent(saved: saved, perMonth: perMonth, minutes: minutes)
+                } else {
+                    OnboardingHeading(
+                        title: "The job is done.\nThe quote still waits.",
+                        subtitle: "Verbal turns the work you have just finished into a quote before you leave."
+                    )
 
-                    Spacer(minLength: 24)
-
-                    VStack(spacing: 22) {
-                        VStack(spacing: 6) {
-                            Text("\(Int((answers.hoursPerYear ?? 0).rounded())) hours")
-                                .font(.robotoSlab(48, relativeTo: .largeTitle))
-                                .foregroundStyle(OnboardingStyle.action)
-                            Text("a year back for the work that matters.")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Text("Spend that time on the job — not chasing paperwork. Verbal keeps the details of each job clear while they're still fresh.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
+                    // This is the honest fallback when the time questions were
+                    // skipped: show the change in workflow without pretending we
+                    // know how long their own quoting takes.
+                    VStack(alignment: .leading, spacing: 0) {
+                        workflowStep(icon: "checkmark", title: "Finish the job",
+                                     detail: "The work is still fresh.")
+                        workflowConnector
+                        workflowStep(icon: "mic.fill", title: "Say what you did",
+                                     detail: "Verbal writes the quote as you speak.")
+                        workflowConnector
+                        workflowStep(icon: "paperplane.fill", title: "Send it before you leave",
+                                     detail: "A clear quote, ready for the customer.")
                     }
-                    .frame(maxWidth: .infinity)
-
-                    Spacer(minLength: 0)
+                    .padding(.top, 8)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                OnboardingHeading(
-                    title: "The job is done.\nThe quote still waits.",
-                    subtitle: "Verbal turns the work you have just finished into a quote before you leave."
-                )
-
-                // This is the honest fallback when the time questions were
-                // skipped: show the change in workflow without pretending we
-                // know how long their own quoting takes.
-                VStack(alignment: .leading, spacing: 0) {
-                    workflowStep(icon: "checkmark", title: "Finish the job",
-                                 detail: "The work is still fresh.")
-                    workflowConnector
-                    workflowStep(icon: "mic.fill", title: "Say what you did",
-                                 detail: "Verbal writes the quote as you speak.")
-                    workflowConnector
-                    workflowStep(icon: "paperplane.fill", title: "Send it before you leave",
-                                 detail: "A clear quote, ready for the customer.")
-                }
-                .padding(.top, 8)
             }
-            Spacer(minLength: 0)
+            .padding(.bottom, 24)
         }
+    }
+
+    private func savingsContent(saved: Double, perMonth: Double, minutes: Int) -> some View {
+        VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 24) {
+                HStack(spacing: 8) {
+                    Image(.visitClock)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 17, height: 17)
+                    Text("YOUR TIME, BACK")
+                        .font(.caption.weight(.semibold))
+                        .tracking(1.6)
+                }
+                .foregroundStyle(OnboardingStyle.action)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text("\(Int(saved.rounded()))")
+                            .font(.scaledSystem(80, relativeTo: .largeTitle, weight: .medium, design: .rounded))
+                            .tracking(-4)
+                            .foregroundStyle(OnboardingStyle.action)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                        Text("hours")
+                            .font(.robotoSlab(28, relativeTo: .title))
+                            .foregroundStyle(Color(.mainText))
+                    }
+                    Text("you could get back every year")
+                        .font(.callout)
+                        .foregroundStyle(Color(.mainText))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+
+                Rectangle()
+                    .fill(Color(.separator).opacity(0.6))
+                    .frame(height: 1)
+
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Time spent quoting / month")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    comparisonRow(title: "Your usual way",
+                                  value: "~\(Int(perMonth.rounded())) hr",
+                                  fraction: 1,
+                                  color: .red)
+                    comparisonRow(title: "With Verbal",
+                                  value: "~\(Int((perMonth * 60 * OnboardingAnswers.verbalMinutesPerQuote / Double(minutes)).rounded())) min",
+                                  fraction: OnboardingAnswers.verbalMinutesPerQuote / Double(minutes),
+                                  color: OnboardingStyle.action)
+                }
+
+                HStack(alignment: .top, spacing: 8) {
+                    Circle()
+                        .fill(Color(.statusWarningText))
+                        .frame(width: 7, height: 7)
+                        .padding(.top, 5)
+                        .accessibilityHidden(true)
+                    Text("Estimated from your answers, allowing 1 minute per quote with Verbal.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.cardSurface),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+                Image(.onboardingSpeak)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(OnboardingStyle.action)
+                    .frame(width: 28, height: 28)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Say it. Send it. Get on with your day.")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color(.mainText))
+                    Text("You speak the details. Verbal writes the quote.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func comparisonRow(title: String, value: String, fraction: Double,
+                               color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .foregroundStyle(Color(.mainText))
+                Spacer(minLength: 8)
+                Text(value)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(color)
+            }
+            .font(.subheadline)
+
+            GeometryReader { geometry in
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(color)
+                    .frame(width: max(6, geometry.size.width * min(1, max(0, fraction))))
+            }
+            .frame(height: 7)
+            .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func workflowStep(icon: String, title: String, detail: String) -> some View {
