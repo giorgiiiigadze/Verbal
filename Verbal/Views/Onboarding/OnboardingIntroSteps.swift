@@ -194,36 +194,37 @@ struct OnboardingStatStep: View {
     let answers: OnboardingAnswers
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 28) {
-                if let saved = answers.hoursSavedPerYear,
-                   let perMonth = answers.hoursPerMonth,
-                   let minutes = answers.minutesPerQuote {
-                    savingsContent(saved: saved, perMonth: perMonth, minutes: minutes)
-                } else {
-                    OnboardingHeading(
-                        title: "The job is done.\nThe quote still waits.",
-                        subtitle: "Verbal turns the work you have just finished into a quote before you leave."
-                    )
+        // This is a result, not reading material: it fits above the persistent
+        // Continue button and should feel like a settled screen rather than a
+        // page the user has to discover by scrolling.
+        VStack(alignment: .leading, spacing: 28) {
+            if let saved = answers.hoursSavedPerYear,
+               let perMonth = answers.hoursPerMonth,
+               let minutes = answers.minutesPerQuote {
+                savingsContent(saved: saved, perMonth: perMonth, minutes: minutes)
+            } else {
+                OnboardingHeading(
+                    title: "The job is done.\nThe quote still waits.",
+                    subtitle: "Verbal turns the work you have just finished into a quote before you leave."
+                )
 
-                    // This is the honest fallback when the time questions were
-                    // skipped: show the change in workflow without pretending we
-                    // know how long their own quoting takes.
-                    VStack(alignment: .leading, spacing: 0) {
-                        workflowStep(icon: "checkmark", title: "Finish the job",
-                                     detail: "The work is still fresh.")
-                        workflowConnector
-                        workflowStep(icon: "mic.fill", title: "Say what you did",
-                                     detail: "Verbal writes the quote as you speak.")
-                        workflowConnector
-                        workflowStep(icon: "paperplane.fill", title: "Send it before you leave",
-                                     detail: "A clear quote, ready for the customer.")
-                    }
-                    .padding(.top, 8)
+                // This is the honest fallback when the time questions were
+                // skipped: show the change in workflow without pretending we
+                // know how long their own quoting takes.
+                VStack(alignment: .leading, spacing: 0) {
+                    workflowStep(icon: "checkmark", title: "Finish the job",
+                                 detail: "The work is still fresh.")
+                    workflowConnector
+                    workflowStep(icon: "mic.fill", title: "Say what you did",
+                                 detail: "Verbal writes the quote as you speak.")
+                    workflowConnector
+                    workflowStep(icon: "paperplane.fill", title: "Send it before you leave",
+                                 detail: "A clear quote, ready for the customer.")
                 }
+                .padding(.top, 8)
             }
-            .padding(.bottom, 24)
         }
+        .padding(.bottom, 24)
     }
 
     private func savingsContent(saved: Double, perMonth: Double, minutes: Int) -> some View {

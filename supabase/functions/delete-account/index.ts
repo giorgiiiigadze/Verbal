@@ -44,6 +44,18 @@ Deno.serve(async (req: Request) => {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
+  // Deleting a user removes their rows, but it does not by itself revoke the
+  // refresh tokens already issued to their other devices. Revoke those first:
+  // a deleted account must not be able to refresh back into a session while
+  // the deletion request is completing. The current access token can remain
+  // valid until its normal expiry, which is why every user-owned row is also
+  // removed by the following delete.
+  const { error: signOutError } = await caller.auth.signOut({ scope: "global" });
+  if (signOutError) {
+    console.error("delete-account session revocation failed", user.id, signOutError.message);
+    return json({ error: "Could not secure account deletion" }, 500);
+  }
+
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
   if (deleteError) {
     console.error("delete-account failed", user.id, deleteError.message);

@@ -30,6 +30,7 @@ struct OnboardingView: View {
 
     @Environment(Store.self) private var store
     @Environment(\.requestReview) private var requestReview
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var model = OnboardingModel()
     @State private var step = 0
@@ -167,13 +168,11 @@ struct OnboardingView: View {
 
     private var content: some View {
         ZStack {
-            // Plain ground. These screens ask a dozen questions and show a
-            // quote, and drawn waves behind a form is decoration competing with
-            // the thing being read. The illustration stays on sign-in, where
-            // there is nothing to answer and it is the whole of the welcome —
-            // so arriving there now reads as the app opening rather than as
-            // more of the same.
-            Color(.homeBackground).ignoresSafeArea()
+            // Light Mode gets a clean white canvas. Dark Mode retains the
+            // original warm charcoal from the app palette rather than picking
+            // up the system's black background.
+            (colorScheme == .dark ? Color(.homeBackground) : .white)
+                .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 0) {
                 // Eighteen screens is long enough that "how much more of this"
