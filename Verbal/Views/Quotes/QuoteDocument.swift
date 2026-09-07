@@ -8,7 +8,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 /// A4 at 72dpi, the unit CoreGraphics uses for PDF pages.
 enum PageMetrics {
@@ -47,12 +46,6 @@ struct QuoteDocument {
     let total: Double
     let currency: String?
     let business: BusinessProfile?
-    /// Passed as an image rather than a URL: the page is rendered synchronously
-    /// into a PDF, so there is no moment at which it could wait for a download.
-    /// It comes from the copy the session already holds, which is also why a
-    /// quote shared with no signal still goes out headed.
-    var logo: UIImage?
-
     var businessName: String {
         let name = business?.businessName?.trimmingCharacters(in: .whitespacesAndNewlines)
         return if let name, !name.isEmpty {

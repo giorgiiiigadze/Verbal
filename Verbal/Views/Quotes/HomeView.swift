@@ -1440,8 +1440,7 @@ struct HomeView: View {
             taxAmount: quote.taxAmount,
             total: quote.total,
             currency: quote.currency,
-            business: session.businessProfile,
-            logo: session.businessLogo
+            business: session.businessProfile
         )
     }
 

@@ -64,7 +64,7 @@ enum QuotePDF {
     ///
     /// This used to be a fixed nine items on the first page and twenty after,
     /// which held only for an average quote. Everything above the table on page
-    /// one — the logo, the contact lines, the summary, the scope — is as tall as
+    /// one — the contact lines, the summary, the scope — is as tall as
     /// the user's own words, and the page frame does not clip: content that
     /// doesn't fit is simply drawn past the edge of the PDF's page box and lost.
     /// A quote with a long summary and six scope bullets silently posted a line
@@ -85,8 +85,8 @@ enum QuotePDF {
     private static func singlePageScale(_ document: QuoteDocument) -> CGFloat? {
         let available = PageMetrics.height - PageMetrics.verticalInsets - Layout.footer
         // Measure the actual SwiftUI content, including wrapped text. The old
-        // estimate still reserved space for the removed logo and could split
-        // a short quote despite ample room on the rendered page.
+        // measurement reflects the rendered header, so short quotes use the
+        // page rather than splitting unnecessarily.
         let page = QuoteDocumentPage(document: document, items: document.lineItems,
                                      isFirstPage: true, isLastPage: true,
                                      pageNumber: 1, pageCount: 1)
@@ -159,8 +159,8 @@ enum QuotePDF {
     private static let pageBudget: CGFloat =
         PageMetrics.height - PageMetrics.verticalInsets - Layout.tableHeader - Layout.footer
 
-    /// Everything above the table on the first page — the logo, the business
-    /// name and its contact lines, the parties row, the summary and the scope.
+    /// Everything above the table on the first page — the business name and
+    /// its contact lines, the parties row, the summary and the scope.
     /// All of it is as tall as the user's own words.
     private static func headerHeight(_ document: QuoteDocument) -> CGFloat {
         var used = Layout.headerBlock

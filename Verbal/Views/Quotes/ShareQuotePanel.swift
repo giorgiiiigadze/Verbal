@@ -165,12 +165,7 @@ struct ShareQuotePanel: View {
         .presentationBackground(.ultraThinMaterial)
         .toast($toast)
         .task {
-            guard var renderedDocument = document else { return }
-            // A quote may be opened while the session is still fetching the
-            // business mark. Resolve it before creating the immutable PDF;
-            // once the document is attached, there is no later redraw.
-            await session.ensureBusinessLogoLoaded()
-            if let logo = session.businessLogo { renderedDocument.logo = logo }
+            guard let renderedDocument = document else { return }
             guard !Task.isCancelled else { return }
 
             preview = QuotePDF.thumbnail(renderedDocument)

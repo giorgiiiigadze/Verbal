@@ -11,7 +11,6 @@ import Foundation
 
 struct BusinessProfile: Codable, Sendable {
     var businessName: String?
-    var logoUrl: String?
     /// What they do — "Electrician", "Plumber". Asked once at onboarding and
     /// sent with every extraction as trade context.
     var trade: String?
@@ -36,7 +35,6 @@ struct BusinessProfile: Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case businessName = "business_name"
-        case logoUrl = "logo_url"
         case trade
         case phone, email, address
         case taxNumber = "tax_number"
@@ -60,7 +58,6 @@ struct BusinessProfile: Codable, Sendable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         businessName = try c.decodeIfPresent(String.self, forKey: .businessName)
-        logoUrl = try c.decodeIfPresent(String.self, forKey: .logoUrl)
         trade = try c.decodeIfPresent(String.self, forKey: .trade)
         phone = try c.decodeIfPresent(String.self, forKey: .phone)
         email = try c.decodeIfPresent(String.self, forKey: .email)
@@ -78,12 +75,11 @@ struct BusinessProfile: Codable, Sendable {
 
     /// Kept because the decoder above suppresses the synthesized one, and
     /// `empty` and the save path both build a profile by hand.
-    init(businessName: String?, logoUrl: String?, trade: String?, phone: String?,
+    init(businessName: String?, trade: String?, phone: String?,
          email: String?, address: String?, taxNumber: String?, currency: String,
          defaultValidityDays: Int, defaultTaxRate: Double, defaultTerms: String?,
          defaultNotes: String?, quoteNumberPrefix: String?, quoteNumberStart: Int) {
         self.businessName = businessName
-        self.logoUrl = logoUrl
         self.trade = trade
         self.phone = phone
         self.email = email
@@ -100,7 +96,7 @@ struct BusinessProfile: Codable, Sendable {
 
     /// A blank profile using the app's current currency and the DB default validity.
     static var empty: BusinessProfile {
-        BusinessProfile(businessName: nil, logoUrl: nil, trade: nil, phone: nil, email: nil,
+        BusinessProfile(businessName: nil, trade: nil, phone: nil, email: nil,
                         address: nil, taxNumber: nil,
                         currency: AppCurrency.current.rawValue,
                         defaultValidityDays: 14, defaultTaxRate: 0,

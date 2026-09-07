@@ -6,15 +6,11 @@
 //
 
 import SwiftUI
-import PhotosUI
 
 struct QuoteDefaultsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
 
-    @State private var pickedLogo: PhotosPickerItem?
-    @State private var isUploadingLogo = false
-    @State private var toast: Toast?
 
     @State private var validityDays = 14
     @State private var taxRate = ""
@@ -135,8 +131,6 @@ struct QuoteDefaultsView: View {
                             .foregroundStyle(Color(.mainText))
 
                         letterheadPreview
-                        logoControls
-
                         Text("The top of every quote you send. Your business name and contact details come from Profile.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -313,14 +307,6 @@ struct QuoteDefaultsView: View {
             .task {
                 await load()
             }
-            .onChange(of: pickedLogo) { _, item in
-                guard let item else { return }
-
-                Task {
-                    await applyLogo(item)
-                }
-            }
-            .toast($toast)
             .alert(
                 "Couldn't save your defaults",
                 isPresented: $saveFailed
@@ -421,53 +407,7 @@ struct QuoteDefaultsView: View {
 
     // MARK: - Letterhead
 
-    private var logoControls: some View {
-        let hasLogo = session.businessLogo != nil
-
-        return HStack(spacing: 10) {
-            PhotosPicker(
-                selection: $pickedLogo,
-                matching: .images
-            ) {
-                glassLabel(
-                    hasLogo ? "Replace" : "Add logo",
-                    systemImage: "photo",
-                    tint: Color(.blueAccentText)
-                )
-            }
-            .disabled(isUploadingLogo)
-
-            if hasLogo {
-                Button {
-                    removeLogo()
-                } label: {
-                    glassLabel(
-                        "Remove",
-                        systemImage: "trash",
-                        tint: .red
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(isUploadingLogo)
-            }
-        }
-    }
-
-    private func glassLabel(
-        _ title: String,
-        systemImage: String,
-        tint: Color
-    ) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(tint)
-            .frame(maxWidth: .infinity)
-            .frame(height: 46)
-            .glassEffect(in: .capsule)
-    }
-
     private var letterheadPreview: some View {
-        let logo = session.businessLogo
         let profile = session.businessProfile
 
         let businessName = profile?.businessName?
@@ -492,43 +432,6 @@ struct QuoteDefaultsView: View {
 
         return HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 5) {
-                if let logo {
-                    Image(uiImage: logo)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(
-                            maxWidth: 120,
-                            maxHeight: 42,
-                            alignment: .leading
-                        )
-                        .padding(.bottom, 3)
-                        .opacity(isUploadingLogo ? 0.3 : 1)
-                } else {
-                    RoundedRectangle(
-                        cornerRadius: 6,
-                        style: .continuous
-                    )
-                    .strokeBorder(
-                        style: StrokeStyle(
-                            lineWidth: 1,
-                            dash: [4, 4]
-                        )
-                    )
-                    .foregroundStyle(.black.opacity(0.18))
-                    .frame(width: 76, height: 42)
-                    .overlay {
-                        Image(systemName: "photo")
-                            .font(
-                                .system(
-                                    size: 15,
-                                    weight: .light
-                                )
-                            )
-                            .foregroundStyle(.black.opacity(0.3))
-                    }
-                    .padding(.bottom, 3)
-                }
-
                 Text(displayBusinessName)
                 // Fixed, like every other size in this card. It is a miniature
                 // of the printed letterhead, not app chrome — the rest of it is
@@ -566,11 +469,6 @@ struct QuoteDefaultsView: View {
             )
         )
         .overlay {
-            if isUploadingLogo {
-                ProgressView()
-            }
-        }
-        .overlay {
             RoundedRectangle(
                 cornerRadius: 14,
                 style: .continuous
@@ -578,105 +476,6 @@ struct QuoteDefaultsView: View {
             .strokeBorder(
                 Color(.separator),
                 lineWidth: 0.5
-            )
-        }
-    }
-
-    // MARK: - Logo
-
-    private func applyLogo(
-        _ item: PhotosPickerItem
-    ) async {
-        isUploadingLogo = true
-
-        defer {
-            isUploadingLogo = false
-            pickedLogo = nil
-        }
-
-        guard
-            let data = try? await item.loadTransferable(type: Data.self),
-            let image = UIImage(data: data)
-        else {
-            toast = Toast(
-                style: .error,
-                message: "Couldn't read that image"
-            )
-            return
-        }
-
-        let previousURL = loaded.logoUrl
-        let previousImage = session.businessLogo
-
-        session.cacheBusinessLogo(image)
-
-        var profile = loaded
-        var uploadedURL: String?
-
-        do {
-            let newURL = try await LogoService.upload(image)
-            uploadedURL = newURL
-
-            profile.logoUrl = newURL
-
-            try await BusinessService.save(profile)
-        } catch {
-            session.cacheBusinessLogo(previousImage)
-
-            // Prevent an orphaned uploaded logo if the database save failed.
-            if let uploadedURL {
-                await LogoService.removeStored(at: uploadedURL)
-            }
-
-            toast = Toast(
-                style: .error,
-                message: "Couldn't save your logo"
-            )
-            return
-        }
-
-        loaded = profile
-        session.cacheBusinessProfile(profile)
-
-        // Only remove the old logo after the new one is safely referenced.
-        await LogoService.removeStored(at: previousURL)
-
-        toast = Toast(
-            style: .success,
-            message: "Logo saved"
-        )
-    }
-
-    private func removeLogo() {
-        let previousURL = loaded.logoUrl
-        let previousImage = session.businessLogo
-
-        session.cacheBusinessLogo(nil)
-
-        var profile = loaded
-        profile.logoUrl = nil
-
-        Task {
-            do {
-                try await BusinessService.save(profile)
-            } catch {
-                session.cacheBusinessLogo(previousImage)
-
-                toast = Toast(
-                    style: .error,
-                    message: "Couldn't remove your logo"
-                )
-                return
-            }
-
-            loaded = profile
-            session.cacheBusinessProfile(profile)
-
-            await LogoService.removeStored(at: previousURL)
-
-            toast = Toast(
-                style: .success,
-                message: "Logo removed"
             )
         }
     }

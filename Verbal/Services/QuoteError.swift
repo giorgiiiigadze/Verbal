@@ -3,7 +3,7 @@
 //  Verbal
 //
 //  What the services throw. Named for the quote service it started in, but
-//  business details and logo uploads report failure with it too.
+//  business details report failure with it too.
 //
 
 import Foundation

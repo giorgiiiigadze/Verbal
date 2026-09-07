@@ -67,63 +67,11 @@ final class SessionStore {
     /// failure), so views can tell "still loading" from "genuinely empty".
     private(set) var listsLoaded = false
 
-    /// The business logo, decoded once and held so the profile screen and the
-    /// PDF letterhead both draw it without a download each time.
-    private(set) var businessLogo: UIImage?
-
-    // MARK: - Business profile & logo
+    // MARK: - Business profile
 
     /// Update the cached business profile after the user edits it, so reopening
     /// the profile screen reflects the change without a refetch.
     func cacheBusinessProfile(_ profile: BusinessProfile) { businessProfile = profile }
-
-    /// Show a just-picked logo everywhere at once, before it has been uploaded.
-    /// The upload is the slow part and the user has already seen their choice;
-    /// making the screen wait for a round trip to agree with them is what makes
-    /// an app feel like a form rather than a tool.
-    func cacheBusinessLogo(_ image: UIImage?) {
-        businessLogo = image
-        guard let cachedUserID else { return }
-        if let data = image?.pngData() {
-            LocalCache.save(data, for: .businessLogo, userID: cachedUserID)
-        } else {
-            LocalCache.clear(key: .businessLogo, userID: cachedUserID)
-        }
-    }
-
-    /// Fetch the logo named by the profile, unless the bytes on disk are already
-    /// the ones it names. The URL is stored alongside the image so a later
-    /// launch can tell "same logo, don't re-download" from "they changed it".
-    private func refreshBusinessLogo() async {
-        guard let cachedUserID else { return }
-        guard let urlString = businessProfile?.logoUrl, let url = URL(string: urlString) else {
-            // The profile names no logo: drop whatever is held, or one the user
-            // removed keeps printing on quotes from this device.
-            if businessLogo != nil { cacheBusinessLogo(nil) }
-            return
-        }
-        // Every upload writes a fresh filename, so an unchanged URL means
-        // unchanged bytes.
-        if UserDefaults.standard.string(forKey: Self.logoURLKey) == urlString,
-           businessLogo != nil { return }
-
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
-              let image = UIImage(data: data),
-              !Task.isCancelled,
-              client.auth.currentUser?.id == cachedUserID else { return }
-        businessLogo = image
-        LocalCache.save(data, for: .businessLogo, userID: cachedUserID)
-        UserDefaults.standard.set(urlString, forKey: Self.logoURLKey)
-    }
-
-    /// A document must be rendered from the actual logo bytes, not merely the
-    /// profile's URL. Most screens can let this finish in the background; a
-    /// PDF cannot redraw after it has been attached to a message.
-    func ensureBusinessLogoLoaded() async {
-        await refreshBusinessLogo()
-    }
-
-    private static let logoURLKey = "cachedBusinessLogoURL"
 
     // MARK: - Rate card & spoken prices
 
@@ -463,7 +411,6 @@ final class SessionStore {
         // writes into.
         await adoptOnboardingDraft()
         guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
-        await refreshBusinessLogo()
     }
 
     // MARK: - Onboarding adoption
@@ -552,9 +499,6 @@ final class SessionStore {
         }
         if let cached = LocalCache.load([BusinessProfile].self, for: .businessProfile, userID: userID) {
             businessProfile = cached.first
-        }
-        if let data = LocalCache.loadData(for: .businessLogo, userID: userID) {
-            businessLogo = UIImage(data: data)
         }
         // Who they are, restored with everything else they own. Without this a
         // launch with no signal showed a stranger's placeholder on the one
@@ -705,11 +649,6 @@ final class SessionStore {
         avatarImage = nil
         avatarUIImage = nil
         businessProfile = nil
-        businessLogo = nil
-        // Keyed to nothing in particular, so it has to go with the account or
-        // the next user's logo is judged "unchanged" against the last one's URL
-        // and never downloaded.
-        UserDefaults.standard.removeObject(forKey: Self.logoURLKey)
         // Same reason: left behind, the next user's avatar is judged
         // "unchanged" against the last one's URL and never downloaded.
         UserDefaults.standard.removeObject(forKey: Self.avatarURLKey)

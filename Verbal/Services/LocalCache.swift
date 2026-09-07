@@ -39,11 +39,6 @@ nonisolated enum LocalCache {
         /// server's rows: it is also written at the moment a quote is recorded,
         /// when there is no server response to keep.
         case transcript(quoteID: UUID)
-        /// The business logo's bytes, not JSON. Kept so a quote shared from a
-        /// basement still prints the user's mark on it — the profile row was
-        /// already cached for exactly that reason, and a letterhead that loses
-        /// its logo offline is half a letterhead.
-        case businessLogo
         /// The signed-in identity from Google: name and avatar URL. Everything
         /// else here survives a launch with no signal, and without this the one
         /// screen that shows who you are is the one that forgets.
@@ -66,7 +61,6 @@ nonisolated enum LocalCache {
             case .scheduledVisits: return "scheduledVisits"
             case .lineItems(let quoteID): return "lineItems-\(quoteID.uuidString)"
             case .transcript(let quoteID): return "transcript-\(quoteID.uuidString)"
-            case .businessLogo: return "businessLogo"
             }
         }
     }

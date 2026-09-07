@@ -52,7 +52,6 @@ enum BusinessService {
     private struct Payload: Encodable {
         let userID: UUID
         let businessName: String?
-        let logoUrl: String?
         let trade: String?
         let phone: String?
         let email: String?
@@ -69,7 +68,6 @@ enum BusinessService {
         init(userID: UUID, profile: BusinessProfile) {
             self.userID = userID
             self.businessName = profile.businessName
-            self.logoUrl = profile.logoUrl
             self.trade = profile.trade
             self.phone = profile.phone
             self.email = profile.email
@@ -87,7 +85,6 @@ enum BusinessService {
         enum CodingKeys: String, CodingKey {
             case userID = "user_id"
             case businessName = "business_name"
-            case logoUrl = "logo_url"
             case trade
             case phone, email, address
             case taxNumber = "tax_number"

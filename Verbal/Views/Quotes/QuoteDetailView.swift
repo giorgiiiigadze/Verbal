@@ -436,8 +436,7 @@ struct QuoteDetailView: View {
             taxAmount: tax,
             total: (subtotal + tax).roundedToCents,
             currency: currency,
-            business: session.businessProfile,
-            logo: session.businessLogo
+            business: session.businessProfile
         )
     }
 

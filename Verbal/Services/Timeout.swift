@@ -11,7 +11,7 @@
 //  spinner is not patience, it is a hang the app has decided to sit through.
 //
 //  Racing rather than configuring the session, because the timeout that matters
-//  is per-call. The same client uploads logos and syncs visits, and neither
+//  is per-call. The same client syncs visits, and neither
 //  wants a deadline this short.
 //
 

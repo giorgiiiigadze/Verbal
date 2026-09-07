@@ -118,7 +118,7 @@ struct OnboardingMethodStep: View {
         switch method {
         case .paper: return .methodPaper
         case .phoneAtNight: return .methodPhone
-        case .spreadsheet: return .quoteDocument
+        case .spreadsheet: return .methodTemplate
         case .losingThem: return .methodLosingJob
         }
     }
@@ -234,9 +234,8 @@ struct OnboardingStatStep: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: 17, height: 17)
-                    Text("YOUR TIME, BACK")
+                    Text("Your time back")
                         .font(.caption.weight(.semibold))
-                        .tracking(1.6)
                 }
                 .foregroundStyle(OnboardingStyle.action)
 
@@ -290,14 +289,7 @@ struct OnboardingStatStep: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.cardSurface),
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            }
 
             HStack(alignment: .top, spacing: 12) {
                 Image(.onboardingSpeak)
@@ -333,11 +325,15 @@ struct OnboardingStatStep: View {
             .font(.subheadline)
 
             GeometryReader { geometry in
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(color)
-                    .frame(width: max(6, geometry.size.width * min(1, max(0, fraction))))
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(color.opacity(0.18))
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(color)
+                        .frame(width: max(8, geometry.size.width * min(1, max(0, fraction))))
+                }
             }
-            .frame(height: 7)
+            .frame(height: 8)
             .accessibilityHidden(true)
         }
         .accessibilityElement(children: .combine)
