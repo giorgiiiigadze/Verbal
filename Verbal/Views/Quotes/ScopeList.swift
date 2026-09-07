@@ -62,8 +62,10 @@ struct ScopeList: View {
                             // shared; the summary carries bold facts now, and
                             // five near-bold bullets under it outweighed the
                             // prose they belong to.
-                            Text(emphasizedScopeItem(item))
-                                .font(documentStyle ? .quoteDocumentBody : nil)
+                            Text(emphasizedScopeItem(
+                                item,
+                                font: documentStyle ? .quoteDocumentBody : .subheadline
+                            ))
                                 .lineSpacing(documentStyle ? 8 : 0)
                                 .foregroundStyle(Color(.mainText))
                                 .frame(maxWidth: .infinity, alignment: .leading)

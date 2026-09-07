@@ -168,7 +168,7 @@ struct AccountView: View {
             } header: {
                 Text("Home")
             } footer: {
-                Text("Hide the Upcoming section on Home. Your booked visits remain available in Schedule and their reminders are unchanged.")
+                Text("Hide booked visits from the Home timeline. They remain available in Schedule and their reminders are unchanged.")
             }
             .listRowBackground(Color(.cardSurface))
 

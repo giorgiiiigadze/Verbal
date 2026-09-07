@@ -366,10 +366,9 @@ struct QuoteDetailView: View {
                 if !jobSummary.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Summary")
-                            .font(.quoteDocumentHeading)
-                            .foregroundStyle(Color(.mainText))
-                        Text(emphasizedSummary(jobSummary))
                             .font(.quoteDocumentBody)
+                            .foregroundStyle(Color(.mainText))
+                        Text(emphasizedSummary(jobSummary, font: .quoteDocumentBody))
                             .lineSpacing(8)
                             .foregroundStyle(Color(.mainText))
                             .frame(maxWidth: .infinity, alignment: .leading)

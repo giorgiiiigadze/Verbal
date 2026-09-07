@@ -190,7 +190,7 @@ struct QuoteRecordingView: View {
                     .animation(.easeInOut(duration: 0.35), value: isGenerating)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .background(Color(.homeBackground))
+                .background(colorScheme == .dark ? Color(.homeBackground) : .white)
                 // Follow the words down as they arrive. Speech runs past the
                 // bottom of the screen after a few lines, and a job description is
                 // the point at which the user most wants to see that it heard
@@ -829,8 +829,7 @@ struct QuoteRecordingView: View {
                     Text("Summary")
                         .font(.quoteDocumentHeading)
                         .foregroundStyle(Color(.mainText))
-                    Text(emphasizedSummary(quote.jobSummary))
-                        .font(.quoteDocumentBody)
+                    Text(emphasizedSummary(quote.jobSummary, font: .quoteDocumentBody))
                         .lineSpacing(8)
                         .foregroundStyle(Color(.mainText))
                         .frame(maxWidth: .infinity, alignment: .leading)

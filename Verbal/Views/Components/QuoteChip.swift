@@ -25,6 +25,11 @@ struct QuoteChip<Leading: View>: View {
         return tinted ? Color(.blueAccentText) : Color(.mainText)
     }
 
+    private var border: Color {
+        if let palette { return palette.text.opacity(0.32) }
+        return tinted ? Color(.blueAccentText).opacity(0.35) : Color(.separator)
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             leading
@@ -52,7 +57,8 @@ struct QuoteChip<Leading: View>: View {
         // standard symbol. Give the capsule one shared minimum height so the
         // avatar doesn't make that one chip taller than the rest.
         .frame(minHeight: 36)
-        .background(palette?.fill ?? (tinted ? Color(.royalBlue25) : Color(.surface)),
-                    in: .capsule)
+        .overlay {
+            Capsule().strokeBorder(border, lineWidth: 1)
+        }
     }
 }
