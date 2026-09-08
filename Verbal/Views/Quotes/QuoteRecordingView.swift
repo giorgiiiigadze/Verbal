@@ -21,6 +21,13 @@ struct QuoteRecordingView: View {
     @State private var isSaving = false
     @State private var isGenerating = false
     @State private var generated: GeneratedQuote?
+    /// Non-nil only after the deferred cloud transcription completed. Kept on
+    /// the review screen rather than in a transient toast so it is auditable.
+    @State private var assemblyAIModel: String?
+    /// Kept visible on the generated document when the cloud pass falls back;
+    /// silent fallback protects the quote, but it made provider setup
+    /// impossible to verify in the field.
+    @State private var assemblyAIFallbackReason: String?
     /// True when generation ran but the transcript wasn't enough to build a quote.
     @State private var notEnough = false
     /// The AI's "there wasn't enough here" note. Held apart from the transcript
@@ -163,6 +170,13 @@ struct QuoteRecordingView: View {
                         if generated != nil {
                             chips
                                 .transition(.opacity)
+                            if let assemblyAIFallbackReason {
+                                Text("AssemblyAI check wasn’t used: \(assemblyAIFallbackReason)")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .transition(.opacity)
+                            }
                         }
 
                         if isGenerating {
@@ -424,12 +438,47 @@ struct QuoteRecordingView: View {
         isGenerating = true
         notEnough = false
         notEnoughNote = ""
+        assemblyAIModel = nil
+        assemblyAIFallbackReason = nil
         // Always open on the first step, however the last run ended.
         phraseIndex = 0
         Task {
             defer { isGenerating = false }
             let result: GeneratedQuote
             do {
+                // Generate is an explicit finish action. Leaving the mic live
+                // here made the screen claim it was building a quote while it
+                // was still listening, and could read the temporary audio file
+                // before its final buffers had been written.
+                if recorder.isRecording {
+                    await recorder.stop()
+                    // `onChange` intentionally follows words only while the
+                    // mic is live; take this final snapshot ourselves so the
+                    // last phrase reaches both transcription paths.
+                    transcriptText = recorder.transcript
+                }
+                // Keep Apple SpeechTranscriber as the immediate, offline live
+                // experience. Once the user asks to generate, improve the
+                // source text once from the saved audio; failure intentionally
+                // falls back to the words already visible on screen.
+                if recorder.hasCompleteCapturedAudio,
+                   let audioURL = recorder.capturedAudioURL {
+                    // The rate card improves recognition, but failing to load
+                    // it must never suppress the whole accuracy pass.
+                    let rateCard = (try? await QuoteService.fetchRateCard(activeOnly: true)) ?? []
+                    do {
+                    let refined = try await QuoteService.refineTranscript(audioURL: audioURL, rateCard: rateCard)
+                    transcriptText = refined.text
+                    assemblyAIModel = refined.model ?? "Universal"
+                    } catch {
+                        assemblyAIFallbackReason = error.localizedDescription
+                    }
+                } else if recorder.capturedAudioURL == nil {
+                    assemblyAIFallbackReason = "No audio was available for the check."
+                } else if !recorder.hasCompleteCapturedAudio {
+                    assemblyAIFallbackReason = "Recording was interrupted, so the complete audio is unavailable."
+                }
+                recorder.discardCapturedAudio()
                 result = try await QuoteService.generate(
                     transcript: transcriptText,
                     tradeContext: session.businessProfile?.trade)
@@ -745,6 +794,12 @@ struct QuoteRecordingView: View {
                 QuoteChip(text: "Draft") {
                     Image(systemName: "pencil")
                 }
+                if let assemblyAIModel {
+                    QuoteChip(text: "AssemblyAI checked") {
+                        Image(systemName: "checkmark.seal.fill")
+                    }
+                    .accessibilityLabel("Transcript checked with AssemblyAI using \(assemblyAIModel)")
+                }
             }
         }
         .scrollIndicators(.hidden)
@@ -827,16 +882,16 @@ struct QuoteRecordingView: View {
             if !quote.jobSummary.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Summary")
-                        .font(.quoteDocumentHeading)
+                        .font(.headline)
                         .foregroundStyle(Color(.mainText))
-                    Text(emphasizedSummary(quote.jobSummary, font: .quoteDocumentBody))
-                        .lineSpacing(8)
+                    Text(emphasizedSummary(quote.jobSummary, font: .body))
+                        .lineSpacing(2)
                         .foregroundStyle(Color(.mainText))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
 
-            ScopeList(items: quote.scope, documentStyle: true)
+            ScopeList(items: quote.scope, documentStyle: true, useDocumentFont: false)
                 .padding(.top, 4)
 
             if !quote.lineItems.isEmpty {

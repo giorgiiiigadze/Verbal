@@ -3,7 +3,9 @@
 //  Verbal
 //
 //  On-device speech-to-text using Apple's SpeechAnalyzer / SpeechTranscriber
-//  (iOS 26+). Audio never leaves the device — only the transcript text is used.
+//  (iOS 26+). A compact, temporary copy of the microphone is retained while a
+//  quote is being composed. It lets the app make one optional accuracy pass
+//  before generation; it is deleted on discard and after that pass.
 //
 
 import Foundation
@@ -95,6 +97,14 @@ final class QuoteRecorder {
     private var sessionToken = 0
 
     private let audioEngine = AVAudioEngine()
+    /// A 16 kHz mono CAF is small enough to upload promptly (about 2 MB/minute)
+    /// and is accepted by the accuracy-pass provider. It is never a permanent
+    /// recording and is deliberately outside the user's documents directory.
+    private var capturedAudioFile: AVAudioFile?
+    private(set) var capturedAudioURL: URL?
+    /// Pausing for an interruption currently creates a fresh AVAudioFile; do
+    /// not transcribe only the resumed fragment and replace the full live text.
+    private(set) var hasCompleteCapturedAudio = true
 
     // MARK: - Public control
 
@@ -111,6 +121,8 @@ final class QuoteRecorder {
         volatileText = ""
         elapsed = 0
         errorMessage = nil
+        discardCapturedAudio()
+        hasCompleteCapturedAudio = true
     }
 
     /// Seed the transcript before resuming, so hand-edits made while paused are kept
@@ -278,6 +290,7 @@ final class QuoteRecorder {
 
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
+        capturedAudioFile = nil
 
         inputContinuation?.finish()
         inputContinuation = nil
@@ -334,6 +347,30 @@ final class QuoteRecorder {
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
 
+        // Capture separately from the analyzer conversion: Apple can choose a
+        // high-rate internal format, while the deferred pass only needs clean
+        // speech-band audio. Keeping it at 16 kHz cuts upload time and cost.
+        if capturedAudioURL != nil {
+            // A resumed session has audio before and after the interruption.
+            // Until we concatenate segments, Apple’s complete transcript is
+            // safer than a provider result for only the latter segment.
+            hasCompleteCapturedAudio = false
+            discardCapturedAudio()
+        }
+        let archiveFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
+                                          sampleRate: 16_000,
+                                          channels: 1,
+                                          interleaved: true)!
+        let archiveConverter = AVAudioConverter(from: inputFormat, to: archiveFormat)
+        let archiveURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("verbal-quote-\(UUID().uuidString)")
+            .appendingPathExtension("caf")
+        capturedAudioFile = try AVAudioFile(forWriting: archiveURL,
+                                            settings: archiveFormat.settings,
+                                            commonFormat: .pcmFormatInt16,
+                                            interleaved: true)
+        capturedAudioURL = archiveURL
+
         let converter: AVAudioConverter?
         if let analyzerFormat, analyzerFormat != inputFormat {
             converter = AVAudioConverter(from: inputFormat, to: analyzerFormat)
@@ -343,10 +380,15 @@ final class QuoteRecorder {
 
         let continuation = inputContinuation
         let levelCont = levelContinuation
+        let archiveFile = capturedAudioFile
 
         // Smaller buffer → audio reaches the recognizer more often → lower latency.
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { buffer, _ in
             levelCont?.yield(Self.level(from: buffer))
+            if let archiveConverter,
+               let archived = Self.convert(buffer, using: archiveConverter, to: archiveFormat) {
+                try? archiveFile?.write(from: archived)
+            }
             guard let continuation else { return }
             if let converter, let analyzerFormat,
                let converted = Self.convert(buffer, using: converter, to: analyzerFormat) {
@@ -428,6 +470,14 @@ final class QuoteRecorder {
         // `.idle` would take the paused notice off screen and leave the failure
         // looking like an ordinary finished transcript.
         if state != .interrupted { state = .idle }
+    }
+
+    /// Audio is only retained until an accuracy pass has consumed it. This is
+    /// public because the view owns the user-visible lifecycle (retry/discard).
+    func discardCapturedAudio() {
+        capturedAudioFile = nil
+        if let capturedAudioURL { try? FileManager.default.removeItem(at: capturedAudioURL) }
+        capturedAudioURL = nil
     }
 
     // MARK: - Model + permissions

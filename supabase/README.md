@@ -135,6 +135,7 @@ refuses.
 | Name | Used by | Notes |
 | --- | --- | --- |
 | `OPENAI_API_KEY` | `extract-quote` | |
+| `ASSEMBLYAI_API_KEY` | `transcribe-audio` | Server-only key for the one deferred accuracy pass. |
 | `APPLE_ROOT_CERTS` | `verify-subscription`, `app-store-notifications` | Comma-separated base64 DER of Apple's root CAs, from <https://www.apple.com/certificateauthority/>. The current chain needs *Apple Root CA - G3*. Pinned as a secret rather than fetched at runtime, so the trust anchor is something you chose. |
 | `APPLE_BUNDLE_ID` | `verify-subscription`, `app-store-notifications` | Defaults to `com.giorgi.verbal`. |
 | `APPLE_APP_APPLE_ID` | `verify-subscription`, `app-store-notifications` | The numeric App Store id. Sandbox does not need it; Production transactions cannot be verified without it. |
@@ -172,6 +173,28 @@ after. They cover the daily gate, the subscription exemption and its lapse, the
 allowance refund, derived totals, quote-number allocation, share-token
 lifecycle, and the column grants that keep entitlement out of the client's
 hands.
+
+## Deferred transcription accuracy pass
+
+The recording screen uses Apple SpeechTranscriber for immediate, offline live
+text. When the user chooses **Generate**, it sends the temporary 16 kHz audio
+copy to `transcribe-audio` once, then feeds the returned text to
+`extract-quote`. The function forwards active rate-card names as AssemblyAI
+keyterms, so trade-specific item names are more likely to survive recognition.
+It discards failures in favour of the live transcript; the cloud pass never
+blocks a quote.
+
+Deploy it only after setting `ASSEMBLYAI_API_KEY` and applying the new migration:
+
+```sh
+supabase db push
+supabase secrets set ASSEMBLYAI_API_KEY=your_server_key
+supabase functions deploy transcribe-audio
+```
+
+The client has a 25 MB upload ceiling (about twelve minutes of its temporary
+audio format). The recording is deleted locally on discard and immediately
+after the accuracy attempt; it is not stored in Supabase Storage.
 
 **Entitlement rules.** The half of `verify-subscription` that decides what a
 verified transaction means:
