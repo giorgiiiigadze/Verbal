@@ -676,41 +676,49 @@ struct HomeView: View {
         return Button {
             selectedVisit = visit
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(visit.title)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color(.mainText))
-                    .lineLimit(1)
+            HStack(spacing: 12) {
+                Image("UpcomingClientIllustration")
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .foregroundStyle(Color(.mainText).opacity(0.72))
+                    .frame(width: 20, height: 20)
+                    .frame(width: 42, height: 42)
+                    .background(Color(.fieldFill),
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityHidden(true)
 
-                Text(visit.timeRangeText)
-                    .font(.caption2)
-                    .lineLimit(1)
-
-                if let detail = visitDetail(visit) {
-                    Text(detail)
-                        .font(.caption2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(visit.title)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(.mainText))
                         .lineLimit(1)
+
+                    Text(visit.timeRangeText)
+                        .font(.caption2)
+                        .foregroundStyle(status.color)
+                        .lineLimit(1)
+
+                    if let detail = visitDetail(visit) {
+                        Text(detail)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundStyle(status.color)
-            .padding(.leading, 14)
-            .padding(.trailing, 8)
+            .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(upcomingVisitCardFill,
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(status.color)
-                    .frame(width: 4)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        in: Self.upcomingVisitCardShape)
+            .clipShape(Self.upcomingVisitCardShape)
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                Self.upcomingVisitCardShape
                     .strokeBorder(Color(.separator), lineWidth: 0.5)
             )
             .contentShape(.contextMenuPreview,
-                          RoundedRectangle(cornerRadius: 10, style: .continuous))
+                          Self.upcomingVisitCardShape)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(visit.accessibilityText). \(status.accessibilityLabel). Record a quote")
@@ -735,6 +743,9 @@ struct HomeView: View {
             ? Color(red: 28 / 255, green: 28 / 255, blue: 30 / 255)
             : Color(.cardSurface)
     }
+
+    private static let upcomingVisitCardShape = RoundedRectangle(cornerRadius: 22,
+                                                                 style: .continuous)
 
     /// Match Calendar's two-hour grace period before an unquoted appointment
     /// becomes overdue. The next non-overdue appointment gets the calmer green
