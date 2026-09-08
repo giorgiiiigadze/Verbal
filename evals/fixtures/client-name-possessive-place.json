@@ -1,0 +1,17 @@
+{
+  "name": "client-name-possessive-place",
+  "note": "A possessive premises phrase identifies who the work is for even when the speaker never says client, customer, or quote for.",
+  "transcript": "All right, replace the two kitchen floors in New York Avenue at Marion Berry's place. The total cost of labor is £180.",
+  "rate_card": [],
+  "currency": "GBP",
+  "customer_name": "Marion Berry",
+  "expect": [
+    {
+      "label": "replace two kitchen floors",
+      "any": ["floor", "kitchen"],
+      "exclude": [],
+      "price": 180,
+      "quantity": 1
+    }
+  ]
+}

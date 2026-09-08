@@ -42,6 +42,7 @@ struct QuoteRecordingView: View {
     @State private var showMicPermission = false
     @State private var micAccessBlocked = false
     @State private var showDiscardConfirmation = false
+    @State private var isDiscarding = false
     /// Offers the prices the extraction was missing to the rate card.
     @State private var showSaveRates = false
     @State private var showReviewEditor = false
@@ -256,10 +257,16 @@ struct QuoteRecordingView: View {
                         // Regenerate: clear the current result and re-run the AI extraction.
                         // The banked draft goes with it, so the rerun replaces the
                         // quote rather than leaving two.
-                        generated = nil
-                        notEnough = false
-                        discardDraft()
-                        generate()
+                        Task {
+                            do {
+                                try await discardDraft()
+                                generated = nil
+                                notEnough = false
+                                generate()
+                            } catch {
+                                toast = Toast(style: .error, message: "Couldn't remove the previous draft")
+                            }
+                        }
                     }
                 }
                 .onChange(of: recorder.transcript) { _, newValue in
@@ -614,13 +621,17 @@ struct QuoteRecordingView: View {
     }
 
     /// Push edits made after the draft was banked. Only what changed is written.
-    private func applyEdits(to id: UUID) async {
+    private func applyEdits(to id: UUID) async throws {
         if title != savedTitle {
-            try? await QuoteService.updateTitle(id: id, title: displayTitle)
+            try await QuoteService.updateTitle(id: id, title: displayTitle)
         }
         let trimmedClient = clientName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if clientName != savedClient, !trimmedClient.isEmpty {
-            try? await QuoteService.setClient(quoteId: id, name: trimmedClient)
+        if clientName != savedClient {
+            if trimmedClient.isEmpty {
+                try await QuoteService.clearClient(quoteId: id)
+            } else {
+                try await QuoteService.setClient(quoteId: id, name: trimmedClient)
+            }
         }
     }
 
@@ -672,33 +683,42 @@ struct QuoteRecordingView: View {
     /// or thrown away outright. Without this, every re-record would leave an
     /// orphan behind in the Drafts list. Awaits the write first: a draft still in
     /// flight would otherwise land after the delete and survive it.
-    private func discardDraft() {
+    private func discardDraft() async throws {
         guard let pending = bankTask else { return }
-        bankTask = nil
         isDraftSaved = false
+        if let id = await pending.value {
+            // Do not forget the task or close the screen until this succeeds.
+            // Keeping it on failure lets the user retry Discard instead of
+            // leaving a banked quote behind with no way back to it.
+            try await QuoteService.deleteQuote(id: id)
+            // The quote is already gone at this point. Returning its allowance
+            // is best-effort cleanup and must not make a successful discard
+            // look unsuccessful.
+            try? await QuoteService.voidQuoteUsage(quoteID: id)
+            await session.refreshQuoteUsage()
+        }
+        bankTask = nil
         savedTitle = ""
         savedClient = ""
-        Task {
-            if let id = await pending.value {
-                try? await QuoteService.deleteQuote(id: id)
-                // And give the allowance back. The ledger never refunds a
-                // delete on purpose, but this draft is being replaced by the
-                // recording about to start — one quote is being made here, not
-                // two, and charging for both would spend a free user's whole
-                // day on a single re-record.
-                try? await QuoteService.voidQuoteUsage(quoteID: id)
-                await session.refreshQuoteUsage()
-            }
-        }
     }
 
     private func discardCurrentRecording() {
-        Task { await recorder.stop() }
-        recorder.reset()
-        transcriptText = ""
-        levels.removeAll()
-        discardDraft()
-        dismiss()
+        guard !isDiscarding else { return }
+        isDiscarding = true
+        Task {
+            defer { isDiscarding = false }
+            await recorder.stop()
+            do {
+                try await discardDraft()
+            } catch {
+                toast = Toast(style: .error, message: "Couldn't discard this draft. Try again.")
+                return
+            }
+            recorder.reset()
+            transcriptText = ""
+            levels.removeAll()
+            dismiss()
+        }
     }
 
     private struct CurrencyMismatch: Identifiable {
@@ -767,10 +787,15 @@ struct QuoteRecordingView: View {
         // reappears and re-generates on the next stop. The banked draft goes
         // too — the next stop replaces it.
         if generated != nil || notEnough {
+            do {
+                try await discardDraft()
+            } catch {
+                toast = Toast(style: .error, message: "Couldn't remove the previous draft")
+                return
+            }
             generated = nil
             notEnough = false
             notEnoughNote = ""
-            discardDraft()
         }
         // Resume from whatever is currently shown (incl. hand-edits).
         recorder.seed(transcriptText)
@@ -800,14 +825,14 @@ struct QuoteRecordingView: View {
             // Wait for the background write before deciding anything: a quick tap
             // on Done while it is still in flight would otherwise save a second copy.
             if let id = await bankTask?.value {
-                await applyEdits(to: id)
-                if hasEditedLineItems {
-                    do {
+                do {
+                    try await applyEdits(to: id)
+                    if hasEditedLineItems {
                         try await applyLineItemEdits(to: id, quote: generated)
-                    } catch {
-                        toast = Toast(style: .error, message: "Couldn't save line-item changes")
-                        return
                     }
+                } catch {
+                    toast = Toast(style: .error, message: "Couldn't save your changes")
+                    return
                 }
                 onSavedQuote?(id)
                 dismiss()

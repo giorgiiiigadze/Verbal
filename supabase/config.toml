@@ -20,6 +20,9 @@ verify_jwt = false
 [functions.extract-quote]
 verify_jwt = true
 
+[functions.transcribe-audio]
+verify_jwt = true
+
 [functions.delete-account]
 verify_jwt = true
 

@@ -260,4 +260,23 @@ extension QuoteService {
             .eq("id", value: quoteId)
             .execute()
     }
+
+    /// Remove the client from an existing quote. This is separate from
+    /// `setClient` so an empty name can never accidentally create a blank
+    /// customer row.
+    static func clearClient(quoteId: UUID) async throws {
+        struct Payload: Encodable {
+            let customerId: UUID?
+            enum CodingKeys: String, CodingKey { case customerId = "customer_id" }
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encodeNil(forKey: .customerId)
+            }
+        }
+        try await client
+            .from("quotes")
+            .update(Payload(customerId: nil))
+            .eq("id", value: quoteId)
+            .execute()
+    }
 }

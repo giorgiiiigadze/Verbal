@@ -35,7 +35,7 @@ struct RecordingPreferencesView: View {
                 Toggle("Accuracy check", isOn: $cloudTranscriptCheckEnabled)
                     .tint(.green)
             } footer: {
-                Text("Verbal can temporarily send a recording to AssemblyAI for a second pass at the transcript, which helps with names, measurements and noisy sites. It is deleted after the check. With this off, everything stays on your phone.")
+                Text("Verbal temporarily sends the recording to AssemblyAI for a second transcription pass. Turn this off to keep recordings on your phone.")
             }
             .listRowBackground(Color(.cardSurface))
         }

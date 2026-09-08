@@ -5,6 +5,7 @@
   "transcript": "Quote for Mrs Chen at number 42. Eight double sockets, sixty each fitted. About eight metres of the 20 mil, I'll price that when I've been to the wholesaler. New board as well — that's four hundred and twenty including the certificate. Day's labour on top, two hundred.",
   "rate_card": [],
   "currency": "GBP",
+  "customer_name": "Mrs Chen",
   "expect": [
     {
       "label": "eight double sockets at 60",

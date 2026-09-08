@@ -1,0 +1,16 @@
+{
+  "name": "product-name-not-client",
+  "note": "A personal-looking product brand must not be inferred as the customer without an explicit client relationship.",
+  "transcript": "Use John Guest pipe for the boiler connection, 80 for the job.",
+  "rate_card": [],
+  "currency": "GBP",
+  "customer_name": null,
+  "expect": [
+    {
+      "label": "boiler pipe connection",
+      "any": ["pipe", "boiler", "connection"],
+      "exclude": [],
+      "price": 80
+    }
+  ]
+}

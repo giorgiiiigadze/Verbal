@@ -101,10 +101,14 @@ final class QuoteRecorder {
     /// and is accepted by the accuracy-pass provider. It is never a permanent
     /// recording and is deliberately outside the user's documents directory.
     private var capturedAudioFile: AVAudioFile?
+    /// Each start/resume writes a separate segment. They are joined after the
+    /// microphone stops so the accuracy pass always receives the whole session.
+    private var capturedAudioSegmentURLs: [URL] = []
+    /// A rebuilt file is separate from the source segments, which lets another
+    /// resume append safely without depending on in-place CAF editing.
+    private var combinedCapturedAudioURL: URL?
     private(set) var capturedAudioURL: URL?
-    /// Pausing for an interruption currently creates a fresh AVAudioFile; do
-    /// not transcribe only the resumed fragment and replace the full live text.
-    private(set) var hasCompleteCapturedAudio = true
+    private(set) var hasCompleteCapturedAudio = false
 
     // MARK: - Public control
 
@@ -122,7 +126,6 @@ final class QuoteRecorder {
         elapsed = 0
         errorMessage = nil
         discardCapturedAudio()
-        hasCompleteCapturedAudio = true
     }
 
     /// Seed the transcript before resuming, so hand-edits made while paused are kept
@@ -291,6 +294,7 @@ final class QuoteRecorder {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         capturedAudioFile = nil
+        rebuildCapturedAudio()
 
         inputContinuation?.finish()
         inputContinuation = nil
@@ -350,13 +354,6 @@ final class QuoteRecorder {
         // Capture separately from the analyzer conversion: Apple can choose a
         // high-rate internal format, while the deferred pass only needs clean
         // speech-band audio. Keeping it at 16 kHz cuts upload time and cost.
-        if capturedAudioURL != nil {
-            // A resumed session has audio before and after the interruption.
-            // Until we concatenate segments, Apple’s complete transcript is
-            // safer than a provider result for only the latter segment.
-            hasCompleteCapturedAudio = false
-            discardCapturedAudio()
-        }
         let archiveFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
                                           sampleRate: 16_000,
                                           channels: 1,
@@ -369,7 +366,9 @@ final class QuoteRecorder {
                                             settings: archiveFormat.settings,
                                             commonFormat: .pcmFormatInt16,
                                             interleaved: true)
-        capturedAudioURL = archiveURL
+        capturedAudioSegmentURLs.append(archiveURL)
+        capturedAudioURL = nil
+        hasCompleteCapturedAudio = false
 
         let converter: AVAudioConverter?
         if let analyzerFormat, analyzerFormat != inputFormat {
@@ -400,6 +399,73 @@ final class QuoteRecorder {
 
         audioEngine.prepare()
         try audioEngine.start()
+    }
+
+    /// Rebuild one provider-ready CAF from every successful recording segment.
+    /// A short silence at each boundary prevents the last word before a pause
+    /// and the first word after resume from being heard as one word.
+    private func rebuildCapturedAudio() {
+        if let combinedCapturedAudioURL {
+            try? FileManager.default.removeItem(at: combinedCapturedAudioURL)
+            self.combinedCapturedAudioURL = nil
+        }
+
+        let readable = capturedAudioSegmentURLs.compactMap { url -> (URL, AVAudioFile)? in
+            guard let file = try? AVAudioFile(forReading: url), file.length > 0 else {
+                try? FileManager.default.removeItem(at: url)
+                return nil
+            }
+            return (url, file)
+        }
+        capturedAudioSegmentURLs = readable.map(\.0)
+
+        guard let first = readable.first else {
+            capturedAudioURL = nil
+            hasCompleteCapturedAudio = false
+            return
+        }
+        guard readable.count > 1 else {
+            capturedAudioURL = first.0
+            hasCompleteCapturedAudio = true
+            return
+        }
+
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("verbal-quote-combined-\(UUID().uuidString)")
+            .appendingPathExtension("caf")
+        do {
+            let format = first.1.processingFormat
+            let output = try AVAudioFile(forWriting: outputURL,
+                                         settings: format.settings,
+                                         commonFormat: format.commonFormat,
+                                         interleaved: format.isInterleaved)
+            let capacity: AVAudioFrameCount = 8_192
+            let silenceFrames = AVAudioFrameCount(format.sampleRate * 0.2)
+            for (index, entry) in readable.enumerated() {
+                let input = entry.1
+                guard input.processingFormat == format else { throw CocoaError(.fileReadCorruptFile) }
+                while input.framePosition < input.length {
+                    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else {
+                        throw CocoaError(.fileReadCorruptFile)
+                    }
+                    try input.read(into: buffer)
+                    guard buffer.frameLength > 0 else { break }
+                    try output.write(from: buffer)
+                }
+                if index < readable.count - 1,
+                   let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: silenceFrames) {
+                    silence.frameLength = silenceFrames
+                    try output.write(from: silence)
+                }
+            }
+            combinedCapturedAudioURL = outputURL
+            capturedAudioURL = outputURL
+            hasCompleteCapturedAudio = true
+        } catch {
+            try? FileManager.default.removeItem(at: outputURL)
+            capturedAudioURL = nil
+            hasCompleteCapturedAudio = false
+        }
     }
 
     /// Normalized RMS level (0...1) of a buffer, for the voice meter.
@@ -476,8 +542,14 @@ final class QuoteRecorder {
     /// public because the view owns the user-visible lifecycle (retry/discard).
     func discardCapturedAudio() {
         capturedAudioFile = nil
-        if let capturedAudioURL { try? FileManager.default.removeItem(at: capturedAudioURL) }
+        var files = Set(capturedAudioSegmentURLs)
+        if let combinedCapturedAudioURL { files.insert(combinedCapturedAudioURL) }
+        if let capturedAudioURL { files.insert(capturedAudioURL) }
+        for file in files { try? FileManager.default.removeItem(at: file) }
+        capturedAudioSegmentURLs.removeAll()
+        combinedCapturedAudioURL = nil
         capturedAudioURL = nil
+        hasCompleteCapturedAudio = false
     }
 
     // MARK: - Model + permissions

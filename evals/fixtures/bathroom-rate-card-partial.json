@@ -9,6 +9,7 @@
     { "name": "New sink with vanity unit", "unit": "set", "unit_price": 50, "type": "material" }
   ],
   "currency": "USD",
+  "customer_name": "Marina Kapanadze",
   "expect": [
     {
       "label": "toilet out and new one fitted",

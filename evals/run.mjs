@@ -101,6 +101,13 @@ export function score(fixture, quote) {
   const missing = [];
   const priceErrors = [];
   const inventions = [];
+  const expectedCustomer = fixture.customer_name;
+  const actualCustomer = quote.customer?.name ?? null;
+  const customerError = expectedCustomer === undefined
+    ? null
+    : String(actualCustomer ?? "").toLocaleLowerCase() === String(expectedCustomer ?? "").toLocaleLowerCase()
+    ? null
+    : `customer: want ${expectedCustomer ?? "null"}, got ${actualCustomer ?? "null"}`;
   let matched = 0;
 
   for (const expected of fixture.expect) {
@@ -139,6 +146,7 @@ export function score(fixture, quote) {
     extras,
     priceErrors,
     inventions,
+    customerError,
     // Shape fingerprint, for the stability check across repeated runs.
     shape: `${matched}/${fixture.expect.length}+${extras.length}`,
   };
@@ -192,7 +200,8 @@ async function main() {
     const shapes = new Set(results.map((r) => r.shape));
     const stable = shapes.size === 1;
 
-    const failed = inventions > 0 || priceErrors > 0 || recall < 1;
+    const customerErrors = results.map((r) => r.customerError).filter(Boolean);
+    const failed = inventions > 0 || priceErrors > 0 || recall < 1 || customerErrors.length > 0;
     if (failed) anyFailure = true;
 
     const mark = inventions > 0 ? `${RED}✗${OFF}`
@@ -208,9 +217,11 @@ async function main() {
     const extraList = [...new Set(results.flatMap((r) => r.extras))];
     const invented = [...new Set(results.flatMap((r) => r.inventions))];
     const wrongPrices = [...new Set(results.flatMap((r) => r.priceErrors))];
+    const wrongCustomers = [...new Set(customerErrors)];
     if (missing.length) console.log(`    ${DIM}dropped:${OFF} ${missing.join(" · ")}`);
     if (extraList.length) console.log(`    ${DIM}extra lines:${OFF} ${extraList.join(" · ")}`);
     if (wrongPrices.length) console.log(`    ${DIM}wrong:${OFF} ${wrongPrices.join(" · ")}`);
+    if (wrongCustomers.length) console.log(`    ${DIM}wrong:${OFF} ${wrongCustomers.join(" · ")}`);
     if (invented.length) console.log(`    ${RED}INVENTED PRICES:${OFF} ${invented.join(" · ")}`);
     console.log();
 

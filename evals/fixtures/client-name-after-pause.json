@@ -1,0 +1,16 @@
+{
+  "name": "client-name-after-pause",
+  "note": "Speech recognition can punctuate a pause between an explicit client cue and the name. The name must still be captured, while a worker named later must not replace it.",
+  "transcript": "The client's name is. Nino Beridze. Replace the kitchen tap for 120. Giorgi is helping me fit it.",
+  "rate_card": [],
+  "currency": "GBP",
+  "customer_name": "Nino Beridze",
+  "expect": [
+    {
+      "label": "replace kitchen tap",
+      "any": ["tap"],
+      "exclude": [],
+      "price": 120
+    }
+  ]
+}
