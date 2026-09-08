@@ -183,13 +183,6 @@ struct QuoteRecordingView: View {
                         if generated != nil {
                             chips
                                 .transition(.opacity)
-                            if let assemblyAIFallbackReason {
-                                Text("Accuracy check wasn’t used: \(assemblyAIFallbackReason)")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .transition(.opacity)
-                            }
                         }
 
                         if isGenerating {
@@ -963,6 +956,11 @@ struct QuoteRecordingView: View {
                         Image(systemName: "checkmark.seal.fill")
                     }
                     .accessibilityLabel("Transcript checked with AssemblyAI using \(assemblyAIModel)")
+                } else if let assemblyAIFallbackReason {
+                    QuoteChip(text: "Accuracy not checked") {
+                        Image(systemName: "checkmark.seal")
+                    }
+                    .accessibilityLabel("Accuracy check wasn't used. \(assemblyAIFallbackReason)")
                 }
             }
         }
@@ -1057,9 +1055,7 @@ struct QuoteRecordingView: View {
                 // The same card the quote screen uses. Its heading used to sit
                 // outside as a large title while the saved quote's sat inside a
                 // header bar — the same table, introduced two different ways.
-                // No expand control: this quote isn't saved yet, so there's
-                // nothing to edit through.
-                LineItemsCard {
+                LineItemsCard(onExpand: { showReviewEditor = true }) {
                     ForEach(quote.lineItems) { item in
                         LineItemRow(
                             description: item.description,
@@ -1073,15 +1069,6 @@ struct QuoteRecordingView: View {
                     }
                 }
                 .padding(.top, 4)
-
-                Button {
-                    showReviewEditor = true
-                } label: {
-                    Label("Edit line items", systemImage: "pencil")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color(.blueAccentText))
-                }
-                .buttonStyle(.plain)
 
                 let subtotal = quote.lineItems.compactMap(\.lineTotal).reduce(0, +)
                 let missing = quote.lineItems.filter(\.isMissingPrice).count

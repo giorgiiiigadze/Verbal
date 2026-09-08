@@ -21,8 +21,7 @@ struct LineItemsCard<Rows: View>: View {
     /// Quote detail calls this “Line items”; onboarding uses the identical
     /// container to preview the rate card the person just created.
     var title = "Line items"
-    /// Present only where the items can actually be edited — the recording
-    /// review is showing a quote that hasn't been saved yet.
+    /// Present wherever the rows can be opened in the full line-item editor.
     var onExpand: (() -> Void)?
     @ViewBuilder var rows: Rows
 
