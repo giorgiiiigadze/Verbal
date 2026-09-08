@@ -136,9 +136,17 @@ struct HomeView: View {
 
         var color: Color {
             switch self {
-            case .next: Color(.statusAcceptedText)
+            case .next: Color(.statusWarningText)
             case .upcoming: Color(.statusWarningText)
             case .overdue: Color(.statusDeclinedText)
+            }
+        }
+
+        var fillColor: Color {
+            switch self {
+            case .next: Color(.statusWarningFill)
+            case .upcoming: Color(.statusWarningFill)
+            case .overdue: Color(.statusDeclinedFill)
             }
         }
 
@@ -533,7 +541,7 @@ struct HomeView: View {
                         case .visit(let visit):
                             visitRow(visit,
                                      surface: section.surface,
-                                     bottomInset: closesWarmSurface ? 14 : 5)
+                                     bottomInset: closesWarmSurface ? 20 : 5)
                         }
                     }
 
@@ -564,11 +572,11 @@ struct HomeView: View {
 
     private var upcomingVisitsEmptyCard: some View {
         HStack(spacing: 12) {
-            Image(systemName: "calendar")
-                .font(.subheadline.weight(.medium))
+            Image("VisitsEmpty")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 32, height: 32)
                 .foregroundStyle(Color(.statusMutedText))
-                .frame(width: 36, height: 36)
-                .background(Color(.surface), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("No upcoming visits yet")
@@ -583,15 +591,14 @@ struct HomeView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .frame(minHeight: 68)
-        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         }
         .listRowBackground(Color(.homeBackground))
         .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 14, trailing: 20))
+        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 20, trailing: 20))
     }
 
     private var upcomingVisitOverflowRow: some View {
@@ -609,9 +616,9 @@ struct HomeView: View {
             .padding(.horizontal, 16)
             .frame(minHeight: 52)
             .background(upcomingVisitCardFill,
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(Color(.separator), lineWidth: 0.5)
             }
         }
@@ -619,7 +626,7 @@ struct HomeView: View {
         .accessibilityLabel("See \(upcomingVisitOverflowCount) more upcoming visits in Calendar")
         .listRowBackground(TimelineSection.Surface.warm.color(for: colorScheme))
         .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 14, trailing: 20))
+        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 20, trailing: 20))
     }
 
     private func quoteTimelineRow(_ quote: QuoteSummary,
@@ -669,72 +676,40 @@ struct HomeView: View {
         return Button {
             selectedVisit = visit
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "calendar")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color(.statusMutedText))
-                    .frame(width: 36, height: 36)
-                    .background(Color(.surface), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(visit.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(visit.title)
-                        .font(.headline)
-                        .foregroundStyle(Color(.mainText))
+                Text(visit.timeRangeText)
+                    .font(.caption2)
+                    .lineLimit(1)
+
+                if let detail = visitDetail(visit) {
+                    Text(detail)
+                        .font(.caption2)
                         .lineLimit(1)
-
-                    // Who it's for, quietly under the name of the job. Only
-                    // when there is one — visits booked before clients had a
-                    // field of their own already say the name in the title.
-                    if let client = visit.clientName?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       !client.isEmpty {
-                        Text(client)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    if let note = visit.note, !note.isEmpty {
-                        Text(note)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .padding(.top, 1)
-                    }
                 }
-
-                Spacer(minLength: 0)
-
-                HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                    Text(visit.timeText)
-                        .monospacedDigit()
-                }
-                .font(.caption.weight(.medium))
-                .foregroundStyle(status.color)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(Color(.surface), in: Capsule())
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            // Tall enough for iOS to draw the swipe actions as icon-above-label,
-            // matching the quote rows below — see the same frame on `QuoteRow`.
-            .frame(minHeight: 68)
-            .background(upcomingVisitCardFill,
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .foregroundStyle(status.color)
+            .padding(.leading, 14)
+            .padding(.trailing, 8)
+            .padding(.vertical, 16)
+            .background(status.fillColor,
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(alignment: .leading) {
                 Rectangle()
                     .fill(status.color)
                     .frame(width: 4)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(status.color.opacity(0.18), lineWidth: 0.5)
             )
             .contentShape(.contextMenuPreview,
-                          RoundedRectangle(cornerRadius: 14, style: .continuous))
+                          RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(visit.accessibilityText). \(status.accessibilityLabel). Record a quote")
@@ -748,13 +723,6 @@ struct HomeView: View {
                 Label("Delete", systemImage: "trash")
             }
             .tint(.red)
-
-            Button {
-                visitEditor = .existing(visit)
-            } label: {
-                Label("Edit", systemImage: "pencil")
-            }
-            .tint(Color(.statusMutedText))
         }
     }
 
@@ -775,6 +743,16 @@ struct HomeView: View {
             return .overdue
         }
         return timelineVisits.first?.id == visit.id ? .next : .upcoming
+    }
+
+    /// Mirrors Calendar's compact appointment card: customer first, then the
+    /// practical address or note when no customer name is available.
+    private func visitDetail(_ visit: ScheduledVisit) -> String? {
+        let candidates = [visit.clientName, visit.address, visit.note]
+        return candidates.compactMap {
+            let value = $0?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return value.isEmpty ? nil : value
+        }.first
     }
 
     /// Take a list that arrived from the server: booked on another phone, or

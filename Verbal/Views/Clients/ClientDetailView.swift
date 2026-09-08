@@ -83,6 +83,10 @@ struct ClientDetailView: View {
         colorScheme == .light ? Color.black.opacity(0.07) : .clear
     }
 
+    private var clientDetailBackground: Color {
+        colorScheme == .dark ? Color(.homeBackground) : .white
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
@@ -96,8 +100,8 @@ struct ClientDetailView: View {
             .padding(.top, 12)
             .padding(.bottom, 36)
         }
-        .background(Color(.homeBackground))
-        // The name is on the page, in the size it deserves. In the bar it would
+        .background(clientDetailBackground)
+    // The name is on the page, in the size it deserves. In the bar it would
         // be said twice, and the page would open with a heading it repeats.
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)

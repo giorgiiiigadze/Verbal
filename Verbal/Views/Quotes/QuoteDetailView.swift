@@ -361,21 +361,14 @@ struct QuoteDetailView: View {
     private var jobDetailsSection: some View {
         if !jobSummary.isEmpty || !scope.isEmpty {
             VStack(alignment: .leading, spacing: 24) {
-                // A serif heading in full ink over serif body at loose
-                // leading, matching the way the scope list below is headed.
                 if !jobSummary.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Summary")
-                            .font(.quoteDocumentBody)
-                            .foregroundStyle(Color(.mainText))
-                        Text(emphasizedSummary(jobSummary, font: .quoteDocumentBody))
-                            .lineSpacing(8)
-                            .foregroundStyle(Color(.mainText))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    Text(emphasizedSummary(jobSummary, font: .body))
+                        .lineSpacing(2)
+                        .foregroundStyle(Color(.mainText))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                ScopeList(items: scope, documentStyle: true)
+                ScopeList(items: scope, documentStyle: true, useDocumentFont: false)
                     .padding(.top, 4)
             }
         }

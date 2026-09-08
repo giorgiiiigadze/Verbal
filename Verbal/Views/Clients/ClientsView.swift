@@ -83,7 +83,7 @@ struct ClientsView: View {
                 feed
             }
         }
-        .background(Color(.homeBackground))
+        .background(clientsBackground)
         .modifier(ClientsDestinations())
         .navigationTitle("Clients")
         .navigationBarTitleDisplayMode(.inline)
@@ -126,6 +126,10 @@ struct ClientsView: View {
     }
 
     // MARK: - Feed
+
+    private var clientsBackground: Color {
+        colorScheme == .dark ? Color(.homeBackground) : .white
+    }
 
     private var loadingState: some View {
         ScrollView {
@@ -316,6 +320,8 @@ struct ClientsView: View {
             .padding(.vertical, 16)
             .background(Color(.cardSurface), in: Self.cardShape)
             .overlay(Self.cardShape.strokeBorder(Color(.separator), lineWidth: 0.5))
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0 : 0.10),
+                    radius: 8, x: 0, y: 3)
             .contentShape(.contextMenuPreview, Self.cardShape)
         }
         .navigationLinkIndicatorVisibility(.hidden)

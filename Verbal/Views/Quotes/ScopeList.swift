@@ -24,6 +24,9 @@ struct ScopeList: View {
     /// full ink, and wider bullets. Opt-in so the recording review and
     /// onboarding, which share this view, keep the layout they have.
     var documentStyle: Bool = false
+    /// Quote details use the same document layout but the app's regular text
+    /// face; recording review keeps the more editorial serif treatment.
+    var useDocumentFont: Bool = true
 
     var body: some View {
         if !items.isEmpty {
@@ -38,7 +41,7 @@ struct ScopeList: View {
                 // body serif a size up and in full ink.
                 if documentStyle {
                     Text("Scope of work")
-                        .font(.quoteDocumentHeading)
+                        .font(useDocumentFont ? .quoteDocumentHeading : .headline)
                         .foregroundStyle(Color(.mainText))
                         .padding(.bottom, 2)
                 } else {
@@ -64,9 +67,11 @@ struct ScopeList: View {
                             // prose they belong to.
                             Text(emphasizedScopeItem(
                                 item,
-                                font: documentStyle ? .quoteDocumentBody : .subheadline
+                                font: documentStyle
+                                    ? (useDocumentFont ? .quoteDocumentBody : .body)
+                                    : .subheadline
                             ))
-                                .lineSpacing(documentStyle ? 8 : 0)
+                                .lineSpacing(documentStyle && useDocumentFont ? 8 : 2)
                                 .foregroundStyle(Color(.mainText))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
