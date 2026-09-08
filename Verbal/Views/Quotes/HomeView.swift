@@ -678,7 +678,7 @@ struct HomeView: View {
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(visit.title)
-                    .font(.caption.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
                     .lineLimit(1)
 
                 Text(visit.timeRangeText)
@@ -695,8 +695,8 @@ struct HomeView: View {
             .foregroundStyle(status.color)
             .padding(.leading, 14)
             .padding(.trailing, 8)
-            .padding(.vertical, 16)
-            .background(status.fillColor,
+            .padding(.vertical, 12)
+            .background(upcomingVisitCardFill,
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(alignment: .leading) {
                 Rectangle()
