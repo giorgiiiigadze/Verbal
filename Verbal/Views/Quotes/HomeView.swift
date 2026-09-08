@@ -14,9 +14,12 @@ struct HomeView: View {
     @Environment(NetworkMonitor.self) private var network
     @Environment(AppNotificationRouter.self) private var notificationRouter
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var showCreate: Bool
     @Binding var recordingVisit: ScheduledVisit?
     @Binding var savedRecordingQuoteID: UUID?
+    /// Home is a preview; Calendar owns the complete visit list.
+    var onShowCalendar: () -> Void = {}
     @State private var path = NavigationPath()
     @State private var quotes: [QuoteSummary] = []
     @State private var hasLoaded = false
@@ -108,10 +111,16 @@ struct HomeView: View {
             case warm
             case white
 
-            var color: Color {
-                switch self {
-                case .warm: Color(.homeBackground)
-                case .white: Color(.cardSurface)
+            /// The two timeline surfaces are intentionally reversed only in
+            /// Dark Mode, so the upcoming and saved-quote sections retain the
+            /// light appearance while their dark hierarchy is swapped.
+            func color(for colorScheme: ColorScheme) -> Color {
+                switch (self, colorScheme) {
+                case (.warm, .dark): Color(.cardSurface)
+                case (.white, .dark): Color(.homeBackground)
+                case (.warm, .light): Color(.homeBackground)
+                case (.white, .light): Color(.cardSurface)
+                @unknown default: Color(.homeBackground)
                 }
             }
         }
@@ -122,10 +131,30 @@ struct HomeView: View {
         let id: String
     }
 
+    private enum UpcomingVisitStatus {
+        case next, upcoming, overdue
+
+        var color: Color {
+            switch self {
+            case .next: Color(.statusAcceptedText)
+            case .upcoming: Color(.statusWarningText)
+            case .overdue: Color(.statusDeclinedText)
+            }
+        }
+
+        var accessibilityLabel: String {
+            switch self {
+            case .next: "Next visit"
+            case .upcoming: "Upcoming visit"
+            case .overdue: "Overdue visit"
+            }
+        }
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             homeContent
-            .background(Color(.homeBackground))
+            .background(topTimelineSurface)
             // Empty on purpose — the name of the screen is `pageTitle`, in the
             // list itself. Left as a large title it would fold into the bar on
             // scroll; left inline it would sit there permanently. Both put the
@@ -283,10 +312,13 @@ struct HomeView: View {
                                 title: quote.displayTitle,
                                 subtitle: "Total \(AppCurrency.format(quote.total, code: quote.currency)) · \(quote.effectiveStatus.capitalized)",
                                 shareText: shareText(for: quote),
-                                document: pdfDocument(for: quote)) {
+                document: pdfDocument(for: quote)) {
                     Task { await markSent(quote) }
                 }
             }
+            // Keep the navigation and presentation stack from making the
+            // lifecycle-observer chain below one enormous generic type.
+            .eraseToAnyView()
             .task {
                 // Seed instantly from the data preloaded during the splash so
                 // the list appears with no empty-state flash, then refresh.
@@ -318,20 +350,17 @@ struct HomeView: View {
                 promptForMissedVisitIfNeeded()
             }
             .onChange(of: notificationRouter.requestedQuoteId) { _, quoteId in
-                guard let quoteId else { return }
-                Task { await openQuoteFromNotification(id: quoteId) }
+                handleRequestedQuoteChange(quoteId)
             }
             .onChange(of: savedRecordingQuoteID) { _, quoteId in
-                handleSavedRecordingQuote(quoteId)
+                handleSavedRecordingQuoteChange(quoteId)
             }
             .onChange(of: showCreate) { _, isPresented in
-                handleRecorderPresentationChange(isPresented: isPresented)
+                handleCreatePresentationChange(isPresented)
             }
             .refreshable { await load() }
-            .alert("Delete this quote?", isPresented: Binding(
-                get: { quoteToDelete != nil },
-                set: { if !$0 { quoteToDelete = nil } }
-            ), presenting: quoteToDelete) { quote in
+            .alert("Delete this quote?", isPresented: isDeleteQuoteAlertPresented,
+                   presenting: quoteToDelete) { quote in
                 Button("Delete", role: .destructive) {
                     Task { await delete(quote) }
                 }
@@ -339,10 +368,8 @@ struct HomeView: View {
             } message: { quote in
                 Text("This permanently deletes “\(quote.displayTitle)”. This can't be undone.")
             }
-            .alert("Duplicate this quote?", isPresented: Binding(
-                get: { quoteToDuplicate != nil },
-                set: { if !$0 { quoteToDuplicate = nil } }
-            ), presenting: quoteToDuplicate) { quote in
+            .alert("Duplicate this quote?", isPresented: isDuplicateQuoteAlertPresented,
+                   presenting: quoteToDuplicate) { quote in
                 Button("Duplicate") {
                     Task { await duplicate(quote) }
                 }
@@ -420,6 +447,36 @@ struct HomeView: View {
         quotes.isEmpty && timelineVisits.isEmpty && hasLoaded && !loadFailed && !hasEverHadQuotes
     }
 
+    private var isDeleteQuoteAlertPresented: Binding<Bool> {
+        Binding(get: { quoteToDelete != nil }, set: { if !$0 { quoteToDelete = nil } })
+    }
+
+    private var isDuplicateQuoteAlertPresented: Binding<Bool> {
+        Binding(get: { quoteToDuplicate != nil }, set: { if !$0 { quoteToDuplicate = nil } })
+    }
+
+    private func handleRequestedQuoteChange(_ quoteId: UUID?) {
+        guard let quoteId else { return }
+        Task { await openQuoteFromNotification(id: quoteId) }
+    }
+
+    private func handleSavedRecordingQuoteChange(_ quoteId: UUID?) {
+        handleSavedRecordingQuote(quoteId)
+    }
+
+    private func handleCreatePresentationChange(_ isPresented: Bool) {
+        handleRecorderPresentationChange(isPresented: isPresented)
+    }
+
+    /// An upcoming-visit section begins at the very top of Home, so its
+    /// surface continues behind the title and toolbar instead of starting at a
+    /// visible horizontal seam. In Light Mode this resolves to the same
+    /// existing Home background; in Dark Mode it uses the swapped visit tone.
+    private var topTimelineSurface: Color {
+        guard !timelineVisits.isEmpty else { return Color(.homeBackground) }
+        return TimelineSection.Surface.warm.color(for: colorScheme)
+    }
+
     // MARK: - List
 
     /// The screen's name, set as the page's own heading rather than as a
@@ -460,7 +517,7 @@ struct HomeView: View {
                         // begins.
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
-                        .listRowBackground(section.surface.color)
+                        .listRowBackground(section.surface.color(for: colorScheme))
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 0, trailing: 20))
 
@@ -478,6 +535,11 @@ struct HomeView: View {
                                      surface: section.surface,
                                      bottomInset: closesWarmSurface ? 14 : 5)
                         }
+                    }
+
+                    if section.id == lastUpcomingSectionID,
+                       upcomingVisitOverflowCount > 0 {
+                        upcomingVisitOverflowRow
                     }
                 }
             }
@@ -532,6 +594,34 @@ struct HomeView: View {
         .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 14, trailing: 20))
     }
 
+    private var upcomingVisitOverflowRow: some View {
+        Button(action: onShowCalendar) {
+            HStack(spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.subheadline.weight(.semibold))
+                Text("See \(upcomingVisitOverflowCount) more upcoming \(upcomingVisitOverflowCount == 1 ? "visit" : "visits")")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+            }
+            .foregroundStyle(OnboardingStyle.action)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 52)
+            .background(upcomingVisitCardFill,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("See \(upcomingVisitOverflowCount) more upcoming visits in Calendar")
+        .listRowBackground(TimelineSection.Surface.warm.color(for: colorScheme))
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 14, trailing: 20))
+    }
+
     private func quoteTimelineRow(_ quote: QuoteSummary,
                                   surface: TimelineSection.Surface) -> some View {
         ZStack {
@@ -539,7 +629,7 @@ struct HomeView: View {
             NavigationLink(value: quote) { EmptyView() }
                 .opacity(0)
         }
-        .listRowBackground(surface.color)
+        .listRowBackground(surface.color(for: colorScheme))
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 5, trailing: 20))
         .onAppear {
@@ -574,7 +664,9 @@ struct HomeView: View {
     private func visitRow(_ visit: ScheduledVisit,
                           surface: TimelineSection.Surface,
                           bottomInset: CGFloat = 5) -> some View {
-        Button {
+        let status = upcomingVisitStatus(for: visit)
+
+        return Button {
             selectedVisit = visit
         } label: {
             HStack(spacing: 12) {
@@ -618,7 +710,7 @@ struct HomeView: View {
                         .monospacedDigit()
                 }
                 .font(.caption.weight(.medium))
-                .foregroundStyle(Color(.statusMutedText))
+                .foregroundStyle(status.color)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
                 .background(Color(.surface), in: Capsule())
@@ -629,18 +721,24 @@ struct HomeView: View {
             // Tall enough for iOS to draw the swipe actions as icon-above-label,
             // matching the quote rows below — see the same frame on `QuoteRow`.
             .frame(minHeight: 68)
-            .background(Color(.cardSurface),
-                        in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(upcomingVisitCardFill,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(status.color)
+                    .frame(width: 4)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(Color(.separator), lineWidth: 0.5)
             )
             .contentShape(.contextMenuPreview,
-                          RoundedRectangle(cornerRadius: 22, style: .continuous))
+                          RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(visit.accessibilityText). Record a quote")
-        .listRowBackground(surface.color)
+        .accessibilityLabel("\(visit.accessibilityText). \(status.accessibilityLabel). Record a quote")
+        .listRowBackground(surface.color(for: colorScheme))
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: bottomInset, trailing: 20))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -658,6 +756,25 @@ struct HomeView: View {
             }
             .tint(Color(.statusMutedText))
         }
+    }
+
+    /// Upcoming visits sit on the lighter Dark Mode timeline surface. Giving
+    /// their containers this near-black fill keeps that section layered without
+    /// changing the existing white appearance in Light Mode.
+    private var upcomingVisitCardFill: Color {
+        colorScheme == .dark
+            ? Color(red: 28 / 255, green: 28 / 255, blue: 30 / 255)
+            : Color(.cardSurface)
+    }
+
+    /// Match Calendar's two-hour grace period before an unquoted appointment
+    /// becomes overdue. The next non-overdue appointment gets the calmer green
+    /// rail so it is the one the user can find at a glance.
+    private func upcomingVisitStatus(for visit: ScheduledVisit) -> UpcomingVisitStatus {
+        if isVisitOverdue(visit) {
+            return .overdue
+        }
+        return timelineVisits.first?.id == visit.id ? .next : .upcoming
     }
 
     /// Take a list that arrived from the server: booked on another phone, or
@@ -1234,7 +1351,7 @@ struct HomeView: View {
         }
 
         var result = visitDays.keys.sorted().map { day in
-            TimelineSection(title: quoteSectionTitle(day),
+            TimelineSection(title: upcomingVisitSectionTitle(day),
                             items: (visitDays[day] ?? []).sorted { left, right in
                                 guard case .visit(let lhs) = left,
                                       case .visit(let rhs) = right else { return false }
@@ -1261,7 +1378,24 @@ struct HomeView: View {
         return result
     }
 
-    private var timelineVisits: [ScheduledVisit] {
+    /// Historical quotes use “Earlier today,” but a booked visit later today
+    /// must not be described as already past. Keep upcoming appointments in
+    /// their own, forward-looking date language.
+    private func upcomingVisitSectionTitle(_ date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
+
+        let daysAway = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: .now),
+            to: calendar.startOfDay(for: date)
+        ).day ?? 0
+        if daysAway < 7 { return date.formatted(.dateTime.weekday(.wide)) }
+        return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+    }
+
+    private var allUpcomingVisits: [ScheduledVisit] {
         guard filter == .all, upcomingVisitsVisible else { return [] }
         let query = searchQuery.lowercased()
         return visits
@@ -1272,6 +1406,31 @@ struct HomeView: View {
                     || (visit.clientName?.lowercased().contains(query) ?? false)
             }
             .sorted { $0.date < $1.date }
+    }
+
+    /// Home is an at-a-glance preview, not another full calendar. Keep the
+    /// next three appointments and surface any overdue visit even when it
+    /// would otherwise fall outside that compact preview.
+    private var timelineVisits: [ScheduledVisit] {
+        let nextThreeIDs = Set(allUpcomingVisits
+            .filter { !isVisitOverdue($0) }
+            .prefix(3)
+            .map(\.id))
+        return allUpcomingVisits.filter {
+            nextThreeIDs.contains($0.id) || isVisitOverdue($0)
+        }
+    }
+
+    private var upcomingVisitOverflowCount: Int {
+        max(0, allUpcomingVisits.count - timelineVisits.count)
+    }
+
+    private var lastUpcomingSectionID: String? {
+        sections.last(where: { $0.surface == .warm })?.id
+    }
+
+    private func isVisitOverdue(_ visit: ScheduledVisit) -> Bool {
+        Date() >= visit.date.addingTimeInterval(2 * 60 * 60)
     }
 
     // MARK: - Data
@@ -1640,5 +1799,11 @@ struct HomeView: View {
             // silence read as success.
             toast = Toast(style: .error, message: "Couldn't duplicate this quote")
         }
+    }
+}
+
+private extension View {
+    func eraseToAnyView() -> AnyView {
+        AnyView(self)
     }
 }

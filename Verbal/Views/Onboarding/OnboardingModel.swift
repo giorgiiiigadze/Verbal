@@ -23,8 +23,8 @@ final class OnboardingModel {
         // Introduction — the problem, their own numbers, and the setup.
         case hook, method, quoteVolume, quoteDuration, stat
         case trade, jobs, prices, business, summary
-        // Climax — the app, in their hands, before anyone has paid.
-        case micReason, record, result, milestone, review
+        // The preview of the setup they have just completed.
+        case result, milestone, review
         // Conclusion — what they came for, what it costs, what happens next.
         case goal, commitment, expectations, notifications
     }
@@ -45,28 +45,6 @@ final class OnboardingModel {
 
     var answers = OnboardingAnswers()
 
-    // MARK: - The first quote
-
-    /// Held here rather than in the recording screen so the footer can ask
-    /// whether it is safe to move on. Continue has to stay out of the way while
-    /// the microphone is live — a step that changes underneath a running
-    /// recogniser leaves the audio session up with nothing showing it.
-    ///
-    /// Transcription is Apple's, on device: the audio never leaves the phone,
-    /// which is the only reason this screen can exist before there is an
-    /// account to authorise anything.
-    let recorder = QuoteRecorder()
-
-    /// A short history of microphone levels, newest last, so the meter reads as
-    /// a trace of the last second rather than a single jumping bar.
-    var levels: [Float] = []
-
-
-    /// What they actually said, kept after the recorder is torn down so the
-    /// result screen survives a step back and forth.
-    var recordedTranscript = ""
-    var quoteDraft: OnboardingQuoteDraft?
-
     /// The value is observable for the onboarding UI, then mirrored to the
     /// existing storage key for extraction after onboarding. Reading
     /// `UserDefaults` directly from a computed property meant a selected chip
@@ -85,22 +63,15 @@ final class OnboardingModel {
 
     /// The steps this particular user will see.
     ///
-    /// Three things shorten it: a trade with no preset jobs skips the list that
-    /// would fit nobody, nothing ticked means nothing to price, and a phone
-    /// whose microphone has already been refused doesn't get asked for it
-    /// again — iOS will not show that dialog twice, so the screen explaining it
-    /// would lead nowhere and the recording screen would sit there failing.
+    /// A trade with no preset jobs skips the list that would fit nobody, and
+    /// nothing ticked means there is nothing to price.
     var steps: [Step] {
         var list: [Step] = [.hook, .method, .quoteVolume, .quoteDuration, .stat, .trade]
         if !TradePresets.jobs(for: trade).isEmpty {
             list.append(.jobs)
             if !pickedJobs.isEmpty { list.append(.prices) }
         }
-        list.append(contentsOf: [.business, .summary])
-        if QuoteRecorder.access != .blocked {
-            list.append(contentsOf: [.micReason, .record])
-        }
-        list.append(contentsOf: [.result, .milestone, .review,
+        list.append(contentsOf: [.business, .summary, .result, .milestone, .review,
                                  .goal, .commitment, .expectations, .notifications])
         return list
     }
@@ -182,32 +153,6 @@ final class OnboardingModel {
         // the draft into the profile.
         answers.hourlyRate = Self.number(from: hourlyRateText)
         answers.save()
-    }
-
-    /// Stop, keep what was said, and price it against the rates they typed.
-    ///
-    /// The draft is built once, here, rather than recomputed by the result
-    /// screen: stepping back and forth over it would otherwise re-run the
-    /// matcher against a transcript the recogniser is no longer finalising, and
-    /// the card would quietly change under them.
-    func finishRecording() async {
-        await recorder.stop()
-        levels.removeAll()
-        let said = recorder.transcript
-        guard !said.isEmpty else { return }
-        recordedTranscript = said
-        quoteDraft = OnboardingQuoteDraft.build(transcript: said, rates: draftRates)
-    }
-
-    /// True once there is something worth carrying to the next screen.
-    var hasRecording: Bool { !recordedTranscript.isEmpty && quoteDraft?.isEmpty == false }
-
-    /// Minutes their own answer says one quote costs them, less the minute this
-    /// one took. Nil when they skipped the question — the milestone then counts
-    /// the quote and says nothing about time it can't stand behind.
-    var minutesSavedOnFirstQuote: Int? {
-        guard let minutes = answers.minutesPerQuote else { return nil }
-        return max(1, minutes - Int(OnboardingAnswers.verbalMinutesPerQuote))
     }
 
     /// Commas for decimal points are the norm in most of the currencies this

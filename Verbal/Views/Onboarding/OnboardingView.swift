@@ -63,10 +63,6 @@ struct OnboardingView: View {
     /// rather than offered — everything else here has a default worth keeping,
     /// or is not a question at all.
     ///
-    /// The recording screen is the other gate, and a softer one: Continue waits
-    /// until there is something to carry forward, and Skip in the header is
-    /// always there for someone who would rather not talk to their phone in
-    /// front of a customer.
     private var canContinue: Bool {
         switch current {
         case .method:
@@ -79,8 +75,6 @@ struct OnboardingView: View {
             return !model.trade.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .jobs:
             return !model.pickedJobs.isEmpty
-        case .record:
-            return !model.recorder.isSessionActive && model.recorder.hasContent
         case .commitment:
             return model.answers.commitment != nil
         default:
@@ -93,7 +87,7 @@ struct OnboardingView: View {
     /// to skip and the button would just be a second Continue.
     private var isSkippable: Bool {
         switch current {
-        case .method, .quoteVolume, .quoteDuration, .jobs, .prices, .business, .micReason, .record:
+        case .method, .quoteVolume, .quoteDuration, .jobs, .prices, .business:
             return true
         default:
             return false
@@ -215,7 +209,7 @@ struct OnboardingView: View {
         .gesture(
             DragGesture(minimumDistance: 20)
                 .onEnded { drag in
-                    guard step > 0, !model.recorder.isSessionActive else { return }
+                    guard step > 0 else { return }
                     let sideways = drag.translation.width
                     let vertical = abs(drag.translation.height)
                     // Through the same path as the button, so a swipe back and
@@ -249,10 +243,6 @@ struct OnboardingView: View {
             OnboardingBusinessStep(model: model, focused: $focusedField)
         case .summary:
             OnboardingSummaryStep(model: model)
-        case .micReason:
-            OnboardingMicReasonStep()
-        case .record:
-            OnboardingRecordStep(model: model)
         case .result:
             OnboardingResultStep(model: model, currencyCode: currencyCode)
         case .milestone:
@@ -308,10 +298,6 @@ struct OnboardingView: View {
     @ViewBuilder
     private var footer: some View {
         switch current {
-        case .record:
-            OnboardingRecordingBar(model: model) {
-                advance()
-            }
         case .notifications:
             pairedFooter(primary: "Turn on notifications",
                          secondary: "Not now") { wantsNotifications in
@@ -367,7 +353,6 @@ struct OnboardingView: View {
     private var footerTitle: String {
         switch current {
         case .hook: return "Get started"
-        case .record: return model.recorder.hasContent ? "That's the one" : "Continue"
         case .result: return "Nice"
         default: return "Continue"
         }
@@ -401,21 +386,8 @@ struct OnboardingView: View {
         }
     }
 
-    /// Skipping the microphone explanation skips the recording too — the two
-    /// are one decision, and dropping someone who just declined the explanation
-    /// onto a record button is the app asking again in a worse way.
     private func skip() {
         focusedField = nil
-        if current == .micReason {
-            let all = model.steps
-            if let resumeAt = all.firstIndex(of: .result) {
-                withAnimation {
-                    step = resumeAt
-                    updateDisplayedProgress()
-                }
-                return
-            }
-        }
         advance()
     }
 
