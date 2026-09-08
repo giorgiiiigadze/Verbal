@@ -38,6 +38,9 @@ struct OnboardingView: View {
     /// the visible bar tied to navigation, not to an answer changing beneath
     /// the current screen.
     @State private var displayedProgress = 0.0
+    /// Long onboarding lists scroll beneath the fixed progress header. Once
+    /// they do, a separator gives that header a deliberate, settled edge.
+    @State private var isProgressHeaderSeparated = false
     @FocusState private var focusedField: OnboardingField?
 
     private typealias Step = OnboardingModel.Step
@@ -175,6 +178,15 @@ struct OnboardingView: View {
                 if !isFirstStep {
                     OnboardingProgressBar(progress: progress)
                         .padding(.bottom, 20)
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(Color(.separator))
+                                .frame(height: 0.5)
+                                .padding(.horizontal, -24)
+                                .opacity(isProgressHeaderSeparated ? 1 : 0)
+                        }
+                        .animation(.easeInOut(duration: 0.18),
+                                   value: isProgressHeaderSeparated)
                         .transition(.opacity)
                 }
 
@@ -198,6 +210,9 @@ struct OnboardingView: View {
             // below this, and matching 24 to it left the button floating well
             // clear of the bottom of the screen.
             .padding(.bottom, 8)
+        }
+        .onChange(of: step) { _, _ in
+            isProgressHeaderSeparated = false
         }
         .animation(.easeInOut(duration: 0.3), value: step)
         // The only way back, so it is worth being generous about what counts as
@@ -233,12 +248,15 @@ struct OnboardingView: View {
         case .stat:
             OnboardingStatStep(answers: model.answers)
         case .trade:
-            OnboardingTradeStep(model: model, focused: $focusedField)
+            OnboardingTradeStep(model: model, focused: $focusedField,
+                                isProgressHeaderSeparated: $isProgressHeaderSeparated)
         case .jobs:
-            OnboardingJobsStep(model: model)
+            OnboardingJobsStep(model: model,
+                               isProgressHeaderSeparated: $isProgressHeaderSeparated)
         case .prices:
             OnboardingPricesStep(model: model, currencyCode: $currencyCode,
-                                 focused: $focusedField)
+                                 focused: $focusedField,
+                                 isProgressHeaderSeparated: $isProgressHeaderSeparated)
         case .business:
             OnboardingBusinessStep(model: model, focused: $focusedField)
         case .summary:

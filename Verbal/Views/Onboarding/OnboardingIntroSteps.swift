@@ -379,6 +379,7 @@ struct OnboardingStatStep: View {
 struct OnboardingTradeStep: View {
     @Bindable var model: OnboardingModel
     var focused: FocusState<OnboardingField?>.Binding
+    @Binding var isProgressHeaderSeparated: Bool
 
     private static let otherTrade = "Something else"
 
@@ -436,6 +437,12 @@ struct OnboardingTradeStep: View {
             }
             .padding(.bottom, 8)
         }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y > geometry.contentInsets.top + 1
+        } action: { _, isScrolled in
+            isProgressHeaderSeparated = isScrolled
+        }
+        .onDisappear { isProgressHeaderSeparated = false }
     }
 }
 
@@ -450,6 +457,7 @@ struct OnboardingTradeStep: View {
 /// setting something up.
 struct OnboardingJobsStep: View {
     @Bindable var model: OnboardingModel
+    @Binding var isProgressHeaderSeparated: Bool
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -485,6 +493,12 @@ struct OnboardingJobsStep: View {
             }
             .padding(.bottom, 8)
         }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y > geometry.contentInsets.top + 1
+        } action: { _, isScrolled in
+            isProgressHeaderSeparated = isScrolled
+        }
+        .onDisappear { isProgressHeaderSeparated = false }
     }
 }
 
@@ -504,6 +518,7 @@ struct OnboardingPricesStep: View {
     @Bindable var model: OnboardingModel
     @Binding var currencyCode: String
     var focused: FocusState<OnboardingField?>.Binding
+    @Binding var isProgressHeaderSeparated: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -553,6 +568,12 @@ struct OnboardingPricesStep: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y > geometry.contentInsets.top + 1
+            } action: { _, isScrolled in
+                isProgressHeaderSeparated = isScrolled
+            }
+            .onDisappear { isProgressHeaderSeparated = false }
         }
     }
 

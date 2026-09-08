@@ -679,6 +679,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(visit.title)
                     .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color(.mainText))
                     .lineLimit(1)
 
                 Text(visit.timeRangeText)
@@ -706,7 +707,7 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(status.color.opacity(0.18), lineWidth: 0.5)
+                    .strokeBorder(Color(.separator), lineWidth: 0.5)
             )
             .contentShape(.contextMenuPreview,
                           RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -1356,12 +1357,11 @@ struct HomeView: View {
         return result
     }
 
-    /// Historical quotes use “Earlier today,” but a booked visit later today
-    /// must not be described as already past. Keep upcoming appointments in
-    /// their own, forward-looking date language.
+    /// Keep booked work unmistakably forward-looking: a simple “Today” could
+    /// otherwise read as the historical quote group beneath it.
     private func upcomingVisitSectionTitle(_ date: Date) -> String {
         let calendar = Calendar.current
-        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInToday(date) { return "Upcoming quotes today" }
         if calendar.isDateInTomorrow(date) { return "Tomorrow" }
 
         let daysAway = calendar.dateComponents(
