@@ -11,6 +11,7 @@ struct ScheduleView: View {
     @Binding var recordingVisit: ScheduledVisit?
     /// Raised by Calendar's one-time intro after its sheet is fully gone.
     @Binding var startBooking: Bool
+    @Binding var requestedVisitID: UUID?
 
     @State private var quoteToOpen: QuoteSummary?
     @State private var selectedVisit: ScheduledVisit?
@@ -71,14 +72,29 @@ struct ScheduleView: View {
             switch editor { case .new: ScheduleVisitSheet(onSave: addOrUpdate).presentationDetents([.large]).presentationDragIndicator(.hidden); case .existing(let visit): ScheduleVisitSheet(editing: visit, onSave: addOrUpdate, onDelete: remove).presentationDetents([.large]).presentationDragIndicator(.hidden) }
         }
         .alert("Remove this visit?", isPresented: Binding(get: { visitToDelete != nil }, set: { if !$0 { visitToDelete = nil } }), presenting: visitToDelete) { visit in Button("Remove", role: .destructive) { remove(visit) }; Button("Cancel", role: .cancel) {} } message: { visit in Text("“\(visit.title)” comes off your schedule. Any quote you've already made is untouched.") }
-        .task { session.visitStore.refresh(); await session.visitStore.sync() }
+        .task {
+            session.visitStore.refresh()
+            await session.visitStore.sync()
+            presentRequestedVisitIfNeeded()
+        }
         .onChange(of: startBooking) { _, shouldStartBooking in
             guard shouldStartBooking else { return }
             startBooking = false
             editor = .new
         }
+        .onChange(of: requestedVisitID) { _, _ in presentRequestedVisitIfNeeded() }
         .refreshable { await session.visitStore.sync(); await session.refreshQuotes() }
         .toast($toast)
+    }
+
+    private func presentRequestedVisitIfNeeded() {
+        guard let id = requestedVisitID,
+              let visit = visits.first(where: { $0.id == id })
+        else { return }
+        filter = .all
+        selectedDay = Calendar.current.startOfDay(for: visit.date)
+        selectedVisit = visit
+        requestedVisitID = nil
     }
 
     private var calendar: some View {

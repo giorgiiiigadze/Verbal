@@ -41,6 +41,7 @@ enum ScheduledVisitReminderLeadTime: String, CaseIterable, Identifiable {
 }
 
 enum ScheduledVisitNotifications {
+    nonisolated static let notificationKind = "scheduled-visit-reminder"
     static let enabledKey = "scheduledVisitNotificationsEnabled"
     static let leadTimeKey = "scheduledVisitNotificationLeadTime"
     nonisolated static let privateContentKey = "scheduledVisitNotificationPrivateContent"
@@ -75,6 +76,7 @@ enum ScheduledVisitNotifications {
         content.body = notificationBody(for: visit)
         content.sound = .default
         content.threadIdentifier = "scheduled-visits"
+        content.userInfo = ["kind": notificationKind, "visitId": visit.id.uuidString]
 
         let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute],
                                                          from: notificationDate)

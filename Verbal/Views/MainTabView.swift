@@ -19,6 +19,7 @@ struct MainTabView: View {
     @Environment(SessionStore.self) private var session
     @Environment(Store.self) private var store
     @Environment(AppNotificationRouter.self) private var notificationRouter
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selection: TabItem = .home
     @State private var showCreate = false
     @State private var recordingVisit: ScheduledVisit?
@@ -36,6 +37,7 @@ struct MainTabView: View {
     @State private var showCalendarIntro = false
     @State private var startBookingAfterCalendarIntro = false
     @State private var calendarBookingRequest = false
+    @State private var calendarVisitRequestID: UUID?
 
     /// Announcements are shown once and never again. A promo that comes back is
     /// how people learn to dismiss your sheets without reading them.
@@ -104,9 +106,11 @@ struct MainTabView: View {
                 NavigationStack {
                     ScheduleView(showCreate: createBinding,
                                  recordingVisit: $recordingVisit,
-                                 startBooking: $calendarBookingRequest)
+                                 startBooking: $calendarBookingRequest,
+                                 requestedVisitID: $calendarVisitRequestID)
                 }
             }
+            .badge(notificationRouter.hasUnreadVisitReminder ? Text("1") : nil)
             Tab("Clients", systemImage: "person.2.fill", value: .clients) {
                 NavigationStack { ClientsView() }
             }
@@ -120,6 +124,7 @@ struct MainTabView: View {
                 }
             }
         }
+        .eraseToAnyView()
         .tint(Color(.mainText))
         // Presented from here rather than Home: that view already owns several
         // sheets, and a further one attached to the same view is silently
@@ -136,6 +141,7 @@ struct MainTabView: View {
             try? await Task.sleep(for: .seconds(0.8))
             showShareLinkNews = true
         }
+        .task { await notificationRouter.refreshVisitReminderBadge() }
         .sheet(isPresented: $showShareLinkNews, onDismiss: { seenShareLinkNews = true }) {
             ShareLinkNewsSheet()
         }
@@ -198,8 +204,17 @@ struct MainTabView: View {
             guard quoteId != nil else { return }
             selection = .home
         }
-        .onChange(of: selection) { _, _ in
-            presentCalendarIntroIfNeeded()
+        .onChange(of: notificationRouter.requestedVisitId) { _, visitId in
+            guard let visitId else { return }
+            calendarVisitRequestID = visitId
+            selection = .schedule
+            notificationRouter.clearVisitReminder()
+            notificationRouter.requestedVisitId = nil
+        }
+        .onChange(of: selection) { _, selectedTab in handleTabSelection(selectedTab) }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await notificationRouter.refreshVisitReminderBadge() }
         }
         .onChange(of: session.visitStore.hasCompletedInitialSync) { _, _ in
             presentCalendarIntroIfNeeded()
@@ -221,6 +236,13 @@ struct MainTabView: View {
               !store.isPaywallPresented
         else { return }
         showCalendarIntro = true
+    }
+
+    private func handleTabSelection(_ selectedTab: TabItem) {
+        if selectedTab == .schedule {
+            notificationRouter.clearVisitReminder()
+        }
+        presentCalendarIntroIfNeeded()
     }
 
     private var calendarIntroKey: String? {
@@ -280,4 +302,8 @@ struct MainTabView: View {
         }
         return output.withRenderingMode(.alwaysOriginal)
     }
+}
+
+private extension View {
+    func eraseToAnyView() -> AnyView { AnyView(self) }
 }

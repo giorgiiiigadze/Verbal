@@ -677,15 +677,16 @@ struct HomeView: View {
             selectedVisit = visit
         } label: {
             HStack(spacing: 12) {
-                Image("UpcomingClientIllustration")
-                    .resizable()
-                    .renderingMode(.template)
-                    .scaledToFit()
+                Image(systemName: "calendar")
+                    .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(Color(.mainText).opacity(0.72))
-                    .frame(width: 20, height: 20)
                     .frame(width: 42, height: 42)
                     .background(Color(.fieldFill),
                                 in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                    }
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
