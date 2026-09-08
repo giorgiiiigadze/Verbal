@@ -5,7 +5,9 @@ import { createClient } from "jsr:@supabase/supabase-js@2.112.2";
 
 const ASSEMBLYAI_API_KEY = Deno.env.get("ASSEMBLYAI_API_KEY");
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
-const MAX_KEYTERMS = 1_000;
+// The app sends at most 100 and stops well short of the header byte ceiling;
+// this is the backstop for anything else that calls here.
+const MAX_KEYTERMS = 100;
 const admin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -20,7 +22,18 @@ async function callerId(req: Request) {
 }
 function keyterms(req: Request): string[] {
   try {
-    const raw = JSON.parse(req.headers.get("X-Verbal-Keyterms") ?? "[]");
+    const header = req.headers.get("X-Verbal-Keyterms") ?? "[]";
+    // Percent-encoded by the app, because a header value must be ASCII and rate
+    // cards are not ("Réparation", "£/m²"). Older builds send bare JSON, which
+    // decodeURIComponent passes through untouched unless it contains a stray
+    // "%" — hence the fallback rather than a hard requirement.
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(header);
+    } catch {
+      decoded = header;
+    }
+    const raw = JSON.parse(decoded);
     if (!Array.isArray(raw)) return [];
     return raw.slice(0, MAX_KEYTERMS).map(String).map(x => x.trim()).filter(x => x.length > 0 && x.length <= 50);
   } catch { return []; }

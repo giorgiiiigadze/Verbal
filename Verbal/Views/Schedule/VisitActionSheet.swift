@@ -190,13 +190,21 @@ struct VisitActionSheet: View {
             // half an hour on the doorstep, or take a call and stand you down.
             // Reschedule and Cancel need to reach into this window; the earlier
             // layout hid both, so the sheet was read-only for up to two hours.
+            //
+            // Four stacked rows ate the sheet: at the medium detent the buttons
+            // pushed the visit's own details — address, phone, note — out of
+            // sight, so the screen about the visit showed none of it. Calling
+            // and recording share a row, which is honest about how they're
+            // used: on the doorstep it's one or the other.
             VStack(spacing: 10) {
-                filledPrimaryButton(primaryTitle, action: onPrimary)
+                HStack(spacing: 10) {
+                    borderedBlueButton("Call client", height: 52, action: onCall)
+                    filledPrimaryButton(primaryTitle, action: onPrimary)
+                }
                 HStack(spacing: 10) {
                     borderedBlueButton("Directions", action: onDirections)
                     borderedBlueButton("Reschedule", action: onReschedule)
                 }
-                filledPrimaryButton("Call client", action: onCall)
                 borderedDestructiveButton("Cancel", action: onCancel)
             }
         case .recorded:
@@ -242,6 +250,10 @@ struct VisitActionSheet: View {
             Text(title)
                 .font(.headline)
                 .foregroundStyle(.white)
+                // Half-width now, so a long title shrinks rather than wrapping
+                // the row taller than the button beside it.
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
                 .background(Self.recordBlue,
@@ -269,15 +281,22 @@ struct VisitActionSheet: View {
         .buttonStyle(.plain)
     }
 
-    private func borderedBlueButton(_ title: String, action: @escaping () -> Void) -> some View {
+    /// `height` is 50 on its own or beside another bordered button, and 52 when
+    /// it sits next to the filled primary — a one-point mismatch reads as a
+    /// misprint when the two are side by side.
+    private func borderedBlueButton(_ title: String,
+                                    height: CGFloat = 50,
+                                    action: @escaping () -> Void) -> some View {
         Button {
             closeThen(action)
         } label: {
             Text(title)
                 .font(.subheadline.weight(.medium))
-        .foregroundStyle(Self.recordBlue)
+                .foregroundStyle(Self.recordBlue)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
-                .frame(height: 50)
+                .frame(height: height)
                 .background(Self.recordBlue.opacity(0.16),
                             in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(

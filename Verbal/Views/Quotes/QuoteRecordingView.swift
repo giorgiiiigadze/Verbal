@@ -21,13 +21,11 @@ struct QuoteRecordingView: View {
     @State private var isSaving = false
     @State private var isGenerating = false
     @State private var generated: GeneratedQuote?
-    /// Non-nil only after the deferred cloud transcription completed. Kept on
-    /// the review screen rather than in a transient toast so it is auditable.
     @State private var assemblyAIModel: String?
-    /// Kept visible on the generated document when the cloud pass falls back;
-    /// silent fallback protects the quote, but it made provider setup
-    /// impossible to verify in the field.
     @State private var assemblyAIFallbackReason: String?
+    /// Generation saves a draft in the background. This is separate from the
+    /// final Done action so the review can say what has really happened.
+    @State private var isDraftSaved = false
     /// True when generation ran but the transcript wasn't enough to build a quote.
     @State private var notEnough = false
     /// The AI's "there wasn't enough here" note. Held apart from the transcript
@@ -46,6 +44,8 @@ struct QuoteRecordingView: View {
     @State private var showDiscardConfirmation = false
     /// Offers the prices the extraction was missing to the rate card.
     @State private var showSaveRates = false
+    @State private var showReviewEditor = false
+    @State private var hasEditedLineItems = false
     /// Which of the generating phrases the banner is currently showing.
     @State private var phraseIndex = 0
     /// Set when the user accepts from that sheet, so recording starts once the
@@ -65,6 +65,11 @@ struct QuoteRecordingView: View {
     /// saved and formatted in the wrong denomination.
     @State private var currencyMismatch: CurrencyMismatch?
     @AppStorage(RecordingPreferences.hapticsEnabledKey) private var recordingHapticsEnabled = true
+    // On unless the user turned it off in Settings → Recording. Nothing is
+    // asked here: the question arrived at the moment the quote was appearing,
+    // which is no place to weigh up a transcription vendor.
+    @AppStorage(RecordingPreferences.cloudTranscriptCheckEnabledKey)
+    private var cloudTranscriptCheckEnabled = true
 
     /// Editable transcript — mirrors live transcription, editable by hand when stopped.
     @State private var transcriptText = ""
@@ -134,6 +139,25 @@ struct QuoteRecordingView: View {
     /// Identifies the zero-height view pinned below the transcript.
     private static let transcriptEndAnchor = "transcriptEnd"
 
+    /// Isolated from the already dense screen body so Swift does not have to
+    /// infer this conditional text-field branch with every other recording UI.
+    @ViewBuilder
+    private var recordingTitle: some View {
+        if recorder.isSessionActive {
+            Text(displayTitle)
+                .foregroundStyle(.secondary)
+                .shimmer(active: recorder.hasContent)
+                .font(.robotoSlab(29, relativeTo: .title))
+        } else {
+            TextField("Untitled quote", text: $title, axis: .vertical)
+                .focused($focus, equals: .title)
+                .foregroundStyle(Color(.mainText))
+                .textFieldStyle(.plain)
+                .lineLimit(2)
+                .font(.robotoSlab(29, relativeTo: .title))
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollViewReader { scroll in
@@ -147,23 +171,7 @@ struct QuoteRecordingView: View {
                             bookedVisitBanner(for: visit)
                         }
 
-                        Group {
-                            // Paused counts as mid-session: a call arriving
-                            // shouldn't turn the title into an editable field
-                            // under the user's thumb.
-                            if recorder.isSessionActive {
-                                Text(displayTitle)
-                                    .foregroundStyle(.secondary)
-                                    .shimmer(active: recorder.hasContent)
-                            } else {
-                                TextField("Untitled quote", text: $title, axis: .vertical)
-                                    .focused($focus, equals: .title)
-                                    .foregroundStyle(Color(.mainText))
-                                    .textFieldStyle(.plain)
-                                    .lineLimit(2)
-                            }
-                        }
-                        .font(.robotoSlab(29, relativeTo: .title))
+                        recordingTitle
 
                         // Only over a quote that exists. When the transcript
                         // wasn't enough there is nothing to name a client on and
@@ -175,7 +183,7 @@ struct QuoteRecordingView: View {
                             chips
                                 .transition(.opacity)
                             if let assemblyAIFallbackReason {
-                                Text("AssemblyAI check wasn’t used: \(assemblyAIFallbackReason)")
+                                Text("Accuracy check wasn’t used: \(assemblyAIFallbackReason)")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -332,7 +340,14 @@ struct QuoteRecordingView: View {
                         // words from it no longer changes anything on screen. After a
                         // "not enough detail" pass it is still the live transcript, so
                         // undo keeps working there.
-                        .disabled(transcriptText.isEmpty || recorder.isRecording
+                        //
+                        // Off while paused as well as while recording, not only
+                        // for symmetry: a paused screen shows the recorder's own
+                        // text, while this edits `transcriptText` behind it. So
+                        // the taps changed nothing visible, and generating threw
+                        // them away by re-reading the recorder — a control that
+                        // appeared to be broken, twice over.
+                        .disabled(transcriptText.isEmpty || recorder.isSessionActive
                                   || isGenerating || generated != nil)
                     }
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
@@ -386,13 +401,21 @@ struct QuoteRecordingView: View {
                 }
             }
         }
+        .sheet(isPresented: $showReviewEditor) {
+            if let generated {
+                GeneratedQuoteEditorSheet(quote: generated, currency: currency) { edited in
+                    self.generated = edited
+                    hasEditedLineItems = true
+                }
+            }
+        }
         .alert("Discard this recording?", isPresented: $showDiscardConfirmation) {
             Button("Discard recording", role: .destructive) {
                 discardCurrentRecording()
             }
             Button("Keep recording", role: .cancel) {}
         } message: {
-            Text("This will permanently remove the recording and its transcript.")
+            Text("This will permanently remove the recording, transcript, and draft.")
         }
         .alert(item: $currencyMismatch) { mismatch in
             Alert(
@@ -406,6 +429,18 @@ struct QuoteRecordingView: View {
                     startBanking(mismatch.quote)
                 }
             )
+        }
+        // A recording is work in progress. The close button routes through the
+        // discard confirmation; prevent the sheet gesture from bypassing it.
+        .interactiveDismissDisabled(recorder.isSessionActive || hasText || generated != nil || isGenerating)
+        // A sheet can leave through its drag indicator as well as our explicit
+        // controls. The recorder owns an active audio engine, not just UI state,
+        // so always give it back when this view goes away.
+        .onDisappear {
+            Task {
+                await recorder.stop()
+                recorder.discardCapturedAudio()
+            }
         }
     }
 
@@ -455,6 +490,7 @@ struct QuoteRecordingView: View {
         isGenerating = true
         notEnough = false
         notEnoughNote = ""
+        isDraftSaved = false
         assemblyAIModel = nil
         assemblyAIFallbackReason = nil
         // Always open on the first step, however the last run ended.
@@ -467,33 +503,31 @@ struct QuoteRecordingView: View {
                 // here made the screen claim it was building a quote while it
                 // was still listening, and could read the temporary audio file
                 // before its final buffers had been written.
-                if recorder.isRecording {
+                if recorder.isSessionActive {
                     await recorder.stop()
                     // `onChange` intentionally follows words only while the
                     // mic is live; take this final snapshot ourselves so the
                     // last phrase reaches both transcription paths.
                     transcriptText = recorder.transcript
                 }
-                // Keep Apple SpeechTranscriber as the immediate, offline live
-                // experience. Once the user asks to generate, improve the
-                // source text once from the saved audio; failure intentionally
-                // falls back to the words already visible on screen.
-                if recorder.hasCompleteCapturedAudio,
+                // A hand-edited transcript is the source of truth. The optional
+                // accuracy pass only runs while the text still matches the live
+                // recognizer's final result, so it can never erase a correction.
+                let canRefine = transcriptText == recorder.transcript
+                if cloudTranscriptCheckEnabled,
+                   canRefine,
+                   recorder.hasCompleteCapturedAudio,
                    let audioURL = recorder.capturedAudioURL {
-                    // The rate card improves recognition, but failing to load
-                    // it must never suppress the whole accuracy pass.
                     let rateCard = (try? await QuoteService.fetchRateCard(activeOnly: true)) ?? []
                     do {
-                    let refined = try await QuoteService.refineTranscript(audioURL: audioURL, rateCard: rateCard)
-                    transcriptText = refined.text
-                    assemblyAIModel = refined.model ?? "Universal"
+                        let refined = try await QuoteService.refineTranscript(audioURL: audioURL, rateCard: rateCard)
+                        transcriptText = refined.text
+                        assemblyAIModel = refined.model ?? "Universal"
                     } catch {
                         assemblyAIFallbackReason = error.localizedDescription
                     }
-                } else if recorder.capturedAudioURL == nil {
-                    assemblyAIFallbackReason = "No audio was available for the check."
-                } else if !recorder.hasCompleteCapturedAudio {
-                    assemblyAIFallbackReason = "Recording was interrupted, so the complete audio is unavailable."
+                } else if cloudTranscriptCheckEnabled, !canRefine {
+                    assemblyAIFallbackReason = "Kept your transcript edits instead."
                 }
                 recorder.discardCapturedAudio()
                 result = try await QuoteService.generate(
@@ -561,6 +595,7 @@ struct QuoteRecordingView: View {
         let bankedCurrency = currency
         savedTitle = bankedTitle
         savedClient = bankedClient
+        isDraftSaved = false
         bankTask = Task {
             let id = try? await QuoteService.save(
                 result, transcript: bankedTranscript, title: bankedTitle,
@@ -572,6 +607,7 @@ struct QuoteRecordingView: View {
             // quote in it, and stayed one short for the rest of the session.
             if id != nil {
                 await session.refreshQuoteUsage()
+                isDraftSaved = true
             }
             return id
         }
@@ -588,6 +624,50 @@ struct QuoteRecordingView: View {
         }
     }
 
+    /// The review editor is deliberately available before leaving this screen.
+    /// Write its changed lines into the already-banked draft when the person
+    /// finishes, rather than deleting and recreating a draft (which could race
+    /// the free-quote allowance).
+    private func applyLineItemEdits(to id: UUID, quote: GeneratedQuote) async throws {
+        let stored = try await QuoteService.fetchLineItems(quoteId: id)
+        // The editor can add and remove lines, so the two lists need not be the
+        // same length. Match by position: rows the draft already has are
+        // updated in place, extra stored rows are deleted, and anything added
+        // beyond them is inserted.
+        for removed in stored.dropFirst(quote.lineItems.count) {
+            try await QuoteService.deleteLineItem(id: removed.id)
+        }
+        for (position, item) in quote.lineItems.enumerated() {
+            let description = item.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            let unit = item.unit?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if position < stored.count {
+                try await QuoteService.updateLineItem(
+                    id: stored[position].id,
+                    description: description,
+                    type: item.type,
+                    quantity: item.quantity,
+                    unit: unit,
+                    unitPrice: item.unitPrice,
+                    priceSource: item.unitPrice == nil ? "missing" : "spoken",
+                    position: position
+                )
+            } else {
+                try await QuoteService.insertLineItem(
+                    quoteId: id,
+                    description: description.isEmpty ? nil : description,
+                    type: item.type,
+                    quantity: item.quantity,
+                    unit: (unit?.isEmpty ?? true) ? nil : unit,
+                    unitPrice: item.unitPrice,
+                    priceSource: item.unitPrice == nil ? "missing" : "spoken",
+                    position: position
+                )
+            }
+        }
+        let subtotal = quote.lineItems.reduce(0.0) { $0 + ($1.lineTotal ?? 0) }
+        try await QuoteService.updateSubtotal(id: id, subtotal: subtotal)
+    }
+
     /// Drop the banked draft — the quote is being replaced by a fresh generation,
     /// or thrown away outright. Without this, every re-record would leave an
     /// orphan behind in the Drafts list. Awaits the write first: a draft still in
@@ -595,6 +675,7 @@ struct QuoteRecordingView: View {
     private func discardDraft() {
         guard let pending = bankTask else { return }
         bankTask = nil
+        isDraftSaved = false
         savedTitle = ""
         savedClient = ""
         Task {
@@ -720,6 +801,14 @@ struct QuoteRecordingView: View {
             // on Done while it is still in flight would otherwise save a second copy.
             if let id = await bankTask?.value {
                 await applyEdits(to: id)
+                if hasEditedLineItems {
+                    do {
+                        try await applyLineItemEdits(to: id, quote: generated)
+                    } catch {
+                        toast = Toast(style: .error, message: "Couldn't save line-item changes")
+                        return
+                    }
+                }
                 onSavedQuote?(id)
                 dismiss()
                 return
@@ -845,7 +934,7 @@ struct QuoteRecordingView: View {
                     Image(systemName: "pencil")
                 }
                 if let assemblyAIModel {
-                    QuoteChip(text: "AssemblyAI checked") {
+                    QuoteChip(text: "Accuracy checked") {
                         Image(systemName: "checkmark.seal.fill")
                     }
                     .accessibilityLabel("Transcript checked with AssemblyAI using \(assemblyAIModel)")
@@ -959,6 +1048,15 @@ struct QuoteRecordingView: View {
                     }
                 }
                 .padding(.top, 4)
+
+                Button {
+                    showReviewEditor = true
+                } label: {
+                    Label("Edit line items", systemImage: "pencil")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color(.blueAccentText))
+                }
+                .buttonStyle(.plain)
 
                 let subtotal = quote.lineItems.compactMap(\.lineTotal).reduce(0, +)
                 let missing = quote.lineItems.filter(\.isMissingPrice).count
@@ -1147,9 +1245,8 @@ struct QuoteRecordingView: View {
         }
     }
 
-    /// Once the quote is ready, recording has finished. Replace the recording
-    /// capsule with one unambiguous action that saves the banked draft and
-    /// returns to the quotes list.
+    /// Once the quote is ready, recording has finished. It is already being
+    /// banked as a draft, so the action simply finishes the review and returns.
     private var saveQuoteBar: some View {
         Button(action: save) {
             HStack(spacing: 8) {
@@ -1158,7 +1255,7 @@ struct QuoteRecordingView: View {
                         .tint(colorScheme == .dark ? Color(.homeBackground) : .white)
                 } else {
                     Image(systemName: "checkmark")
-                    Text("Save quote")
+                    Text("Done")
                 }
             }
             .font(.body.weight(.semibold))
@@ -1169,6 +1266,9 @@ struct QuoteRecordingView: View {
         }
         .buttonStyle(.plain)
         .disabled(isSaving)
+        .accessibilityHint(isDraftSaved
+                           ? "Your quote is saved as a draft."
+                           : "Finishes saving your quote as a draft.")
     }
 
     private var recordingControlBar: some View {

@@ -65,6 +65,12 @@ struct MainTabView: View {
             get: { showCreate },
             set: { wantsToCreate in
                 if wantsToCreate {
+                    // The other half of the race above: the announcement can be
+                    // raised in the same tick as this tap, and then neither is
+                    // guarded by the other. Losing one tap while a sheet is
+                    // arriving costs a second tap; losing the race costs the
+                    // record button until the app is relaunched.
+                    guard !showShareLinkNews else { return }
                     if store.canCreateQuote(remaining: session.freeQuotesRemaining) {
                         if hasSeenRecordingIntro {
                             showCreate = true
@@ -139,7 +145,7 @@ struct MainTabView: View {
             // After the tabs have settled: a sheet racing the first paint reads
             // as something that went wrong.
             try? await Task.sleep(for: .seconds(0.8))
-            showShareLinkNews = true
+            presentShareLinkNewsIfNeeded()
         }
         .task { await notificationRouter.refreshVisitReminderBadge() }
         .sheet(isPresented: $showShareLinkNews, onDismiss: { seenShareLinkNews = true }) {
@@ -219,6 +225,31 @@ struct MainTabView: View {
         .onChange(of: session.visitStore.hasCompletedInitialSync) { _, _ in
             presentCalendarIntroIfNeeded()
         }
+    }
+
+    /// The announcement, raised only if it is still the only thing asking for
+    /// the screen — and checked *here*, after the 0.8s wait, not before it.
+    ///
+    /// It was the one sheet on this view raised by a timer and the one with no
+    /// guards, which is a worse combination than it sounds. Two sheets
+    /// presented together are not both shown: UIKit keeps one, drops the other,
+    /// and leaves the loser's `isPresented` stuck `true` with nothing on
+    /// screen. Every later tap then sets a flag that is already `true`, so
+    /// SwiftUI has no change to react to and the record button is dead for the
+    /// rest of the launch. The window was 0.8 seconds after the quote list
+    /// loaded — which is roughly when someone who opened the app to record
+    /// reaches for the button.
+    private func presentShareLinkNewsIfNeeded() {
+        guard !seenShareLinkNews,
+              !showShareLinkNews,
+              session.listsLoaded,
+              !session.quotes.isEmpty,
+              !showRecordingIntro,
+              !showCreate,
+              !showCalendarIntro,
+              !store.isPaywallPresented
+        else { return }
+        showShareLinkNews = true
     }
 
     /// One sheet at a time. The intro is deliberately not queued behind an

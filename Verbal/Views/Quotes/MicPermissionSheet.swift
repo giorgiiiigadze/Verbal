@@ -75,7 +75,7 @@ struct MicPermissionSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 benefit(icon: "iphone.gen3",
                         title: "Transcribed on your phone",
-                        detail: "Your voice becomes text on-device. The audio never leaves it.")
+                        detail: "Your voice becomes text on-device. An accuracy check also sends it to our transcription provider, which you can turn off in Settings.")
                 benefit(icon: "text.quote",
                         title: "Only the words are kept",
                         detail: "The transcript is saved with the quote so you can redo it. The recording isn't.")
