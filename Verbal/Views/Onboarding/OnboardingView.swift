@@ -134,7 +134,10 @@ struct OnboardingView: View {
                         // Never a wall: every question has a sensible answer
                         // already, and nobody should be stuck on the way to the
                         // thing they installed the app for.
-                        if isSkippable {
+                        // Once they have answered, the primary footer is the
+                        // honest next action. Leaving Skip up at that point
+                        // makes two controls advance the same screen.
+                        if isSkippable && !canContinue {
                             Button("Skip") { skip() }
                                 .font(.subheadline)
                                 .foregroundStyle(Color(.mainText))

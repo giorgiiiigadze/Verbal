@@ -60,6 +60,10 @@ struct QuoteRecordingView: View {
     /// Currency for the quote being built — always the user's Settings default.
     /// Changing a quote's currency happens later, on the detail page.
     @State private var currency = AppCurrency.current.rawValue
+    /// A spoken currency is meaningful only when it is explicit. The prompt
+    /// returns bare numeric prices, so catch a conflict here before a draft is
+    /// saved and formatted in the wrong denomination.
+    @State private var currencyMismatch: CurrencyMismatch?
     @AppStorage(RecordingPreferences.hapticsEnabledKey) private var recordingHapticsEnabled = true
 
     /// Editable transcript — mirrors live transcription, editable by hand when stopped.
@@ -390,6 +394,19 @@ struct QuoteRecordingView: View {
         } message: {
             Text("This will permanently remove the recording and its transcript.")
         }
+        .alert(item: $currencyMismatch) { mismatch in
+            Alert(
+                title: Text("Check the quote currency"),
+                message: Text("You said \(mismatch.spoken.displayName), but this quote is set to \(mismatch.selected.displayName). Which should this quote use?"),
+                primaryButton: .default(Text("Use \(mismatch.spoken.symbol) \(mismatch.spoken.rawValue)")) {
+                    currency = mismatch.spoken.rawValue
+                    startBanking(mismatch.quote)
+                },
+                secondaryButton: .cancel(Text("Keep \(mismatch.selected.rawValue)")) {
+                    startBanking(mismatch.quote)
+                }
+            )
+        }
     }
 
     /// Put the prices just typed onto the quote as well as the rate card. Doing
@@ -519,10 +536,15 @@ struct QuoteRecordingView: View {
                 }
             }
             // Bank it straight away, before the user has a chance to lose it —
-            // but in the background. The quote is on screen and they should be
-            // reading it, not watching a spinner wait on four round trips.
+            // but only after any explicitly spoken currency has been confirmed.
+            // The quote is on screen and they should be reading it, not
+            // watching a spinner wait on four round trips.
             if !result.lineItems.isEmpty {
-                startBanking(result)
+                if let spoken = explicitlySpokenCurrency(in: transcriptText), spoken.rawValue != currency {
+                    currencyMismatch = CurrencyMismatch(spoken: spoken, selectedCode: currency, quote: result)
+                } else {
+                    startBanking(result)
+                }
             }
         }
     }
@@ -596,6 +618,34 @@ struct QuoteRecordingView: View {
         levels.removeAll()
         discardDraft()
         dismiss()
+    }
+
+    private struct CurrencyMismatch: Identifiable {
+        let spoken: AppCurrency
+        let selectedCode: String
+        let quote: GeneratedQuote
+        var id: String { "\(spoken.rawValue)-\(selectedCode)" }
+        var selected: AppCurrency { AppCurrency(rawValue: selectedCode) ?? .usd }
+    }
+
+    /// Only flag unambiguous currency names/symbols. A bare "dollars" is not
+    /// enough because it could mean USD, CAD, or AUD; the selected currency is
+    /// safer than a false correction in that case.
+    private func explicitlySpokenCurrency(in transcript: String) -> AppCurrency? {
+        let patterns: [(AppCurrency, String)] = [
+            (.gbp, #"£|\b(?:pound|pounds|quid)\b"#),
+            (.eur, #"€|\b(?:euro|euros)\b"#),
+            (.cad, #"\b(?:canadian dollar|canadian dollars|cad)\b"#),
+            (.aud, #"\b(?:australian dollar|australian dollars|aud)\b"#),
+            (.usd, #"\b(?:us dollar|us dollars|usd)\b"#),
+            (.chf, #"\b(?:swiss franc|swiss francs|chf)\b"#),
+            (.jpy, #"¥|\b(?:yen|jpy)\b"#),
+            (.inr, #"₹|\b(?:rupee|rupees|inr)\b"#),
+            (.aed, #"د\.إ|\b(?:dirham|dirhams|aed)\b"#),
+        ]
+        return patterns.first { _, pattern in
+            transcript.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+        }?.0
     }
 
     /// Says the microphone was taken away, and stays until it's picked back up.
@@ -880,15 +930,10 @@ struct QuoteRecordingView: View {
         // two were not allowed to drift apart by four points.
         VStack(alignment: .leading, spacing: 20) {
             if !quote.jobSummary.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Summary")
-                        .font(.headline)
-                        .foregroundStyle(Color(.mainText))
-                    Text(emphasizedSummary(quote.jobSummary, font: .body))
-                        .lineSpacing(2)
-                        .foregroundStyle(Color(.mainText))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                Text(emphasizedSummary(quote.jobSummary, font: .body))
+                    .lineSpacing(2)
+                    .foregroundStyle(Color(.mainText))
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             ScopeList(items: quote.scope, documentStyle: true, useDocumentFont: false)

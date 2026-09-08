@@ -429,6 +429,28 @@ begin
   select public.reserve_request_budget(pg_temp.uid(6), 'extract_quote') into result;
   perform pg_temp.t_ok(result = 'hour', 'the next extraction is refused at the hourly limit');
 
+  -- Transcription has its own paid-operation budget. Old reservations are
+  -- removed before the count so this scratch table remains bounded.
+  insert into public.request_budget_reservations (user_id, operation, created_at)
+  values (pg_temp.uid(7), 'transcribe_audio', now() - interval '25 hours');
+  select public.reserve_request_budget(pg_temp.uid(7), 'transcribe_audio') into result;
+  perform pg_temp.t_ok(result is null, 'a transcription slot is reserved below the hourly limit');
+  perform pg_temp.t_ok(
+    not exists (
+      select 1 from public.request_budget_reservations
+      where user_id = pg_temp.uid(7)
+        and operation = 'transcribe_audio'
+        and created_at <= now() - interval '24 hours'
+    ),
+    'expired transcription reservations are pruned before counting'
+  );
+  for i in 2..30 loop
+    select public.reserve_request_budget(pg_temp.uid(7), 'transcribe_audio') into result;
+    perform pg_temp.t_ok(result is null, 'a transcription slot is reserved below the hourly limit');
+  end loop;
+  select public.reserve_request_budget(pg_temp.uid(7), 'transcribe_audio') into result;
+  perform pg_temp.t_ok(result = 'hour', 'the next transcription is refused at the hourly limit');
+
   for i in 1..12 loop
     select public.reserve_request_budget(pg_temp.uid(6), 'verify_subscription') into result;
     perform pg_temp.t_ok(result is null, 'a subscription-check slot is reserved below the hourly limit');

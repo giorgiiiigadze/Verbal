@@ -210,18 +210,18 @@ struct OnboardingStatStep: View {
 
                 // This is the honest fallback when the time questions were
                 // skipped: show the change in workflow without pretending we
-                // know how long their own quoting takes.
-                VStack(alignment: .leading, spacing: 0) {
-                    workflowStep(icon: "checkmark", title: "Finish the job",
+                // know how long their own quoting takes. The three moments are
+                // peers, so present them as a centered sequence rather than a
+                // settings-style list.
+                HStack(alignment: .top, spacing: 12) {
+                    workflowStep(icon: .visitNote, title: "Finish the job",
                                  detail: "The work is still fresh.")
-                    workflowConnector
-                    workflowStep(icon: "mic.fill", title: "Say what you did",
+                    workflowStep(icon: .onboardingSpeak, title: "Say what you did",
                                  detail: "Verbal writes the quote as you speak.")
-                    workflowConnector
-                    workflowStep(icon: "paperplane.fill", title: "Send it before you leave",
+                    workflowStep(icon: .onboardingSend, title: "Send it before you leave",
                                  detail: "A clear quote, ready for the customer.")
                 }
-                .padding(.top, 8)
+                .padding(.top, 12)
             }
         }
         .padding(.bottom, 24)
@@ -340,33 +340,31 @@ struct OnboardingStatStep: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func workflowStep(icon: String, title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image(systemName: icon)
-                .font(.subheadline.weight(.semibold))
+    private func workflowStep(icon: ImageResource, title: String, detail: String) -> some View {
+        VStack(spacing: 10) {
+            Image(icon)
+                .resizable()
+                .scaledToFit()
                 .foregroundStyle(OnboardingStyle.action)
-                .frame(width: 34, height: 34)
-                .background(OnboardingStyle.action.opacity(0.12), in: Circle())
+                .frame(width: 48, height: 48)
+                .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(spacing: 5) {
                 Text(title)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color(.mainText))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
                 Text(detail)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.top, 2)
         }
-    }
-
-    private var workflowConnector: some View {
-        Rectangle()
-            .fill(OnboardingStyle.action.opacity(0.25))
-            .frame(width: 1, height: 24)
-            .padding(.leading, 16.5)
-            .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -544,36 +542,12 @@ struct OnboardingPricesStep: View {
             // off; running out past it, it reads as one that carries on.
             .scrollClipDisabled()
 
-            ScrollView {
-                VStack(spacing: 8) {
-                    ForEach(model.pickedList) { job in
-                        priceRow(name: job.name, unit: job.unit, field: .price(job.name),
-                                 text: Binding(
-                                    get: { model.prices[job.name] ?? "" },
-                                    set: { model.prices[job.name] = $0 }
-                                 ))
-                    }
+            priceRow(name: "Your hourly rate", unit: "hour", field: .hourlyRate,
+                     text: $model.hourlyRateText)
 
-                    // Asked of everyone, including the trades whose preset list
-                    // already offers an hourly rate, because this is the number
-                    // the conclusion measures the subscription against. Kept
-                    // visually apart from the ticked jobs: it is the one row
-                    // here they didn't ask for.
-                    if !model.pickedList.contains(where: { $0.name == OnboardingModel.hourlyRateName }) {
-                        priceRow(name: "Your hourly rate",
-                                 unit: "hour",
-                                 field: .hourlyRate,
-                                 text: $model.hourlyRateText)
-                    }
-                }
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y > geometry.contentInsets.top + 1
-            } action: { _, isScrolled in
-                isProgressHeaderSeparated = isScrolled
-            }
-            .onDisappear { isProgressHeaderSeparated = false }
+            Text("You can add job-specific prices after your first quote.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 

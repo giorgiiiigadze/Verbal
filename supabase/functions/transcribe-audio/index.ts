@@ -53,9 +53,9 @@ Deno.serve(async (req) => {
     headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({
       audio_url: upload_url,
-      // API identifiers use hyphens, not the display name's decimal point.
-      // Universal-2 is the documented fallback for unsupported languages.
-      speech_models: ["universal-3-5-pro", "universal-2"],
+      // Universal-3 Pro is the documented high-accuracy model. Universal-2
+      // remains the ordered fallback for languages it does not support.
+      speech_models: ["universal-3-pro", "universal-2"],
       keyterms_prompt: keyterms(req),
       format_text: true,
     }),

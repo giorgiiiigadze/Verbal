@@ -67,11 +67,13 @@ final class OnboardingModel {
     /// nothing ticked means there is nothing to price.
     var steps: [Step] {
         var list: [Step] = [.hook, .method, .quoteVolume, .quoteDuration, .stat, .trade]
-        if !TradePresets.jobs(for: trade).isEmpty {
-            list.append(.jobs)
-            if !pickedJobs.isEmpty { list.append(.prices) }
-        }
-        list.append(contentsOf: [.business, .summary, .result, .milestone, .review,
+        // Pricing a whole list of jobs before the first quote is admin work,
+        // not setup. Collect one useful anchor now; the Rate Card can grow
+        // once the user has seen a real quote.
+        list.append(.prices)
+        // The outcome is already shown in the "Your time back" step. Do not
+        // repeat it with an empty rate-card tally before the user reaches the app.
+        list.append(contentsOf: [.business, .summary, .milestone, .review,
                                  .goal, .commitment, .expectations, .notifications])
         return list
     }

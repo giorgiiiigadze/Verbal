@@ -62,6 +62,8 @@ struct HomeView: View {
     /// Someone who deletes every quote still isn't a beginner, and the teaching
     /// card would greet them by explaining their own job back to them.
     @AppStorage("hasEverHadQuotes") private var hasEverHadQuotes = false
+    @AppStorage("hasPromptedRateCardAfterFirstQuote") private var hasPromptedRateCardAfterFirstQuote = false
+    @State private var showRateCardNudge = false
     /// A display preference only. Scheduled visits keep syncing and remain in
     /// the Schedule tab when this preview is hidden.
     @AppStorage(HomePreferences.upcomingVisitsVisibleKey) private var upcomingVisitsVisible = true
@@ -352,7 +354,12 @@ struct HomeView: View {
                                 apply: applyVisits,
                                 reconnected: { Task { await session.visitStore.sync() } }))
             .onChange(of: quotes.isEmpty) { _, isEmpty in
-                if !isEmpty { hasEverHadQuotes = true }
+                guard !isEmpty else { return }
+                let isFirstQuote = !hasEverHadQuotes
+                hasEverHadQuotes = true
+                if isFirstQuote, !hasPromptedRateCardAfterFirstQuote {
+                    showRateCardNudge = true
+                }
             }
             .onChange(of: visits) { _, _ in
                 promptForMissedVisitIfNeeded()
@@ -384,6 +391,17 @@ struct HomeView: View {
                 Button("Cancel", role: .cancel) {}
             } message: { quote in
                 Text("This creates a copy of “\(quote.displayTitle)” as a new draft.")
+            }
+            .alert("Make the next quote faster", isPresented: $showRateCardNudge) {
+                Button("Set up rate card") {
+                    hasPromptedRateCardAfterFirstQuote = true
+                    showRateCard = true
+                }
+                Button("Not now", role: .cancel) {
+                    hasPromptedRateCardAfterFirstQuote = true
+                }
+            } message: {
+                Text("Add the prices you use most while this job is still fresh.")
             }
         }
         .toast($toast)
