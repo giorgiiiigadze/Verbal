@@ -644,7 +644,7 @@ struct HomeView: View {
                     .font(.subheadline.weight(.semibold))
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
+                    .appDisclosureIcon()
             }
             .foregroundStyle(OnboardingStyle.action)
             .padding(.horizontal, 16)

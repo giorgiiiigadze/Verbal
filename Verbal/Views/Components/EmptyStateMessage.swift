@@ -100,7 +100,7 @@ struct EmptyStatePill: View {
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color(.mainText))
                 Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.semibold))
+                    .appDisclosureIcon()
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 18)

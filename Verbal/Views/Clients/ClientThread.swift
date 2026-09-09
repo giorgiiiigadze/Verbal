@@ -80,7 +80,7 @@ struct ClientThread: View {
                 Text("See all \(quotes.count) quotes")
                     .font(.footnote.weight(.medium))
                 Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.semibold))
+                    .appDisclosureIcon()
                 Spacer(minLength: 0)
             }
             .foregroundStyle(.secondary)

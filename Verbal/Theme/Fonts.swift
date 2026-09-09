@@ -6,6 +6,19 @@
 import SwiftUI
 import UIKit
 
+enum AppIconMetrics {
+    static let tabArtwork: CGFloat = 25
+    static let avatarPlaceholderRatio: CGFloat = 0.46
+}
+
+extension View {
+    /// Shared treatment for chevrons that disclose another screen or row.
+    func appDisclosureIcon() -> some View {
+        font(.caption2.weight(.semibold))
+            .frame(width: 12)
+    }
+}
+
 extension Font {
     /// Roboto Slab — the app's primary custom font.
     /// Scales with Dynamic Type via `relativeTo`.

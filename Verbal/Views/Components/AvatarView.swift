@@ -40,7 +40,7 @@ struct AvatarView: View {
 
     private var placeholder: some View {
         Image(systemName: "person.fill")
-            .font(.system(size: size * 0.5))
+            .font(.system(size: size * AppIconMetrics.avatarPlaceholderRatio, weight: .medium))
             .foregroundStyle(.secondary)
             .frame(width: size, height: size)
             .background(Color(.systemGray5), in: Circle())

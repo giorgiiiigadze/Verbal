@@ -177,9 +177,9 @@ private struct VisitsCalendarHeader: View {
     private let calendar = Calendar.current
     var body: some View {
         HStack(spacing: 2) {
-            Button { moveMonth(-1) } label: { Image(systemName: "chevron.left").font(.footnote.weight(.semibold)).frame(width: 32, height: 32) }.accessibilityLabel("Previous month")
+            Button { moveMonth(-1) } label: { Image(systemName: "chevron.left").font(.footnote.weight(.semibold)).frame(width: 44, height: 44) }.accessibilityLabel("Previous month")
             Text(selectedDay.formatted(.dateTime.month(.wide).year())).font(.title3.weight(.semibold)).foregroundStyle(Color(.mainText))
-            Button { moveMonth(1) } label: { Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).frame(width: 32, height: 32) }.accessibilityLabel("Next month")
+            Button { moveMonth(1) } label: { Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).frame(width: 44, height: 44) }.accessibilityLabel("Next month")
             Spacer()
             if !calendar.isDateInToday(selectedDay) { Button("Today") { selectedDay = calendar.startOfDay(for: .now) }.font(.footnote.weight(.medium)).foregroundStyle(Color(.royalBlue600)) }
         }.padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 6)
@@ -218,7 +218,7 @@ private struct VisitsDaySelector: View {
             Button { moveDay(-1) } label: {
                 Image(systemName: "chevron.left")
                     .font(.footnote.weight(.semibold))
-                    .frame(width: 36, height: 40)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityLabel("Previous day")
 
@@ -241,7 +241,7 @@ private struct VisitsDaySelector: View {
             Button { moveDay(1) } label: {
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
-                    .frame(width: 36, height: 40)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityLabel("Next day")
         }

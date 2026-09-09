@@ -68,7 +68,7 @@ struct RecordingIntroSheet: View {
                         .foregroundStyle(Color(.mainText))
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.body.weight(.semibold))
+                            .appDisclosureIcon()
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 20)

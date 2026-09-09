@@ -388,7 +388,7 @@ struct RateCardView: View {
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
+                    .appDisclosureIcon()
                     .foregroundStyle(Color(.blueAccentText))
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -313,7 +313,7 @@ struct MainTabView: View {
 
     private static func avatarIcon(for image: UIImage) -> UIImage? {
         if lastAvatarSource === image { return lastAvatarIcon }
-        let icon = MainTabView.circularIcon(from: image, size: 26)
+        let icon = MainTabView.circularIcon(from: image, size: AppIconMetrics.tabArtwork)
         lastAvatarSource = image
         lastAvatarIcon = icon
         return icon

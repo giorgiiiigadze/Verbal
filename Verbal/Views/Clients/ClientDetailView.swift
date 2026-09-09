@@ -546,7 +546,7 @@ struct ClientDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             if showsDisclosure {
                 Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.semibold))
+                    .appDisclosureIcon()
                     .foregroundStyle(.tertiary)
             }
         }

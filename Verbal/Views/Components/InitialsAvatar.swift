@@ -43,7 +43,7 @@ struct InitialsAvatar: View {
             .overlay {
                 if initials.isEmpty {
                     Image(systemName: "person.fill")
-                        .font(.system(size: size * 0.42, weight: .medium))
+                        .font(.system(size: size * AppIconMetrics.avatarPlaceholderRatio, weight: .medium))
                         .foregroundStyle(Color(hue: hue, saturation: 0.55, brightness: 0.42))
                 } else {
                     // Slab, matching the name beside it. Initials are a

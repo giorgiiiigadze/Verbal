@@ -447,7 +447,7 @@ struct ScheduleVisitSheet: View {
                         .lineLimit(2)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
+                        .appDisclosureIcon()
                         .foregroundStyle(.tertiary)
                 }
                 .contentShape(.rect)
