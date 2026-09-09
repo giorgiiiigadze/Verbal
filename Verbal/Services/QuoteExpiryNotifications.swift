@@ -109,9 +109,7 @@ enum QuoteExpiryNotifications {
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             return true
-        case .notDetermined:
-            return (try? await center.requestAuthorization(options: [.alert, .sound])) == true
-        case .denied:
+        case .notDetermined, .denied:
             return false
         @unknown default:
             return false

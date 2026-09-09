@@ -378,6 +378,7 @@ struct OnboardingTradeStep: View {
     @Bindable var model: OnboardingModel
     var focused: FocusState<OnboardingField?>.Binding
     @Binding var isProgressHeaderSeparated: Bool
+    @Binding var isFooterSeparated: Bool
 
     private static let otherTrade = "Something else"
 
@@ -440,7 +441,17 @@ struct OnboardingTradeStep: View {
         } action: { _, isScrolled in
             isProgressHeaderSeparated = isScrolled
         }
-        .onDisappear { isProgressHeaderSeparated = false }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            let visibleBottom = geometry.contentOffset.y + geometry.containerSize.height
+            let contentBottom = geometry.contentSize.height + geometry.contentInsets.bottom
+            return visibleBottom < contentBottom - 1
+        } action: { _, hasContentBelow in
+            isFooterSeparated = hasContentBelow
+        }
+        .onDisappear {
+            isProgressHeaderSeparated = false
+            isFooterSeparated = false
+        }
     }
 }
 
@@ -456,6 +467,7 @@ struct OnboardingTradeStep: View {
 struct OnboardingJobsStep: View {
     @Bindable var model: OnboardingModel
     @Binding var isProgressHeaderSeparated: Bool
+    @Binding var isFooterSeparated: Bool
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -496,7 +508,17 @@ struct OnboardingJobsStep: View {
         } action: { _, isScrolled in
             isProgressHeaderSeparated = isScrolled
         }
-        .onDisappear { isProgressHeaderSeparated = false }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            let visibleBottom = geometry.contentOffset.y + geometry.containerSize.height
+            let contentBottom = geometry.contentSize.height + geometry.contentInsets.bottom
+            return visibleBottom < contentBottom - 1
+        } action: { _, hasContentBelow in
+            isFooterSeparated = hasContentBelow
+        }
+        .onDisappear {
+            isProgressHeaderSeparated = false
+            isFooterSeparated = false
+        }
     }
 }
 

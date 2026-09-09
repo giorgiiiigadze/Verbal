@@ -65,7 +65,14 @@ struct NotificationSettingsView: View {
 
             Section {
                 LabeledContent("Permission", value: permissionLabel)
-                if authorizationStatus == .denied {
+                if authorizationStatus == .notDetermined {
+                    Button("Allow notifications") {
+                        Task {
+                            _ = await ScheduledVisitNotifications.requestAuthorization()
+                            await rescheduleReminders()
+                        }
+                    }
+                } else if authorizationStatus == .denied {
                     Button {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
                             openURL(url)
@@ -101,7 +108,7 @@ struct NotificationSettingsView: View {
         case .denied:
             return "Notifications are blocked in iOS Settings. Turn them on there to receive upcoming quote reminders."
         case .notDetermined:
-            return "iOS will ask for permission the next time reminders are enabled or a visit is saved."
+            return "Allow notifications to receive upcoming quote reminders on this device."
         default:
             return "Permission is active for local reminders on this device."
         }

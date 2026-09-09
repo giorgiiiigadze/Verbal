@@ -88,33 +88,103 @@ struct OnboardingMilestoneStep: View {
     let model: OnboardingModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            OnboardingHeading(title: "You're set up.")
+        // Echo the earlier time-saved result: this is the second payoff in the
+        // flow, so it should read as an outcome rather than another form card.
+        VStack(alignment: .leading, spacing: 28) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                Text("Your setup")
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(OnboardingStyle.action)
 
-            OnboardingCard(tinted: true) {
-                tally(value: "\(model.draftRates.count)",
-                      label: model.draftRates.count == 1 ? "rate on your card" : "rates on your card")
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text("\(model.draftRates.count)")
+                        .font(.scaledSystem(80, relativeTo: .largeTitle,
+                                            weight: .medium, design: .rounded))
+                        .tracking(-4)
+                        .foregroundStyle(OnboardingStyle.action)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text(model.draftRates.count == 1 ? "rate" : "rates")
+                        .font(.robotoSlab(28, relativeTo: .title))
+                        .foregroundStyle(Color(.mainText))
+                }
+
+                Text("ready on your rate card")
+                    .font(.callout)
+                    .foregroundStyle(Color(.mainText))
+            }
+            .accessibilityElement(children: .combine)
+
+            Rectangle()
+                .fill(Color(.separator).opacity(0.6))
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Ready for your first quote")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                setupRow(icon: .tradeTools,
+                         title: "Trade",
+                         value: tradeName)
+                setupRow(icon: .quoteDocument,
+                         title: "Quote details",
+                         value: businessName)
             }
 
-            Text("Everything you've set up is waiting on the other side of this.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 8) {
+                Circle()
+                    .fill(Color(.statusWarningText))
+                    .frame(width: 7, height: 7)
+                    .padding(.top, 5)
+                    .accessibilityHidden(true)
+                Text("Everything you've set up is waiting on the other side of this.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Spacer(minLength: 0)
         }
     }
 
-    private func tally(value: String, label: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(value)
-                .font(.robotoSlab(34, relativeTo: .largeTitle))
+    private var tradeName: String {
+        model.summaryFacts.first(where: { $0.label == "Trade" })?.value
+            ?? "Ready to add"
+    }
+
+    private var businessName: String {
+        model.summaryFacts.first(where: { $0.label == "Business" })?.value
+            ?? "Using your saved defaults"
+    }
+
+    private func setupRow(icon: ImageResource, title: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            Image(icon)
+                .resizable()
+                .scaledToFit()
                 .foregroundStyle(OnboardingStyle.action)
-            Text(label)
-                .font(.callout)
-                .foregroundStyle(Color(.mainText))
-                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 30, height: 30)
+                .frame(width: 42, height: 42)
+                .background(OnboardingStyle.action.opacity(0.10),
+                            in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color(.mainText))
+                    .lineLimit(1)
+            }
         }
+        .accessibilityElement(children: .combine)
     }
 }
 

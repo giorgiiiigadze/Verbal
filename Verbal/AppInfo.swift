@@ -36,12 +36,9 @@ enum AppInfo {
     /// shared domain, but it leaves HTML unstyled and its buttons dead.
     ///
     /// The origin here must match an entry in the quote function's
-    /// `ALLOWED_ORIGINS`, or the page's fetch is refused by CORS. `www` is the
-    /// canonical host — the apex redirects to it — so this points straight at
-    /// `www` rather than taking a redirect hop that would drop the trailing
-    /// slash and could drop the token in the fragment with it.
+    /// `ALLOWED_ORIGINS`, or the page's fetch is refused by CORS.
     static func shareURL(token: String) -> URL? {
-        URL(string: "https://www.theverbal.app/q/#\(token)")
+        URL(string: "https://theverbal.app/q/#\(token)")
     }
 
     /// Nil until the app is on the App Store and has a numeric id. Until then

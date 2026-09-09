@@ -434,6 +434,11 @@ struct HomeView: View {
         if quotes.isEmpty && !hasLoaded {
             // Still loading first paint — placeholders, not "no quotes".
             loadingState
+        } else if quotes.isEmpty && !hasResolvedUpcomingVisits {
+            // Quotes and visits are independent requests. On a clean install
+            // there is no visit cache, so an empty array is not an empty-state
+            // answer until VisitStore has made its first sync attempt.
+            loadingState
         } else if quotes.isEmpty && loadFailed {
             // Don't claim the account is empty when the fetch failed.
             errorState
@@ -453,7 +458,16 @@ struct HomeView: View {
     /// Showing the floating control beside it creates two identical calls to
     /// action on one screen.
     private var showsFirstQuoteCard: Bool {
-        quotes.isEmpty && timelineVisits.isEmpty && hasLoaded && !loadFailed && !hasEverHadQuotes
+        quotes.isEmpty && timelineVisits.isEmpty && hasLoaded
+            && hasResolvedUpcomingVisits && !loadFailed && !hasEverHadQuotes
+    }
+
+    /// A non-empty cache is immediately useful; an empty cache is conclusive
+    /// only after the first server attempt (or after VisitStore confirms that
+    /// the device is offline). Keeping this distinction prevents a false empty
+    /// state without delaying cached visits by a frame.
+    private var hasResolvedUpcomingVisits: Bool {
+        !visits.isEmpty || session.visitStore.hasCompletedInitialSync
     }
 
     private var isDeleteQuoteAlertPresented: Binding<Bool> {
@@ -477,13 +491,24 @@ struct HomeView: View {
         handleRecorderPresentationChange(isPresented: isPresented)
     }
 
-    /// An upcoming-visit section begins at the very top of Home, so its
-    /// surface continues behind the title and toolbar instead of starting at a
-    /// visible horizontal seam. In Light Mode this resolves to the same
-    /// existing Home background; in Dark Mode it uses the swapped visit tone.
+    /// The upcoming-visit area begins at the very top of Home, so its surface
+    /// continues behind the title and toolbar instead of starting at a visible
+    /// horizontal seam. The empty upcoming card belongs to that same area and
+    /// must keep the surface even when there are no visit rows yet.
     private var topTimelineSurface: Color {
-        guard !timelineVisits.isEmpty else { return Color(.homeBackground) }
+        guard !timelineVisits.isEmpty || showsUpcomingVisitsEmptyCard else {
+            return Color(.homeBackground)
+        }
         return TimelineSection.Surface.warm.color(for: colorScheme)
+    }
+
+    private var showsUpcomingVisitsEmptyCard: Bool {
+        !quotes.isEmpty
+            && upcomingVisitsVisible
+            && filter == .all
+            && searchQuery.isEmpty
+            && timelineVisits.isEmpty
+            && hasResolvedUpcomingVisits
     }
 
     // MARK: - List
@@ -511,8 +536,7 @@ struct HomeView: View {
             List {
                 pageTitle
 
-                if upcomingVisitsVisible, filter == .all,
-                   searchQuery.isEmpty, timelineVisits.isEmpty {
+                if showsUpcomingVisitsEmptyCard {
                     upcomingVisitsEmptyCard
                 }
 
@@ -576,8 +600,15 @@ struct HomeView: View {
             Image("VisitsEmpty")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 32, height: 32)
+                .frame(width: 24, height: 24)
                 .foregroundStyle(Color(.statusMutedText))
+                .frame(width: 42, height: 42)
+                .background(Color(.fieldFill),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("No upcoming visits yet")
@@ -590,16 +621,18 @@ struct HomeView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .background(upcomingVisitCardFill,
+                    in: Self.upcomingVisitCardShape)
+        .clipShape(Self.upcomingVisitCardShape)
+        .overlay(
+            Self.upcomingVisitCardShape
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
-        }
-        .listRowBackground(Color(.homeBackground))
+        )
+        .listRowBackground(TimelineSection.Surface.warm.color(for: colorScheme))
         .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 20, trailing: 20))
+        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 20, trailing: 20))
     }
 
     private var upcomingVisitOverflowRow: some View {

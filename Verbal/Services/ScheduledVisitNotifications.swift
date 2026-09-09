@@ -129,14 +129,31 @@ enum ScheduledVisitNotifications {
         await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
-    private static func notificationsAllowed(center: UNUserNotificationCenter) async -> Bool {
+    /// Present the system prompt only in response to a user action. Reminder
+    /// restoration also runs at launch, and letting that path ask made the two
+    /// independent reminder systems race each other after a reinstall.
+    static func requestAuthorization() async -> Bool {
+        let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             return true
         case .notDetermined:
-            return (try? await center.requestAuthorization(options: [.alert, .sound])) == true
+            return (try? await center.requestAuthorization(
+                options: [.alert, .sound, .badge])) == true
         case .denied:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    private static func notificationsAllowed(center: UNUserNotificationCenter) async -> Bool {
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .notDetermined, .denied:
             return false
         @unknown default:
             return false

@@ -41,6 +41,10 @@ struct OnboardingView: View {
     /// Long onboarding lists scroll beneath the fixed progress header. Once
     /// they do, a separator gives that header a deliberate, settled edge.
     @State private var isProgressHeaderSeparated = false
+    /// Long option lists also pass beneath the fixed Continue area. The footer
+    /// gains an edge only while there is content below it; at the true end the
+    /// normal breathing room returns and the divider disappears.
+    @State private var isFooterSeparated = false
     @FocusState private var focusedField: OnboardingField?
 
     private typealias Step = OnboardingModel.Step
@@ -206,6 +210,16 @@ struct OnboardingView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
                 footer
+                    .padding(.top, 12)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(Color(.separator))
+                            .frame(height: 0.5)
+                            .padding(.horizontal, -24)
+                            .opacity(isFooterSeparated ? 1 : 0)
+                    }
+                    .animation(.easeInOut(duration: 0.18),
+                               value: isFooterSeparated)
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
@@ -216,6 +230,7 @@ struct OnboardingView: View {
         }
         .onChange(of: step) { _, _ in
             isProgressHeaderSeparated = false
+            isFooterSeparated = false
         }
         .animation(.easeInOut(duration: 0.3), value: step)
         // The only way back, so it is worth being generous about what counts as
@@ -252,10 +267,12 @@ struct OnboardingView: View {
             OnboardingStatStep(answers: model.answers)
         case .trade:
             OnboardingTradeStep(model: model, focused: $focusedField,
-                                isProgressHeaderSeparated: $isProgressHeaderSeparated)
+                                isProgressHeaderSeparated: $isProgressHeaderSeparated,
+                                isFooterSeparated: $isFooterSeparated)
         case .jobs:
             OnboardingJobsStep(model: model,
-                               isProgressHeaderSeparated: $isProgressHeaderSeparated)
+                               isProgressHeaderSeparated: $isProgressHeaderSeparated,
+                               isFooterSeparated: $isFooterSeparated)
         case .prices:
             OnboardingPricesStep(model: model, currencyCode: $currencyCode,
                                  focused: $focusedField,
@@ -418,9 +435,7 @@ struct OnboardingView: View {
             return
         }
         Task {
-            _ = try? await UNUserNotificationCenter.current().requestAuthorization(
-                options: [.alert, .sound, .badge]
-            )
+            _ = await ScheduledVisitNotifications.requestAuthorization()
             await MainActor.run { completeOnboarding() }
         }
     }

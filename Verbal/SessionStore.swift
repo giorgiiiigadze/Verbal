@@ -582,6 +582,12 @@ final class SessionStore {
         async let quotesResult = try? await QuoteService.fetchQuotes()
         async let rateResult = try? await QuoteService.fetchRateCard()
         async let bizResult = try? await BusinessService.fetch()
+        // Upcoming is first-paint data too. A reinstall has no device cache, so
+        // starting this only after every other preload made Home briefly claim
+        // there were no visits while the server still had them. Run it beside
+        // the other Home requests and don't publish `listsLoaded` until its
+        // first answer (or offline fallback) is known.
+        async let visitsResult: Void = visitStore.sync()
         // Fetched beside the rate card, not after it. The offer needs both, but
         // only the comparison does — asking for one and then the other would put
         // a second round trip in front of the tab for no gain.
@@ -594,6 +600,7 @@ final class SessionStore {
         let fetchedBusiness = await bizResult
         let fetchedPrices = await spokenResult
         let fetchedUsage = await usageResult
+        await visitsResult
         guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
         quotes = fetchedQuotes ?? quotes
         rateCard = fetchedRates ?? rateCard
@@ -607,11 +614,6 @@ final class SessionStore {
         // only worth anything on the launch after next, when there's no signal.
         let ids = quotes.map(\.id)
         Task.detached { await QuoteService.cacheMissingTranscripts(for: ids) }
-
-        // Also off the critical path: Upcoming is already on screen from the
-        // cache. This is what pushes a visit booked with no signal, and pulls
-        // one booked on another phone.
-        Task { await visitStore.sync() }
 
         // Same: nothing waits on it, and it only writes when the answer has
         // changed. It is what makes the daily allowance roll over at the user's

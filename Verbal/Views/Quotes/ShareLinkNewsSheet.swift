@@ -41,7 +41,7 @@ struct ShareLinkNewsSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "link")
                     .font(.footnote.weight(.semibold))
-                Text("verbal.app/q/…")
+                Text("theverbal.app/q/…")
                     .font(.footnote.monospaced())
                 Spacer(minLength: 0)
                 Image(systemName: "doc.on.doc")
@@ -57,13 +57,13 @@ struct ShareLinkNewsSheet: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(Color(.blueAccentText).opacity(0.5))
 
-            HStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Bathroom re-tiling")
                         .font(.headline)
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(1)
-                    Text("Marina Kapanadze · 2 days ago")
+                    Text("Marina Kapanadze · 2d ago")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
