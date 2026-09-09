@@ -476,10 +476,12 @@ do $$
 declare source_id uuid; copy_id uuid; original_line_id uuid; n int; subtotal numeric;
 begin
   set local role authenticated;
-  perform pg_temp.as_user(pg_temp.uid(7)::text);
+  -- Atomicity is the subject of this block. Use the subscribed fixture so an
+  -- earlier quota test cannot prevent the setup quote from being created.
+  perform pg_temp.as_user(pg_temp.uid(2)::text);
 
   insert into public.quotes (user_id, title, job_summary, subtotal)
-  values (pg_temp.uid(7), 'Atomic source', 'Keep this complete', 10)
+  values (pg_temp.uid(2), 'Atomic source', 'Keep this complete', 10)
   returning id into source_id;
   insert into public.quote_line_items
     (quote_id, description, type, quantity, unit_price, price_source, position)
