@@ -27,13 +27,11 @@ struct LineItemsSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var items: [EditableLineItem]
-    /// Server ids present when editing began, to compute deletions on save.
-    private let originalIDs: Set<UUID>
-    /// What each saved line looked like when the sheet opened, and where it sat,
-    /// so a save can tell the lines that were edited from the ones that were
-    /// only looked at.
+    /// Preserve the model's confidence only on lines the user did not edit.
+    /// Once a person changes a line, the model's old confidence no longer
+    /// describes what is being saved.
     private let originalByID: [UUID: EditableLineItem]
-    private let originalPositionByID: [UUID: Int]
+    private let originalConfidenceByID: [UUID: String]
     /// The whole list as it opened, for the one question Save needs answered:
     /// is there anything to write? `EditableLineItem` compares on the fields
     /// that reach the database, so this catches edits, additions, deletions
@@ -58,17 +56,12 @@ struct LineItemsSheet: View {
         var built: [EditableLineItem] = []
         for item in lineItems { built.append(EditableLineItem(item)) }
         _items = State(initialValue: built)
-        originalIDs = Set(lineItems.map(\.id))
-
-        var byID: [UUID: EditableLineItem] = [:]
-        var positionByID: [UUID: Int] = [:]
-        for (position, item) in built.enumerated() {
-            guard let serverID = item.serverID else { continue }
-            byID[serverID] = item
-            positionByID[serverID] = position
-        }
-        originalByID = byID
-        originalPositionByID = positionByID
+        originalByID = Dictionary(uniqueKeysWithValues: built.compactMap { item in
+            item.serverID.map { ($0, item) }
+        })
+        originalConfidenceByID = Dictionary(uniqueKeysWithValues: lineItems.compactMap { item in
+            item.confidence.map { (item.id, $0) }
+        })
         originalItems = built
     }
 
@@ -166,57 +159,22 @@ struct LineItemsSheet: View {
         let newTotal = total
 
         do {
-            // Delete items removed during editing.
-            let survivingIDs = Set(items.compactMap(\.serverID))
-            for removed in originalIDs.subtracting(survivingIDs) {
-                try await QuoteService.deleteLineItem(id: removed)
-            }
-
-            // Update existing items and insert new ones, preserving order.
-            for (index, item) in items.enumerated() {
-                let source = item.unitPrice != nil ? "spoken" : "missing"
+            let replacements = items.enumerated().map { index, item in
                 let description = item.description.trimmingCharacters(in: .whitespacesAndNewlines)
                 let unit = item.unit.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let serverID = item.serverID {
-                    // A line nobody touched is left alone. Rewriting all of them
-                    // spent a round trip per line to change one, and an update
-                    // clears `confidence` — so correcting a single price threw
-                    // away what the model had said about every other line on the
-                    // quote. Position is part of the comparison: a line that
-                    // hasn't been edited still has to be written if a deletion
-                    // above it moved it.
-                    if originalByID[serverID] == item,
-                       originalPositionByID[serverID] == index {
-                        continue
-                    }
-                    try await QuoteService.updateLineItem(
-                        id: serverID,
-                        description: description.isEmpty ? nil : description,
-                        type: item.type,
-                        quantity: item.quantity,
-                        unit: unit.isEmpty ? nil : unit,
-                        unitPrice: item.unitPrice,
-                        priceSource: source,
-                        position: index
-                    )
-                } else {
-                    try await QuoteService.insertLineItem(
-                        quoteId: quoteId,
-                        description: description.isEmpty ? nil : description,
-                        type: item.type,
-                        quantity: item.quantity,
-                        unit: unit.isEmpty ? nil : unit,
-                        unitPrice: item.unitPrice,
-                        priceSource: source,
-                        position: index
-                    )
-                }
+                return QuoteLineItemReplacement(
+                    description: description.isEmpty ? nil : description,
+                    type: item.type,
+                    quantity: item.quantity,
+                    unit: unit.isEmpty ? nil : unit,
+                    unitPrice: item.unitPrice,
+                    confidence: item.serverID.flatMap { id in
+                        originalByID[id] == item ? originalConfidenceByID[id] : nil
+                    },
+                    position: index
+                )
             }
-
-            // Only the subtotal: a database trigger derives tax and total from
-            // it, so writing those here would be this screen's arithmetic
-            // overruling the server's on the way past.
-            try await QuoteService.updateSubtotal(id: quoteId, subtotal: newSubtotal)
+            try await QuoteService.replaceLineItems(quoteId: quoteId, items: replacements)
         } catch {
             // Staying open on a failed write is the point: closing with a
             // success haptic would tell the user their prices were saved when

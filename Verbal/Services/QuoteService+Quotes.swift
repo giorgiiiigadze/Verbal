@@ -31,11 +31,9 @@ extension QuoteService {
     @discardableResult
     static func save(_ quote: GeneratedQuote, transcript: String, title: String,
                      currency: String, clientName: String = "") async throws -> UUID {
-        guard let userID = client.auth.currentUser?.id else {
+        guard client.auth.currentUser != nil else {
             throw QuoteError.notSignedIn
         }
-
-        let customerId = try? await customerID(named: clientName, userID: userID)
 
         // Deterministic totals (never trust the LLM for math).
         let subtotal = quote.lineItems.reduce(into: 0.0) { sum, item in
@@ -67,14 +65,14 @@ extension QuoteService {
             taxRate: taxRate,
             status: "draft",
             currency: currency,
-            customerId: customerId,
+            customerName: clientName,
             lineItems: lineItems,
             transcript: transcript
         )
         let quoteID: UUID
         do {
             quoteID = try await client
-                .rpc("create_quote_with_details", params: params)
+                .rpc("create_quote_with_client_details", params: params)
                 .execute()
                 .value
         } catch let error where error.isMissingDatabaseFunction {
@@ -98,107 +96,17 @@ extension QuoteService {
     /// and all line items are copied; the copy is never pinned). Returns the new id.
     @discardableResult
     static func duplicateQuote(id: UUID) async throws -> UUID {
-        guard let userID = client.auth.currentUser?.id else {
+        guard client.auth.currentUser != nil else {
             throw QuoteError.notSignedIn
         }
-
-        // Read the source quote's copyable fields.
-        struct SourceQuote: Decodable {
-            let title: String?
-            let jobSummary: String?
-            let scope: [String]?
-            let notes: String?
-            let subtotal: Double?
-            let total: Double
-            let currency: String?
-            /// Carried over so the copy is taxed like its original — the database
-            /// recomputes tax_amount and total from it, so leaving it out would
-            /// quietly produce a tax-free duplicate.
-            let taxRate: Double?
-            enum CodingKeys: String, CodingKey {
-                case title
-                case jobSummary = "job_summary"
-                case scope, notes, subtotal, total, currency
-                case taxRate = "tax_rate"
-            }
+        struct Params: Encodable {
+            let quoteId: UUID
+            enum CodingKeys: String, CodingKey { case quoteId = "p_quote_id" }
         }
-        let source: SourceQuote = try await client
-            .from("quotes")
-            .select("title, job_summary, scope, notes, subtotal, total, currency, tax_rate")
-            .eq("id", value: id)
-            .single()
+        return try await client
+            .rpc("duplicate_quote_with_details", params: Params(quoteId: id))
             .execute()
             .value
-
-        struct DuplicateInsert: Encodable {
-            let userId: UUID
-            let title: String?
-            let jobSummary: String?
-            let scope: [String]
-            let notes: String?
-            let subtotal: Double?
-            let total: Double
-            let status: String
-            let currency: String?
-            let taxRate: Double
-            enum CodingKeys: String, CodingKey {
-                case userId = "user_id"
-                case title
-                case jobSummary = "job_summary"
-                case scope, notes, subtotal, total, status, currency
-                case taxRate = "tax_rate"
-            }
-        }
-        let copiedTitle = source.title.map { $0.isEmpty ? $0 : "\($0) (copy)" }
-        let inserted: InsertedRow = try await client
-            .from("quotes")
-            .insert(DuplicateInsert(
-                userId: userID,
-                title: copiedTitle,
-                jobSummary: source.jobSummary,
-                scope: source.scope ?? [],
-                notes: source.notes,
-                subtotal: source.subtotal,
-                total: source.total,
-                status: "draft",
-                currency: source.currency,
-                taxRate: source.taxRate ?? 0
-            ), returning: .representation)
-            .select("id")
-            .single()
-            .execute()
-            .value
-        let newID = inserted.id
-
-        // Copy the line items over, preserving order.
-        let items = try await fetchLineItems(quoteId: id)
-        let copies = items.map { item in
-            LineItemInsert(
-                quoteId: newID,
-                description: item.description ?? "",
-                type: item.type,
-                quantity: item.quantity,
-                unit: item.unit,
-                unitPrice: item.unitPrice,
-                priceSource: item.priceSource,
-                confidence: item.confidence,
-                position: item.position
-            )
-        }
-        if !copies.isEmpty {
-            try await client.from("quote_line_items").insert(copies).execute()
-        }
-
-        // Copy the transcript so the duplicate keeps "View transcript" and can be
-        // regenerated, just like the original.
-        if let transcript = try? await fetchTranscript(quoteId: id) ?? cachedTranscript(quoteId: id) {
-            try await client.from("transcripts").insert(
-                TranscriptInsert(quoteId: newID, text: transcript, sttSource: "on_device", status: "done")
-            ).execute()
-            cacheTranscript(transcript, quoteId: newID)
-        }
-
-        return newID
     }
 
     /// Delete a quote (line items and transcript cascade via FK).
@@ -346,6 +254,10 @@ extension QuoteService {
             throw QuoteError.notSignedIn
         }
 
+        // This compatibility path cannot make customer and quote creation one
+        // transaction, but it must still surface a customer failure instead of
+        // silently saving a clientless quote.
+        let customerId = try await customerID(named: params.customerName, userID: userID)
         let inserted: InsertedRow = try await client
             .from("quotes")
             .insert(DirectQuoteInsert(
@@ -358,7 +270,7 @@ extension QuoteService {
                 taxRate: params.taxRate,
                 status: params.status,
                 currency: params.currency,
-                customerId: params.customerId
+                customerId: customerId
             ), returning: .representation)
             .select("id")
             .single()
@@ -467,7 +379,7 @@ private struct CreateQuoteParams: Encodable {
     let taxRate: Double
     let status: String
     let currency: String
-    let customerId: UUID?
+    let customerName: String
     let lineItems: [GeneratedLineItemInsert]
     let transcript: String
 
@@ -480,7 +392,7 @@ private struct CreateQuoteParams: Encodable {
         case taxRate = "p_tax_rate"
         case status = "p_status"
         case currency = "p_currency"
-        case customerId = "p_customer_id"
+        case customerName = "p_customer_name"
         case lineItems = "p_line_items"
         case transcript = "p_transcript"
     }

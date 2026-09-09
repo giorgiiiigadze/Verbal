@@ -16,14 +16,11 @@ extension QuoteService {
     /// `tradeContext` is passed in rather than fetched: the caller already
     /// holds the preloaded profile, and a round trip here would sit on the
     /// critical path of the one moment the user is watching a spinner.
-    static func generate(transcript: String, tradeContext: String?) async throws -> GeneratedQuote {
-        // Both are round trips, so run them together rather than back to back:
-        // this sits on the critical path of the one moment the user is watching
-        // a spinner.
-        async let rateCardTask = try? await fetchRateCard(activeOnly: true)
-        async let taxRateTask = (try? await BusinessService.fetch())?.defaultTaxRate
-        let rateCard = await rateCardTask ?? []
-        let taxRate = await taxRateTask
+    static func generate(transcript: String, tradeContext: String?,
+                         rateCard: [RateCardItem], taxRate: Double?) async throws -> GeneratedQuote {
+        // The recording screen starts these database reads before the accuracy
+        // pass. Accepting their results here keeps them off the critical path
+        // and avoids fetching the rate card a second time.
         let request = ExtractRequest(
             transcript: transcript,
             rate_card: rateCard.map {

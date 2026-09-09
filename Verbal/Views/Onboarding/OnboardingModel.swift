@@ -24,7 +24,7 @@ final class OnboardingModel {
         case hook, method, quoteVolume, quoteDuration, stat
         case trade, jobs, prices, business, summary
         // The preview of the setup they have just completed.
-        case result, milestone, review
+        case result, milestone
         // Conclusion — what they came for, what it costs, what happens next.
         case goal, commitment, expectations, notifications
     }
@@ -73,7 +73,7 @@ final class OnboardingModel {
         list.append(.prices)
         // The outcome is already shown in the "Your time back" step. Do not
         // repeat it with an empty rate-card tally before the user reaches the app.
-        list.append(contentsOf: [.business, .summary, .milestone, .review,
+        list.append(contentsOf: [.business, .summary, .milestone,
                                  .goal, .commitment, .expectations, .notifications])
         return list
     }

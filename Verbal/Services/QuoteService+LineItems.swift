@@ -9,6 +9,25 @@ import Foundation
 import Supabase
 
 extension QuoteService {
+    /// Replace a quote's complete line-item list and recompute its subtotal in
+    /// one database transaction. A connection failure therefore leaves either
+    /// the old list or the new one, never a mixture of both.
+    @discardableResult
+    static func replaceLineItems(quoteId: UUID, items: [QuoteLineItemReplacement]) async throws -> Double {
+        struct Params: Encodable {
+            let quoteId: UUID
+            let lineItems: [QuoteLineItemReplacement]
+            enum CodingKeys: String, CodingKey {
+                case quoteId = "p_quote_id"
+                case lineItems = "p_line_items"
+            }
+        }
+        return try await client
+            .rpc("replace_quote_line_items", params: Params(quoteId: quoteId, lineItems: items))
+            .execute()
+            .value
+    }
+
     /// Fetch a quote's line items, in order.
     static func fetchLineItems(quoteId: UUID) async throws -> [QuoteLineItem] {
         let response: PostgrestResponse<[QuoteLineItem]> = try await client
@@ -111,6 +130,21 @@ extension QuoteService {
             .update(Payload(subtotal: subtotal))
             .eq("id", value: id)
             .execute()
+    }
+}
+
+struct QuoteLineItemReplacement: Encodable {
+    let description: String?
+    let type: String
+    let quantity: Double?
+    let unit: String?
+    let unitPrice: Double?
+    let confidence: String?
+    let position: Int
+
+    enum CodingKeys: String, CodingKey {
+        case description, type, quantity, unit, confidence, position
+        case unitPrice = "unit_price"
     }
 }
 

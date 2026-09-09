@@ -21,6 +21,12 @@ import StoreKit
 import Supabase
 
 enum SubscriptionService {
+    enum ReportOutcome {
+        case accepted
+        case belongsToAnotherAccount
+        case unavailable
+    }
+
     private static var client: SupabaseClient { SupabaseManager.client }
 
     /// The last payload we successfully reported, so an unchanged entitlement
@@ -41,9 +47,9 @@ enum SubscriptionService {
     /// paywall until it lapses on its own, so a missed report costs nothing
     /// until it has been missed for a very long time.
     @MainActor
-    static func report(signedTransactions: [String], force: Bool = false) async {
-        guard client.auth.currentUser != nil else { return }
-        guard force || lastReported != signedTransactions else { return }
+    static func report(signedTransactions: [String], force: Bool = false) async -> ReportOutcome {
+        guard client.auth.currentUser != nil else { return .unavailable }
+        guard force || lastReported != signedTransactions else { return .accepted }
 
         struct Payload: Encodable {
             let signed_transactions: [String]
@@ -54,8 +60,15 @@ enum SubscriptionService {
                 options: FunctionInvokeOptions(body: Payload(signed_transactions: signedTransactions))
             )
             lastReported = signedTransactions
+            return .accepted
+        } catch FunctionsError.httpError(let code, _) where code == 403 {
+            // The server only uses 403 when Apple's signed appAccountToken names
+            // a different Verbal account. Preserve this distinction so the app
+            // never calls that permanent ownership decision "still syncing".
+            return .belongsToAnotherAccount
         } catch {
             // Left unreported, so the next refresh tries again.
+            return .unavailable
         }
     }
 

@@ -29,7 +29,6 @@ struct OnboardingView: View {
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
     @Environment(Store.self) private var store
-    @Environment(\.requestReview) private var requestReview
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var model = OnboardingModel()
@@ -179,7 +178,7 @@ struct OnboardingView: View {
                 .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 0) {
-                // Eighteen screens is long enough that "how much more of this"
+                // A multi-step setup is long enough that "how much more of this"
                 // is a fair question, and a hairline answers it without
                 // inviting anyone to stop and count.
                 if !isFirstStep {
@@ -201,7 +200,7 @@ struct OnboardingView: View {
                     stepView
                 }
                 // Each step arrives from the side it was going, so the sequence
-                // reads as forward motion rather than as eighteen unrelated
+                // reads as forward motion rather than as unrelated
                 // screens sharing a background.
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .offset(x: 24)),
@@ -285,8 +284,6 @@ struct OnboardingView: View {
             OnboardingResultStep(model: model, currencyCode: currencyCode)
         case .milestone:
             OnboardingMilestoneStep(model: model)
-        case .review:
-            OnboardingReviewStep()
         case .goal:
             OnboardingGoalStep(answers: model.answers)
         case .commitment:
@@ -340,11 +337,6 @@ struct OnboardingView: View {
             pairedFooter(primary: "Turn on notifications",
                          secondary: "Not now") { wantsNotifications in
                 finish(requestingNotifications: wantsNotifications)
-            }
-        case .review:
-            pairedFooter(primary: "Rate Verbal", secondary: "Not now") { wantsReview in
-                if wantsReview { requestReview() }
-                advance()
             }
         default:
             Button {

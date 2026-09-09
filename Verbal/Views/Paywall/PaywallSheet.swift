@@ -44,12 +44,24 @@ struct PaywallSheet: View {
         // makes, and for the same reason.
         NavigationStack {
             ScrollView {
-                content
+                Group {
+                    if store.subscriptionBelongsToAnotherAccount {
+                        accountMismatchContent
+                    } else {
+                        content
+                    }
+                }
                     .padding(.horizontal, 24)
                     .padding(.top, 24)
             }
             .scrollBounceBehavior(.basedOnSize)
-            .safeAreaInset(edge: .bottom) { actions }
+            .safeAreaInset(edge: .bottom) {
+                if store.subscriptionBelongsToAnotherAccount {
+                    accountMismatchActions
+                } else {
+                    actions
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(action: { dismiss() }) {
@@ -62,7 +74,7 @@ struct PaywallSheet: View {
                         Button(action: restorePurchases) {
                             Text("Restore Purchases")
                         }
-                        .disabled(isPurchasing || isRestoring)
+                        .disabled(isPurchasing || isRestoring || store.subscriptionBelongsToAnotherAccount)
                     } label: {
                         Image(systemName: "ellipsis")
                     }
@@ -82,6 +94,39 @@ struct PaywallSheet: View {
     }
 
     // MARK: - The case
+
+    private var accountMismatchContent: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "person.crop.circle.badge.exclamationmark")
+                .font(.system(size: 58, weight: .regular))
+                .foregroundStyle(accent)
+                .accessibilityHidden(true)
+            Text("Subscription linked to another account")
+                .font(.robotoSlab(26, relativeTo: .title2))
+                .foregroundStyle(Color(.mainText))
+                .multilineTextAlignment(.center)
+            Text("This Apple subscription belongs to a different Verbal account. Sign out and use the Verbal account that originally purchased Pro.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 36)
+    }
+
+    private var accountMismatchActions: some View {
+        Button("Got it") { dismiss() }
+            .font(.headline)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(accent, in: Capsule())
+            .buttonStyle(.plain)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(Color(.systemBackground))
+    }
 
     private var content: some View {
         VStack(spacing: 0) {

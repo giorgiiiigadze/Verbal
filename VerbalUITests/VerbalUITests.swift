@@ -6,10 +6,11 @@ final class VerbalUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        // A new device starts with onboarding; a returning signed-out person
-        // starts directly at sign-in. Both are valid launch states, and both
-        // must leave a clear, reachable path to authentication.
-        if app.buttons["Get Started"].waitForExistence(timeout: 8) { return }
+        // A new device starts with onboarding, a returning signed-out person
+        // starts at sign-in, and a simulator may retain a valid signed-in
+        // session. Every state must expose its primary next action.
+        if app.buttons["Get started"].waitForExistence(timeout: 8) { return }
+        if app.buttons["Record a quote"].exists { return }
 
         XCTAssertTrue(
             app.buttons["Continue with Google"].waitForExistence(timeout: 8),

@@ -745,7 +745,12 @@ final class SessionStore {
         // While the token still works. Afterwards there is no session to write
         // with, so a visit booked in a basement this morning would sit on the
         // phone until this account next signs in.
-        await visitStore.flushPending()
+        // Pending visits remain in the account-scoped local cache if the
+        // network is unavailable. Do not make signing out wait on URLSession's
+        // much longer request deadline.
+        _ = try? await withTimeout(.seconds(2)) {
+            await self.visitStore.flushPending()
+        }
         GoogleAuth.signOut()
         defer { clearSession() }
         do {

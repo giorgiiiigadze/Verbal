@@ -76,6 +76,10 @@ final class Store {
 
     private(set) var products: [Product] = []
     private(set) var isPro = false
+    /// StoreKit is device/Apple-ID scoped, while Verbal subscriptions are bound
+    /// to the account that bought them. This flag prevents a second account from
+    /// looking Pro locally and then failing every server-side save.
+    private(set) var subscriptionBelongsToAnotherAccount = false
     private(set) var isLoadingProducts = false
     #if DEBUG
     private var debugUnlocked = false
@@ -174,7 +178,22 @@ final class Store {
         // paywall can be stepped past on a simulator, and a switch in the app
         // that writes entitlement on the server is the exact thing the server
         // side of this was built not to have.
-        await SubscriptionService.report(signedTransactions: signed, force: forceReport)
+        let report = await SubscriptionService.report(
+            signedTransactions: signed,
+            force: forceReport
+        )
+        switch report {
+        case .accepted:
+            subscriptionBelongsToAnotherAccount = false
+        case .belongsToAnotherAccount:
+            subscriptionBelongsToAnotherAccount = true
+            isPro = false
+        case .unavailable:
+            // A temporary network failure must not revoke an entitlement that
+            // StoreKit has verified. Keep the last ownership decision until a
+            // server response replaces it.
+            break
+        }
     }
 
     #if DEBUG

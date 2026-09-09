@@ -469,12 +469,127 @@ begin
 end $$;
 reset role;
 
+-- ------------------------------------------------------------
+-- Multi-row quote mutations are atomic
+-- ------------------------------------------------------------
+do $$
+declare source_id uuid; copy_id uuid; original_line_id uuid; n int; subtotal numeric;
+begin
+  set local role authenticated;
+  perform pg_temp.as_user(pg_temp.uid(7)::text);
+
+  insert into public.quotes (user_id, title, job_summary, subtotal)
+  values (pg_temp.uid(7), 'Atomic source', 'Keep this complete', 10)
+  returning id into source_id;
+  insert into public.quote_line_items
+    (quote_id, description, type, quantity, unit_price, price_source, position)
+  values (source_id, 'Original', 'labor', 1, 10, 'spoken', 0)
+  returning id into original_line_id;
+  insert into public.transcripts (quote_id, text, stt_source, status)
+  values (source_id, 'original words', 'on_device', 'done');
+
+  begin
+    perform public.replace_quote_line_items(source_id, jsonb_build_array(
+      jsonb_build_object('description', 'Would partially land', 'type', 'labor',
+                         'quantity', 2, 'unit_price', 20, 'position', 0),
+      jsonb_build_object('description', 'Invalid', 'type', 'not-a-type',
+                         'quantity', 1, 'unit_price', 1, 'position', 1)
+    ));
+    raise exception 'FAIL  invalid line replacement unexpectedly succeeded';
+  exception when check_violation then
+    perform pg_temp.t_ok(
+      exists (select 1 from public.quote_line_items where id = original_line_id),
+      'a failed line-item replacement keeps the complete original list'
+    );
+  end;
+
+  select public.replace_quote_line_items(source_id, jsonb_build_array(
+    jsonb_build_object('description', 'Labour', 'type', 'labor',
+                       'quantity', 2, 'unit_price', 20, 'position', 0),
+    jsonb_build_object('description', 'Materials', 'type', 'material',
+                       'quantity', 3, 'unit_price', 5, 'position', 1)
+  )) into subtotal;
+  perform pg_temp.t_ok(subtotal = 55, 'line replacement computes its subtotal on the server');
+  perform pg_temp.t_ok(
+    (select q.subtotal = 55 and q.total = 55 from public.quotes q where q.id = source_id),
+    'line replacement updates the quote total in the same transaction'
+  );
+
+  select public.duplicate_quote_with_details(source_id) into copy_id;
+  select count(*) into n from public.quote_line_items where quote_id = copy_id;
+  perform pg_temp.t_ok(n = 2, 'atomic duplication copies every line item');
+  perform pg_temp.t_ok(
+    (select count(*) = 1 from public.transcripts where quote_id = copy_id),
+    'atomic duplication copies the transcript'
+  );
+  perform pg_temp.t_ok(
+    (select title = 'Atomic source (copy)' and status = 'draft' and not pinned
+       from public.quotes where id = copy_id),
+    'atomic duplication creates the expected draft'
+  );
+end $$;
+reset role;
+
+-- ------------------------------------------------------------
+-- Customer association is part of the quote transaction
+-- ------------------------------------------------------------
+do $$
+declare quote_id uuid; customer_id uuid;
+begin
+  set local role authenticated;
+  perform pg_temp.as_user(pg_temp.uid(2)::text);
+
+  select public.create_quote_with_client_details(
+    'Customer quote', 'Boiler service', array['Service boiler'], null,
+    75, 0, 'draft', 'USD', 'Atomic Customer',
+    jsonb_build_array(jsonb_build_object(
+      'description', 'Labour', 'type', 'labor', 'quantity', 1,
+      'unit_price', 75, 'position', 0
+    )), 'service the boiler'
+  ) into quote_id;
+
+  select q.customer_id into customer_id from public.quotes q where q.id = quote_id;
+  perform pg_temp.t_ok(
+    customer_id is not null and exists (
+      select 1 from public.customers c
+       where c.id = customer_id
+         and c.user_id = pg_temp.uid(2)
+         and c.name = 'Atomic Customer'
+    ),
+    'quote creation preserves its customer association'
+  );
+
+  begin
+    perform public.create_quote_with_client_details(
+      'Broken customer quote', 'Must roll back', '{}', null,
+      1, 0, 'draft', 'USD', 'Rollback Customer',
+      jsonb_build_array(jsonb_build_object(
+        'description', 'Invalid', 'type', 'not-a-type', 'quantity', 1,
+        'unit_price', 1, 'position', 0
+      )), 'invalid quote'
+    );
+    raise exception 'FAIL  invalid customer quote unexpectedly succeeded';
+  exception when check_violation then
+    perform pg_temp.t_ok(
+      not exists (
+        select 1 from public.customers
+         where user_id = pg_temp.uid(2) and name = 'Rollback Customer'
+      ),
+      'a failed quote save also rolls back its newly created customer'
+    );
+  end;
+end $$;
+reset role;
+
 -- Public execute is not suitable for RPCs that modify an account's data.
 select pg_temp.t_ok(
   not has_function_privilege('anon', 'public.create_quote_with_details(text, text, text[], text, numeric, numeric, text, text, uuid, jsonb, text)', 'execute')
   and not has_function_privilege('anon', 'public.ensure_share_token(uuid)', 'execute')
   and not has_function_privilege('anon', 'public.revoke_share_token(uuid)', 'execute')
-  and not has_function_privilege('anon', 'public.void_quote_usage(uuid)', 'execute'),
+  and not has_function_privilege('anon', 'public.void_quote_usage(uuid)', 'execute')
+  and not has_function_privilege('anon', 'public.replace_quote_line_items(uuid, jsonb)', 'execute')
+  and not has_function_privilege('anon', 'public.duplicate_quote_with_details(uuid)', 'execute')
+  and not has_function_privilege('anon', 'public.create_quote_with_client_details(text, text, text[], text, numeric, numeric, text, text, text, jsonb, text)', 'execute'),
   'anonymous callers cannot execute account-mutating RPCs'
 );
 

@@ -499,6 +499,12 @@ struct QuoteRecordingView: View {
             defer { isGenerating = false }
             let result: GeneratedQuote
             do {
+                // Start independent database work immediately. Tax can finish
+                // entirely behind transcription, and the one rate-card result
+                // is reused by both transcription and extraction.
+                async let rateCardTask = try? await QuoteService.fetchRateCard(activeOnly: true)
+                async let taxRateTask = (try? await BusinessService.fetch())?.defaultTaxRate
+
                 // Generate is an explicit finish action. Leaving the mic live
                 // here made the screen claim it was building a quote while it
                 // was still listening, and could read the temporary audio file
@@ -510,6 +516,20 @@ struct QuoteRecordingView: View {
                     // last phrase reaches both transcription paths.
                     transcriptText = recorder.transcript
                 }
+                let rateCard = await rateCardTask ?? []
+                let taxRate = await taxRateTask
+                let originalTranscript = transcriptText
+                // Extract the already-complete on-device words while the
+                // accuracy provider checks them. If it corrects a word or
+                // number, this preliminary result is discarded below.
+                let preliminary = Task {
+                    try await QuoteService.generate(
+                        transcript: originalTranscript,
+                        tradeContext: session.businessProfile?.trade,
+                        rateCard: rateCard,
+                        taxRate: taxRate)
+                }
+
                 // A hand-edited transcript is the source of truth. The optional
                 // accuracy pass only runs while the text still matches the live
                 // recognizer's final result, so it can never erase a correction.
@@ -518,7 +538,6 @@ struct QuoteRecordingView: View {
                    canRefine,
                    recorder.hasCompleteCapturedAudio,
                    let audioURL = recorder.capturedAudioURL {
-                    let rateCard = (try? await QuoteService.fetchRateCard(activeOnly: true)) ?? []
                     do {
                         let refined = try await QuoteService.refineTranscript(audioURL: audioURL, rateCard: rateCard)
                         transcriptText = refined.text
@@ -530,9 +549,16 @@ struct QuoteRecordingView: View {
                     assemblyAIFallbackReason = "Kept your transcript edits instead."
                 }
                 recorder.discardCapturedAudio()
-                result = try await QuoteService.generate(
-                    transcript: transcriptText,
-                    tradeContext: session.businessProfile?.trade)
+                if transcriptWordsDiffer(originalTranscript, transcriptText) {
+                    preliminary.cancel()
+                    result = try await QuoteService.generate(
+                        transcript: transcriptText,
+                        tradeContext: session.businessProfile?.trade,
+                        rateCard: rateCard,
+                        taxRate: taxRate)
+                } else {
+                    result = try await preliminary.value
+                }
             } catch {
                 // A timeout has something specific and reassuring to say — the
                 // recording survived, and trying again is the whole fix. Every
@@ -581,6 +607,15 @@ struct QuoteRecordingView: View {
                 }
             }
         }
+    }
+
+    /// Formatting does not change the quote. Any changed letter or digit is
+    /// treated as a real correction and forces extraction from the refined text.
+    private func transcriptWordsDiffer(_ first: String, _ second: String) -> Bool {
+        func words(in text: String) -> [String] {
+            text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        }
+        return words(in: first) != words(in: second)
     }
 
     /// Begin writing the generated quote to the server as a draft, so it survives
