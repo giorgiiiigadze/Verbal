@@ -910,6 +910,17 @@ struct HomeView: View {
             visits = session.visitStore.visits
         }
         savedRecordingQuoteID = nil
+
+        // The short onboarding deliberately postpones job-specific pricing
+        // until there is a real quote to learn from. Introduce the rate card
+        // after that first result, then let the existing sheet take them there.
+        if OnboardingModel.FeatureFlag.usesShortFlow, !seenRateCardIntro {
+            Task {
+                try? await Task.sleep(for: .seconds(0.5))
+                guard !seenRateCardIntro else { return }
+                showRateCardIntro = true
+            }
+        }
     }
 
     private func handleRecorderPresentationChange(isPresented: Bool) {

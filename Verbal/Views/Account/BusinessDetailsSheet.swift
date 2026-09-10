@@ -9,7 +9,7 @@
 //  document that looks like nobody sent it. The quote is the product; this is
 //  the last moment before a customer sees it.
 //
-//  The fields are here rather than behind a link to the Profile tab: two inputs
+//  The fields are here rather than behind a link to the Profile tab: a few inputs
 //  is less work than a navigation trip, and anything longer gets skipped while
 //  the user is mid-send.
 //
@@ -25,11 +25,13 @@ struct BusinessDetailsSheet: View {
 
     @State private var businessName = ""
     @State private var phone = ""
+    @State private var isTaxRegistered = false
+    @State private var taxRate = ""
     @State private var isSaving = false
     @State private var saveFailed = false
 
     private enum Field: Hashable {
-        case businessName, phone
+        case businessName, phone, taxRate
     }
     @FocusState private var focus: Field?
 
@@ -60,6 +62,34 @@ struct BusinessDetailsSheet: View {
                         field("Phone", text: $phone)
                             .focused($focus, equals: .phone)
                             .keyboardType(.phonePad)
+
+                        Toggle("I'm tax registered", isOn: $isTaxRegistered)
+                            .font(.callout)
+                            .tint(Color(.royalBlue600))
+                            .padding(.horizontal, 4)
+
+                        if isTaxRegistered {
+                            HStack(spacing: 8) {
+                                Text("Tax rate")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                TextField("20", text: $taxRate)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .focused($focus, equals: .taxRate)
+                                    .frame(width: 64)
+                                Text("%").foregroundStyle(.secondary)
+                            }
+                            .font(.body)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                            .background(Color(.fieldFill),
+                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(Color(.separator), lineWidth: 0.5)
+                            )
+                        }
                     }
                     .padding(.top, 24)
                 }
@@ -121,7 +151,7 @@ struct BusinessDetailsSheet: View {
                 .background(Color(.systemBackground))
             }
         }
-        .presentationDetents([.height(520)])
+        .presentationDetents([.height(650)])
         .presentationBackground(Color(.systemBackground))
         .alert("Couldn't save business details", isPresented: $saveFailed) {
             Button("OK", role: .cancel) {}
@@ -132,6 +162,11 @@ struct BusinessDetailsSheet: View {
             // Prefill anything already saved, so this is never a retype.
             businessName = session.businessProfile?.businessName ?? ""
             phone = session.businessProfile?.phone ?? ""
+            let savedTaxRate = session.businessProfile?.defaultTaxRate ?? 0
+            isTaxRegistered = savedTaxRate > 0
+            taxRate = savedTaxRate > 0
+                ? savedTaxRate.formatted(.number.precision(.fractionLength(0...2)))
+                : ""
             try? await Task.sleep(for: .seconds(0.35))
             focus = .businessName
         }
@@ -165,6 +200,9 @@ struct BusinessDetailsSheet: View {
             var profile = session.businessProfile ?? .empty
             profile.businessName = businessName.trimmedOrNil
             profile.phone = phone.trimmedOrNil
+            profile.defaultTaxRate = isTaxRegistered
+                ? max(0, OnboardingModel.number(from: taxRate) ?? 0)
+                : 0
 
             do {
                 try await BusinessService.save(profile)
