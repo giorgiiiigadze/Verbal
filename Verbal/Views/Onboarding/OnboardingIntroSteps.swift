@@ -362,24 +362,6 @@ struct OnboardingStatStep: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack(alignment: .top, spacing: 12) {
-                Image(.onboardingSpeak)
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(OnboardingStyle.action)
-                    .frame(width: 28, height: 28)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Say it. Send it. Get on with your day.")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Color(.mainText))
-                    Text("You speak the details. Verbal writes the quote.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 
