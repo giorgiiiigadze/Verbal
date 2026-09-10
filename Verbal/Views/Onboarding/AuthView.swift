@@ -17,6 +17,7 @@ struct AuthView: View {
     /// covering the screen for.
     @State private var isFinishing = false
     @State private var headlineIndex = 0
+    @State private var showAppleComingSoon = false
     @State private var showEmailAuth = false
 
     var body: some View {
@@ -76,15 +77,11 @@ struct AuthView: View {
 
                 Spacer()
 
-                Text("Your setup is ready. Sign in to save it and send your first quote.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 12)
-
                 VStack(spacing: 10) {
                     googleButton
+                        .disabled(isChoosingAccount)
+
+                    appleButton
                         .disabled(isChoosingAccount)
 
                     emailButton
@@ -114,6 +111,11 @@ struct AuthView: View {
                 isFinishing = true
                 showEmailAuth = false
             }
+        }
+        .alert("Apple sign-in coming soon", isPresented: $showAppleComingSoon) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Use Google or email for now.")
         }
     }
 
@@ -185,6 +187,24 @@ struct AuthView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private var appleButton: some View {
+        Button {
+            showAppleComingSoon = true
+        } label: {
+            authButtonLabel(
+                title: "Continue with Apple",
+                foreground: .white,
+                background: .black,
+                border: .white.opacity(0.12)
+            ) {
+                Image(systemName: "apple.logo")
+                    .font(.system(size: authButtonIconSize, weight: .medium))
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Continue with Apple, coming soon")
     }
 
     /// The way in for anyone without a Google account, or unwilling to hand one
