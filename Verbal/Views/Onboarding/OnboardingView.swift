@@ -71,13 +71,15 @@ struct OnboardingView: View {
     ///
     private var canContinue: Bool {
         switch current {
+        case .profile:
+            return true
         case .method:
             return model.answers.method != nil
         case .quoteVolume:
             return model.answers.quotesPerWeek != nil
         case .quoteDuration:
             return model.answers.minutesPerQuote != nil
-        case .trade:
+        case .setup, .trade:
             return !model.trade.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .jobs:
             return !model.pickedJobs.isEmpty
@@ -93,7 +95,7 @@ struct OnboardingView: View {
     /// to skip and the button would just be a second Continue.
     private var isSkippable: Bool {
         switch current {
-        case .method, .quoteVolume, .quoteDuration, .jobs, .prices, .business:
+        case .profile, .method, .quoteVolume, .quoteDuration, .jobs, .prices, .business:
             return true
         default:
             return false
@@ -140,7 +142,7 @@ struct OnboardingView: View {
                         // Once they have answered, the primary footer is the
                         // honest next action. Leaving Skip up at that point
                         // makes two controls advance the same screen.
-                        if isSkippable && !canContinue {
+                        if isSkippable && (!canContinue || current == .profile) {
                             Button("Skip") { skip() }
                                 .font(.subheadline)
                                 .foregroundStyle(Color(.mainText))
@@ -256,6 +258,10 @@ struct OnboardingView: View {
         switch current {
         case .hook:
             OnboardingHookStep(currencyCode: currencyCode)
+        case .profile:
+            OnboardingProfileStep(model: model,
+                                  isProgressHeaderSeparated: $isProgressHeaderSeparated,
+                                  isFooterSeparated: $isFooterSeparated)
         case .method:
             OnboardingMethodStep(model: model)
         case .quoteVolume:
@@ -264,6 +270,10 @@ struct OnboardingView: View {
             OnboardingQuoteDurationStep(model: model)
         case .stat:
             OnboardingStatStep(answers: model.answers)
+        case .setup:
+            OnboardingSetupStep(model: model, focused: $focusedField,
+                                isProgressHeaderSeparated: $isProgressHeaderSeparated,
+                                isFooterSeparated: $isFooterSeparated)
         case .trade:
             OnboardingTradeStep(model: model, focused: $focusedField,
                                 isProgressHeaderSeparated: $isProgressHeaderSeparated,

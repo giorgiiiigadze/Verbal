@@ -178,6 +178,69 @@ struct OnboardingQuoteDurationStep: View {
     }
 }
 
+// MARK: - Compact profile
+
+/// The three funnel answers on one page. They remain separate stored values
+/// because both the time-saved result and the paywall use the arithmetic.
+struct OnboardingProfileStep: View {
+    @Bindable var model: OnboardingModel
+    @Binding var isProgressHeaderSeparated: Bool
+    @Binding var isFooterSeparated: Bool
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 24) {
+                OnboardingHeading(
+                    title: "Tell us about\nyour quoting.",
+                    subtitle: "Rough answers are enough — you can change any of these."
+                )
+
+                chipSection("How do you write quotes now?") {
+                    ForEach(OnboardingAnswers.Method.allCases) { method in
+                        OnboardingChip(text: method.label,
+                                       isPicked: model.answers.method == method) {
+                            model.answers.method = method
+                        }
+                    }
+                }
+
+                chipSection("How many do you write a week?") {
+                    ForEach(OnboardingAnswers.volumeOptions, id: \.value) { option in
+                        OnboardingChip(text: option.label,
+                                       isPicked: model.answers.quotesPerWeek == option.value) {
+                            model.answers.quotesPerWeek = option.value
+                        }
+                    }
+                }
+
+                chipSection("How long does one usually take?") {
+                    ForEach(OnboardingAnswers.durationOptions, id: \.value) { option in
+                        OnboardingChip(text: option.label,
+                                       isPicked: model.answers.minutesPerQuote == option.value) {
+                            model.answers.minutesPerQuote = option.value
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 8)
+        }
+        .onboardingScrollEdges(progress: $isProgressHeaderSeparated,
+                               footer: $isFooterSeparated)
+    }
+
+    private func chipSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Color(.mainText))
+            FlowLayout(spacing: 8) { content() }
+        }
+    }
+}
+
 // MARK: - 5 · The 'aha'
 
 /// Their week, multiplied out.
@@ -365,6 +428,115 @@ struct OnboardingStatStep: View {
         }
         .frame(maxWidth: .infinity, alignment: .top)
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Compact setup
+
+/// The two setup values the signed-in product reads immediately: trade gives
+/// extraction its vocabulary, while hourly rate anchors both the rate card and
+/// the paywall comparison.
+struct OnboardingSetupStep: View {
+    @Bindable var model: OnboardingModel
+    var focused: FocusState<OnboardingField?>.Binding
+    @Binding var isProgressHeaderSeparated: Bool
+    @Binding var isFooterSeparated: Bool
+
+    private static let otherTrade = "Something else"
+    private static let trades = [
+        "Electrician", "Plumber", "Carpenter", "Tiler", "Painter",
+        "Plasterer", "Builder", "Roofer", "Landscaper", otherTrade
+    ]
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 24) {
+                OnboardingHeading(
+                    title: "Set up your\nfirst quote.",
+                    subtitle: "Your trade helps Verbal understand the job. Your hourly rate helps price your time."
+                )
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("What's your trade?")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color(.mainText))
+                    FlowLayout(spacing: 8) {
+                        ForEach(Self.trades, id: \.self) { trade in
+                            let isOther = trade == Self.otherTrade
+                            let picked = isOther ? model.isCustomTrade
+                                : (!model.isCustomTrade && model.trade == trade)
+                            OnboardingChip(text: trade, isPicked: picked) {
+                                if isOther {
+                                    model.isCustomTrade = true
+                                    model.trade = ""
+                                } else {
+                                    model.isCustomTrade = false
+                                    model.trade = trade
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if model.isCustomTrade {
+                    OnboardingFieldBox {
+                        TextField("Locksmith, glazier, welder…", text: $model.trade)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .focused(focused, equals: .customTrade)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("What's your hourly rate?")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color(.mainText))
+                    OnboardingFieldBox {
+                        HStack(spacing: 8) {
+                            Text(AppCurrency.current.symbol)
+                                .foregroundStyle(.secondary)
+                            TextField("0", text: $model.hourlyRateText)
+                                .keyboardType(.decimalPad)
+                                .focused(focused, equals: .hourlyRate)
+                                .font(.callout.monospacedDigit())
+                            Text("per hour")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
+                    Text("Optional — you can add job-specific prices after your first quote.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.bottom, 8)
+        }
+        .onboardingScrollEdges(progress: $isProgressHeaderSeparated,
+                               footer: $isFooterSeparated)
+    }
+}
+
+private extension View {
+    func onboardingScrollEdges(progress: Binding<Bool>, footer: Binding<Bool>) -> some View {
+        self
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y > geometry.contentInsets.top + 1
+            } action: { _, isScrolled in
+                progress.wrappedValue = isScrolled
+            }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                let visibleBottom = geometry.contentOffset.y + geometry.containerSize.height
+                let contentBottom = geometry.contentSize.height + geometry.contentInsets.bottom
+                return visibleBottom < contentBottom - 1
+            } action: { _, hasContentBelow in
+                footer.wrappedValue = hasContentBelow
+            }
+            .onDisappear {
+                progress.wrappedValue = false
+                footer.wrappedValue = false
+            }
     }
 }
 

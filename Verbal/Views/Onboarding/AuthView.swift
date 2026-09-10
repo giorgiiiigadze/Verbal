@@ -76,6 +76,13 @@ struct AuthView: View {
 
                 Spacer()
 
+                Text("Your setup is ready. Sign in to save it and send your first quote.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+
                 VStack(spacing: 10) {
                     googleButton
                         .disabled(isChoosingAccount)

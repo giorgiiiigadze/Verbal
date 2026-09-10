@@ -16,13 +16,25 @@ import Observation
 @MainActor
 @Observable
 final class OnboardingModel {
+    enum FeatureFlag {
+        static let shortFlowKey = "shortPreAuthOnboarding"
+
+        /// New installs use the five-step flow. Setting the key to `false`
+        /// keeps the previous funnel available for the conversion experiment.
+        static var usesShortFlow: Bool {
+            let defaults = UserDefaults.standard
+            guard defaults.object(forKey: shortFlowKey) != nil else { return true }
+            return defaults.bool(forKey: shortFlowKey)
+        }
+    }
+
     /// The three acts, in the order they run. Named for what the screen does to
     /// the person reading it rather than for the field it fills, because half
     /// of them fill no field at all.
     enum Step: Hashable {
         // Introduction — the problem, their own numbers, and the setup.
-        case hook, method, quoteVolume, quoteDuration, stat
-        case trade, jobs, prices, business, summary
+        case hook, profile, method, quoteVolume, quoteDuration, stat
+        case setup, trade, jobs, prices, business, summary
         // The preview of the setup they have just completed.
         case result, milestone
         // Conclusion — what they came for, what it costs, what happens next.
@@ -45,6 +57,21 @@ final class OnboardingModel {
 
     var answers = OnboardingAnswers()
 
+    private let usesShortFlow: Bool
+
+    init(usesShortFlow override: Bool? = nil) {
+        let usesShortFlow = override ?? FeatureFlag.usesShortFlow
+        self.usesShortFlow = usesShortFlow
+        guard usesShortFlow else { return }
+
+        // The compact profile is an estimate, not a form. Start it with a
+        // representative answer in every row so Continue is always useful and
+        // the stat/paywall never lose the numbers they quote.
+        answers.method = .phoneAtNight
+        answers.quotesPerWeek = 4
+        answers.minutesPerQuote = 20
+    }
+
     /// The value is observable for the onboarding UI, then mirrored to the
     /// existing storage key for extraction after onboarding. Reading
     /// `UserDefaults` directly from a computed property meant a selected chip
@@ -66,6 +93,10 @@ final class OnboardingModel {
     /// A trade with no preset jobs skips the list that would fit nobody, and
     /// nothing ticked means there is nothing to price.
     var steps: [Step] {
+        if usesShortFlow {
+            return [.hook, .profile, .stat, .setup, .notifications]
+        }
+
         var list: [Step] = [.hook, .method, .quoteVolume, .quoteDuration, .stat, .trade]
         // Pricing a whole list of jobs before the first quote is admin work,
         // not setup. Collect one useful anchor now; the Rate Card can grow
