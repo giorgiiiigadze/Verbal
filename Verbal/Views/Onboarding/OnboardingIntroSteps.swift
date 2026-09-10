@@ -441,10 +441,7 @@ struct OnboardingSetupStep: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 24) {
-                OnboardingHeading(
-                    title: "Set up your\nfirst quote.",
-                    subtitle: "Your trade helps Verbal understand the job. Your hourly rate helps price your time."
-                )
+                OnboardingHeading(title: "Set up your\nfirst quote.")
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text("What's your trade?")
