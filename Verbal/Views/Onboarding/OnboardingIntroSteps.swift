@@ -189,15 +189,12 @@ struct OnboardingProfileStep: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 24) {
-                OnboardingHeading(
-                    title: "Tell us about\nyour quoting.",
-                    subtitle: "Rough answers are enough — you can change any of these."
-                )
+            VStack(alignment: .leading, spacing: 20) {
+                OnboardingHeading(title: "Your quoting today")
 
                 chipSection("How do you write quotes now?") {
                     ForEach(OnboardingAnswers.Method.allCases) { method in
-                        OnboardingChip(text: method.label,
+                        OnboardingChip(text: Self.shortLabel(for: method),
                                        isPicked: model.answers.method == method) {
                             model.answers.method = method
                         }
@@ -237,6 +234,17 @@ struct OnboardingProfileStep: View {
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(Color(.mainText))
             FlowLayout(spacing: 8) { content() }
+        }
+    }
+
+    /// The legacy flow has room to explain each answer. On this combined page,
+    /// shorter labels keep the choices scannable without changing what is saved.
+    private static func shortLabel(for method: OnboardingAnswers.Method) -> String {
+        switch method {
+        case .paper: "Pen and paper"
+        case .phoneAtNight: "Phone, after work"
+        case .spreadsheet: "Spreadsheet"
+        case .losingThem: "I put it off"
         }
     }
 }

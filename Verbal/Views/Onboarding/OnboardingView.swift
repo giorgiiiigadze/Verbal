@@ -95,7 +95,7 @@ struct OnboardingView: View {
     /// to skip and the button would just be a second Continue.
     private var isSkippable: Bool {
         switch current {
-        case .profile, .method, .quoteVolume, .quoteDuration, .jobs, .prices, .business:
+        case .method, .quoteVolume, .quoteDuration, .jobs, .prices, .business:
             return true
         default:
             return false
@@ -142,7 +142,7 @@ struct OnboardingView: View {
                         // Once they have answered, the primary footer is the
                         // honest next action. Leaving Skip up at that point
                         // makes two controls advance the same screen.
-                        if isSkippable && (!canContinue || current == .profile) {
+                        if isSkippable && !canContinue {
                             Button("Skip") { skip() }
                                 .font(.subheadline)
                                 .foregroundStyle(Color(.mainText))
