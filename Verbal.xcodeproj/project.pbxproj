@@ -11,6 +11,7 @@
 		31D5DF613015EAA4004D1E99 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000010000000000000002 /* Supabase */; };
 		AA0000010000000000000004 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000010000000000000003 /* GoogleSignIn */; };
 		AA0000010000000000000006 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000010000000000000005 /* GoogleSignInSwift */; };
+		AA0000010000000000000012 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000010000000000000011 /* RevenueCat */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,6 +64,7 @@
 				31D5DF613015EAA4004D1E99 /* Supabase in Frameworks */,
 				AA0000010000000000000004 /* GoogleSignIn in Frameworks */,
 				AA0000010000000000000006 /* GoogleSignInSwift in Frameworks */,
+				AA0000010000000000000012 /* RevenueCat in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -127,6 +129,7 @@
 				AA0000010000000000000002 /* Supabase */,
 				AA0000010000000000000003 /* GoogleSignIn */,
 				AA0000010000000000000005 /* GoogleSignInSwift */,
+				AA0000010000000000000011 /* RevenueCat */,
 			);
 			productName = Verbal;
 			productReference = 31D5DF473015E943004D1E99 /* Verbal.app */;
@@ -201,6 +204,7 @@
 			packageReferences = (
 				AA0000010000000000000001 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 				AA0000010000000000000010 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				AA0000010000000000000013 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 31D5DF483015E943004D1E99 /* Products */;
@@ -578,6 +582,14 @@
 				minimumVersion = 8.0.0;
 			};
 		};
+		AA0000010000000000000013 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/RevenueCat/purchases-ios-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.43.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -595,6 +607,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AA0000010000000000000010 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
+		};
+		AA0000010000000000000011 /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000010000000000000013 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCat;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

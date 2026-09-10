@@ -22,6 +22,7 @@ struct VerbalApp: App {
 
     init() {
         GoogleAuth.configure()
+        RevenueCatService.configure()
         UNUserNotificationCenter.current().delegate = Self.notificationDelegate
         configureNavigationTitleWeight()
     }

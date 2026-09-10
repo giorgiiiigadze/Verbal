@@ -392,6 +392,8 @@ final class SessionStore {
         // new user's quotes. Refreshes for the same account keep their cache.
         let userID = client.auth.currentUser?.id
         guard let userID, !Task.isCancelled else { return }
+        await RevenueCatService.identify(userID)
+        guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
         if userID != cachedUserID {
             clearUserData()
         }
@@ -677,6 +679,7 @@ final class SessionStore {
         // next account to sign in here would find it "already reported" and the
         // server would never hear about it.
         SubscriptionService.forgetLastReport()
+        Task { await RevenueCatService.resetIdentity() }
         // The zone was reported for the account that just left. The next one
         // has to report its own, even from the same handset.
         UserDefaults.standard.removeObject(forKey: Self.timeZoneKey)
