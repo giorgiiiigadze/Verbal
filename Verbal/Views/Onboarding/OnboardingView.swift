@@ -387,6 +387,7 @@ struct OnboardingView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
                     .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
+                    .contentShape(Capsule())
             }
             .buttonStyle(.plain)
         }
