@@ -370,21 +370,23 @@ struct OnboardingView: View {
         VStack(spacing: 10) {
             Button { action(true) } label: {
                 Text(primary)
-                    .font(.headline)
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(Color(.homeBackground))
+                    .padding(.horizontal, 22)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 58)
+                    .frame(height: 56)
                     .background(Color(.mainText), in: Capsule())
             }
             .buttonStyle(.plain)
 
             Button { action(false) } label: {
                 Text(secondary)
-                    .font(.headline)
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(Color(.mainText))
+                    .padding(.horizontal, 22)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 58)
-                    .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 1))
+                    .frame(height: 56)
+                    .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
         }
