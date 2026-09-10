@@ -1797,7 +1797,7 @@ struct HomeView: View {
         // it has to be asked for on the same terms as a recording. Counting it
         // without gating it was the worst of both: the allowance drained
         // without the user ever being told why.
-        guard store.canCreateQuote(remaining: session.freeQuotesRemaining) else {
+        guard session.canCreateQuote else {
             store.isPaywallPresented = true
             return
         }

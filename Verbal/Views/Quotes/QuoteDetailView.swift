@@ -562,7 +562,7 @@ struct QuoteDetailView: View {
     /// away from what they were reading to a screen identical to it; the copy
     /// is waiting on the list when they go back.
     private func duplicateQuote() {
-        guard store.canCreateQuote(remaining: session.freeQuotesRemaining) else {
+        guard session.canCreateQuote else {
             store.isPaywallPresented = true
             return
         }

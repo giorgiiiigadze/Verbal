@@ -114,12 +114,25 @@ final class SessionStore {
     /// be refused on the strength of not knowing.
     private(set) var quotesUsedToday: Int?
 
+    /// The subscription state that the database will use when it decides
+    /// whether to accept a quote. This can briefly differ from StoreKit's local
+    /// state while a purchase is syncing (and always differs for Xcode-local
+    /// StoreKit transactions, which the backend cannot verify).
+    private(set) var serverHasActiveSubscription: Bool?
+
     /// The limit the server is holding us to, which is not necessarily the one
     /// compiled in above.
     private(set) var dailyQuoteLimit: Int = SessionStore.freeQuotesPerDay
 
     var freeQuotesRemaining: Int? {
         quotesUsedToday.map { max(dailyQuoteLimit - $0, 0) }
+    }
+
+    /// The same decision the database will make, using its entitlement rather
+    /// than the device's. Unknown still fails open so an offline/network error
+    /// does not block recording; the insert trigger remains the final guard.
+    var canCreateQuote: Bool {
+        serverHasActiveSubscription == true || (freeQuotesRemaining ?? .max) > 0
     }
 
     /// Ask the server what is left.
@@ -135,10 +148,13 @@ final class SessionStore {
     /// timezone `syncTimeZone` reports, because a day that rolls over at 4am
     /// would be indefensible to explain to someone whose allowance vanished
     /// mid-afternoon.
-    func refreshQuoteUsage() async {
-        guard let allowance = try? await QuoteService.allowance() else { return }
+    @discardableResult
+    func refreshQuoteUsage() async -> QuoteAllowance? {
+        guard let allowance = try? await QuoteService.allowance() else { return nil }
+        serverHasActiveSubscription = allowance.isPro
         quotesUsedToday = allowance.used
         dailyQuoteLimit = allowance.limit
+        return allowance
     }
 
     /// Tell the server which day the user is living in.
@@ -610,6 +626,7 @@ final class SessionStore {
         spokenPrices = fetchedPrices ?? spokenPrices
         quotesUsedToday = fetchedUsage?.used ?? quotesUsedToday
         dailyQuoteLimit = fetchedUsage?.limit ?? dailyQuoteLimit
+        serverHasActiveSubscription = fetchedUsage?.isPro ?? serverHasActiveSubscription
         listsLoaded = true
 
         // Off the critical path: the list is already on screen, and this is
@@ -673,6 +690,7 @@ final class SessionStore {
         rateCard = []
         spokenPrices = []
         quotesUsedToday = nil
+        serverHasActiveSubscription = nil
         dailyQuoteLimit = Self.freeQuotesPerDay
         // Signing out doesn't change what this device is entitled to, but it
         // does change whose profile that entitlement belongs on. Left set, the

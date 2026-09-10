@@ -22,6 +22,11 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selection: TabItem = .home
     @State private var showCreate = false
+    /// The database owns the allowance. Refresh it before opening the recorder
+    /// so a stale in-memory count cannot let somebody record and generate a
+    /// quote that the server will refuse only when they tap Done.
+    @State private var isCheckingQuoteAllowance = false
+    @State private var allowanceCheckFailed = false
     @State private var recordingVisit: ScheduledVisit?
     @State private var savedRecordingQuoteID: UUID?
     /// Set when the recorder's save was refused for want of allowance. Acted on
@@ -71,15 +76,7 @@ struct MainTabView: View {
                     // arriving costs a second tap; losing the race costs the
                     // record button until the app is relaunched.
                     guard !showShareLinkNews else { return }
-                    if store.canCreateQuote(remaining: session.freeQuotesRemaining) {
-                        if hasSeenRecordingIntro {
-                            showCreate = true
-                        } else {
-                            showRecordingIntro = true
-                        }
-                    } else {
-                        store.isPaywallPresented = true
-                    }
+                    Task { await requestCreate() }
                 } else {
                     showCreate = false
                 }
@@ -157,6 +154,11 @@ struct MainTabView: View {
         .sheet(isPresented: Bindable(store).isPaywallPresented) {
             PaywallSheet(remaining: session.freeQuotesRemaining)
         }
+        .alert("Couldn't check your quote allowance", isPresented: $allowanceCheckFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Check your connection and try recording again.")
+        }
         .sheet(isPresented: $showRecordingIntro, onDismiss: {
             hasSeenRecordingIntro = true
             guard startRecordingAfterIntro else { return }
@@ -224,6 +226,32 @@ struct MainTabView: View {
         }
         .onChange(of: session.visitStore.hasCompletedInitialSync) { _, _ in
             presentCalendarIntroIfNeeded()
+        }
+    }
+
+    /// Reconcile the cached count with the server at the moment it matters.
+    /// The insert trigger remains the final authority for races across devices,
+    /// but an ordinary exhausted account now sees the paywall before recording.
+    @MainActor
+    private func requestCreate() async {
+        guard !isCheckingQuoteAllowance else { return }
+        isCheckingQuoteAllowance = true
+        defer { isCheckingQuoteAllowance = false }
+
+        guard let allowance = await session.refreshQuoteUsage() else {
+            allowanceCheckFailed = true
+            return
+        }
+
+        guard allowance.isPro || (allowance.remaining ?? 0) > 0 else {
+            store.isPaywallPresented = true
+            return
+        }
+
+        if hasSeenRecordingIntro {
+            showCreate = true
+        } else {
+            showRecordingIntro = true
         }
     }
 

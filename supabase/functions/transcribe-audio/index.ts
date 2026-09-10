@@ -15,6 +15,21 @@ const admin = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUP
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
+async function deleteTranscript(id: string, headers: { Authorization: string }) {
+  try {
+    const response = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, {
+      method: "DELETE",
+      headers,
+    });
+    if (!response.ok) {
+      console.error("AssemblyAI transcript cleanup failed:", response.status);
+    }
+  } catch (error) {
+    // Cleanup must not discard a transcript that was successfully produced.
+    // Account-level retention remains the fallback when this request cannot run.
+    console.error("AssemblyAI transcript cleanup request failed:", error);
+  }
+}
 async function callerId(req: Request) {
   const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   const { data, error } = await admin.auth.getUser(token);
@@ -84,11 +99,19 @@ Deno.serve(async (req) => {
     if (!poll.ok) return json({ error: "The accuracy pass failed." }, 502);
     const result = await poll.json();
     if (result.status === "completed") {
+      // AssemblyAI deletes the transcript data and its associated /upload file
+      // when this request succeeds. Keep the text in memory before deleting it.
+      const transcript = result.text;
+      const model = result.speech_model_used ?? null;
+      await deleteTranscript(id, headers);
       // Return provenance to the app. This is intentionally not inferred from
       // the requested model: AssemblyAI may select a configured fallback.
-      return json({ transcript: result.text, model: result.speech_model_used ?? null });
+      return json({ transcript, model });
     }
-    if (result.status === "error") return json({ error: "The accuracy pass could not transcribe this recording." }, 422);
+    if (result.status === "error") {
+      await deleteTranscript(id, headers);
+      return json({ error: "The accuracy pass could not transcribe this recording." }, 422);
+    }
   }
   return json({ error: "The accuracy pass took too long." }, 504);
 });
