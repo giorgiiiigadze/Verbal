@@ -147,9 +147,19 @@ final class Store {
         await loadProducts()
     }
 
-    /// Expired subscriptions are already absent from `currentEntitlements`; a
-    /// refunded one is still listed but carries a revocation date, so both ends
-    /// of "no longer paid for" have to be checked.
+    /// What this device is entitled to, from the two places StoreKit keeps it.
+    ///
+    /// `currentEntitlements` is the obvious source and stays the first one
+    /// asked. It is not sufficient on its own: in the Xcode environment it can
+    /// yield nothing for a subscription StoreKit otherwise reports as
+    /// `.subscribed`, which made a bought subscription read as Free on every
+    /// screen. The subscription group's own `status` is the authority for an
+    /// auto-renewable product, so it decides when the first source is silent.
+    ///
+    /// Reading the group status also fixes a case that was always wrong and
+    /// never visible in testing: a subscriber whose payment failed enters
+    /// `.inGracePeriod` with Apple still granting access, and
+    /// `currentEntitlements` is the wrong place to learn that.
     func refreshEntitlement(forceReport: Bool = false) async {
         var active = false
         // Collected alongside the boolean, and sent on. `isPro` is what this
@@ -164,6 +174,14 @@ final class Store {
             active = true
             signed.append(result.jwsRepresentation)
         }
+
+        if !active {
+            for (jws, _) in await entitlingSubscriptionStatuses() {
+                active = true
+                signed.append(jws)
+            }
+        }
+
         #if DEBUG
         isPro = active || debugUnlocked
         #else
@@ -194,6 +212,41 @@ final class Store {
             // server response replaces it.
             break
         }
+    }
+
+    /// The signed transactions of every subscription in the group that Apple
+    /// currently grants access for, paired with the state that granted it.
+    ///
+    /// `.subscribed` and `.inGracePeriod` are the two states where Apple says
+    /// the user has the product. `.inBillingRetryPeriod` deliberately is not:
+    /// access has lapsed while Apple retries, and the paywall is the honest
+    /// thing to show. Revoked transactions are refunds and never entitle.
+    private func entitlingSubscriptionStatuses() async -> [(String, Product.SubscriptionInfo.RenewalState)] {
+        guard let groupID = await subscriptionGroupID(),
+              let statuses = try? await Product.SubscriptionInfo.status(for: groupID)
+        else { return [] }
+
+        var found: [(String, Product.SubscriptionInfo.RenewalState)] = []
+        for status in statuses {
+            guard status.state == .subscribed || status.state == .inGracePeriod,
+                  case .verified(let transaction) = status.transaction,
+                  Self.productIDs.contains(transaction.productID),
+                  transaction.revocationDate == nil
+            else { continue }
+            found.append((status.transaction.jwsRepresentation, status.state))
+        }
+        return found
+    }
+
+    /// The group the products share, which `Product.SubscriptionInfo` needs and
+    /// only a loaded product can supply. Loads them if the first refresh runs
+    /// before the paywall has ever been opened.
+    private func subscriptionGroupID() async -> String? {
+        if let id = products.compactMap({ $0.subscription?.subscriptionGroupID }).first {
+            return id
+        }
+        await loadProducts()
+        return products.compactMap { $0.subscription?.subscriptionGroupID }.first
     }
 
     #if DEBUG
@@ -250,12 +303,4 @@ final class Store {
         return isPro
     }
 
-    /// Whether another quote can be made.
-    ///
-    /// A nil remaining count means the server hasn't answered yet, and that is
-    /// not the same as none left — `SessionStore` keeps the two apart on
-    /// purpose. Nothing is refused on the strength of not knowing.
-    func canCreateQuote(remaining: Int?) -> Bool {
-        isPro || (remaining ?? .max) > 0
-    }
 }
