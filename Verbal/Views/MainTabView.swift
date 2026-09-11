@@ -238,16 +238,16 @@ struct MainTabView: View {
         isCheckingQuoteAllowance = true
         defer { isCheckingQuoteAllowance = false }
 
-        guard let allowance = await session.refreshQuoteUsage() else {
+        guard await session.refreshQuoteUsage() != nil else {
             allowanceCheckFailed = true
             return
         }
 
-        let outcome = SubscriptionFlow.recordRequestOutcome(
-            serverIsPro: allowance.isPro,
-            remaining: allowance.remaining ?? 0
-        )
-        guard outcome == .openRecorder else {
+        // `refreshQuoteUsage()` updates SessionStore's server-backed state.
+        // Ask its single creation gate afterward so development builds can
+        // follow the backend quota-off switch instead of re-applying the
+        // numeric free allowance here.
+        guard session.canCreateQuote else {
             store.isPaywallPresented = true
             return
         }

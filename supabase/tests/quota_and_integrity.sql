@@ -73,7 +73,12 @@ end $$;
 
 -- Most tests exercise the fully configured subscription path. Production can
 -- independently disable subscriptions while Apple setup is incomplete.
-update public.app_settings set subscriptions_enabled = true where id;
+-- Production is currently left open for development, but the quota regression
+-- cases must opt back into enforcement before exercising the gate.
+update public.app_settings
+   set subscriptions_enabled = true,
+       quota_enforced = true
+ where id;
 
 -- ------------------------------------------------------------
 -- The free tier is enforced by the database, not by the phone

@@ -132,7 +132,14 @@ final class SessionStore {
     /// than the device's. Unknown still fails open so an offline/network error
     /// does not block recording; the insert trigger remains the final guard.
     var canCreateQuote: Bool {
+#if DEBUG
+        // Development builds follow the backend's quota-off rollout and never
+        // put up the paywall before attempting a quote. The database remains
+        // the final authority if enforcement is turned back on.
+        true
+#else
         serverHasActiveSubscription == true || (freeQuotesRemaining ?? .max) > 0
+#endif
     }
 
     /// Ask the server what is left.
