@@ -25,6 +25,27 @@ final class SubscriptionFlowTests: XCTestCase {
         )
     }
 
+    func testThirdDailyQuoteShowsPaywallBeforeRecorderOpens() {
+        XCTAssertEqual(
+            SubscriptionFlow.recordRequestOutcome(serverIsPro: false, remaining: 0),
+            .showPaywall
+        )
+    }
+
+    func testFreeUserWithAllowanceCanOpenRecorder() {
+        XCTAssertEqual(
+            SubscriptionFlow.recordRequestOutcome(serverIsPro: false, remaining: 1),
+            .openRecorder
+        )
+    }
+
+    func testVerifiedSubscriberCanOpenRecorderAfterFreeAllowanceIsUsed() {
+        XCTAssertEqual(
+            SubscriptionFlow.recordRequestOutcome(serverIsPro: true, remaining: 0),
+            .openRecorder
+        )
+    }
+
     func testPendingPurchaseExplainsWhatWillHappen() {
         XCTAssertEqual(
             StoreError.purchasePending.errorDescription,

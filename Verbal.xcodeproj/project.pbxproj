@@ -32,7 +32,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		310CF4B3303F693A00456090 /* Verbal.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Verbal.storekit; sourceTree = "<group>"; };
+		310CF4B3303F693A00456090 /* Verbal.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Verbal.storekit; sourceTree = SOURCE_ROOT; };
 		31D5DF473015E943004D1E99 /* Verbal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Verbal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000001 /* VerbalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VerbalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000002 /* VerbalUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VerbalUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };

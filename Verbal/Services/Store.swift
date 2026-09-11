@@ -55,12 +55,25 @@ enum SubscriptionFlow {
         case showPaywall
     }
 
+    /// What tapping Record should do after the app receives the server's fresh
+    /// allowance. This is deliberately decided before the recording sheet is
+    /// opened: a free user who has saved both daily quotes should see the
+    /// paywall immediately, not record and generate work that cannot be saved.
+    enum RecordRequestOutcome: Equatable {
+        case openRecorder
+        case showPaywall
+    }
+
     static func restoreOutcome(isPro: Bool) -> RestoreOutcome {
         isPro ? .restored : .noActiveSubscription
     }
 
     static func quotaRefusalOutcome(isPro: Bool) -> QuotaRefusalOutcome {
         isPro ? .retryAfterEntitlementSync : .showPaywall
+    }
+
+    static func recordRequestOutcome(serverIsPro: Bool, remaining: Int) -> RecordRequestOutcome {
+        serverIsPro || remaining > 0 ? .openRecorder : .showPaywall
     }
 }
 
@@ -76,6 +89,11 @@ final class Store {
 
     private(set) var products: [Product] = []
     private(set) var isPro = false
+    /// Renewal details for the Account row. Cancelling turns off renewal; it
+    /// does not revoke access already paid for, so `isPro` stays true until the
+    /// transaction's expiration date while this becomes false.
+    private(set) var subscriptionWillAutoRenew: Bool?
+    private(set) var subscriptionExpirationDate: Date?
     /// StoreKit is device/Apple-ID scoped, while Verbal subscriptions are bound
     /// to the account that bought them. This flag prevents a second account from
     /// looking Pro locally and then failing every server-side save.
@@ -166,6 +184,7 @@ final class Store {
         // screen believes; the server needs something it can check for itself,
         // and the signed blob is that. See `SubscriptionService`.
         var signed: [String] = []
+        var expirationDates: [Date] = []
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result,
                   Self.productIDs.contains(transaction.productID),
@@ -173,13 +192,28 @@ final class Store {
             else { continue }
             active = true
             signed.append(result.jwsRepresentation)
+            if let expirationDate = transaction.expirationDate {
+                expirationDates.append(expirationDate)
+            }
         }
 
+        let statuses = await entitlingSubscriptionStatuses()
         if !active {
-            for (jws, _) in await entitlingSubscriptionStatuses() {
+            for status in statuses {
                 active = true
-                signed.append(jws)
+                signed.append(status.jws)
             }
+        }
+
+        if active {
+            subscriptionExpirationDate = statuses.compactMap(\.expirationDate).max()
+                ?? expirationDates.max()
+            subscriptionWillAutoRenew = statuses
+                .max { ($0.expirationDate ?? .distantPast) < ($1.expirationDate ?? .distantPast) }?
+                .willAutoRenew
+        } else {
+            subscriptionExpirationDate = nil
+            subscriptionWillAutoRenew = nil
         }
 
         #if DEBUG
@@ -221,19 +255,35 @@ final class Store {
     /// the user has the product. `.inBillingRetryPeriod` deliberately is not:
     /// access has lapsed while Apple retries, and the paywall is the honest
     /// thing to show. Revoked transactions are refunds and never entitle.
-    private func entitlingSubscriptionStatuses() async -> [(String, Product.SubscriptionInfo.RenewalState)] {
+    private struct EntitlingSubscription {
+        let jws: String
+        let expirationDate: Date?
+        let willAutoRenew: Bool?
+    }
+
+    private func entitlingSubscriptionStatuses() async -> [EntitlingSubscription] {
         guard let groupID = await subscriptionGroupID(),
               let statuses = try? await Product.SubscriptionInfo.status(for: groupID)
         else { return [] }
 
-        var found: [(String, Product.SubscriptionInfo.RenewalState)] = []
+        var found: [EntitlingSubscription] = []
         for status in statuses {
             guard status.state == .subscribed || status.state == .inGracePeriod,
                   case .verified(let transaction) = status.transaction,
                   Self.productIDs.contains(transaction.productID),
                   transaction.revocationDate == nil
             else { continue }
-            found.append((status.transaction.jwsRepresentation, status.state))
+            let willAutoRenew: Bool?
+            if case .verified(let renewalInfo) = status.renewalInfo {
+                willAutoRenew = renewalInfo.willAutoRenew
+            } else {
+                willAutoRenew = nil
+            }
+            found.append(EntitlingSubscription(
+                jws: status.transaction.jwsRepresentation,
+                expirationDate: transaction.expirationDate,
+                willAutoRenew: willAutoRenew
+            ))
         }
         return found
     }

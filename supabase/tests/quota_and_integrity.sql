@@ -71,6 +71,10 @@ begin
   end loop;
 end $$;
 
+-- Most tests exercise the fully configured subscription path. Production can
+-- independently disable subscriptions while Apple setup is incomplete.
+update public.app_settings set subscriptions_enabled = true where id;
+
 -- ------------------------------------------------------------
 -- The free tier is enforced by the database, not by the phone
 -- ------------------------------------------------------------
@@ -122,6 +126,42 @@ begin
     raise exception 'FAIL  a lapsed subscription was still exempt';
   exception when sqlstate 'PT402' then
     perform pg_temp.t_ok(true, 'a lapsed subscription is capped again');
+  end;
+end $$;
+reset role;
+
+-- A genuine-looking stored entitlement is ignored while subscription support
+-- is deliberately disabled for the pre-App-Store rollout.
+update public.app_settings set subscriptions_enabled = false where id;
+do $$
+begin
+  set local role authenticated;
+  perform pg_temp.as_user(pg_temp.uid(2)::text);
+  begin
+    insert into public.quotes (user_id, job_summary)
+    values (pg_temp.uid(2), 'subscription-disabled');
+    raise exception 'FAIL  disabled subscriptions still bypassed the quota';
+  exception when sqlstate 'PT402' then
+    perform pg_temp.t_ok(true, 'disabled subscriptions cannot bypass the quota');
+  end;
+end $$;
+reset role;
+update public.app_settings set subscriptions_enabled = true where id;
+
+-- An active label without an Apple expiration is stale/manual state, not a
+-- renewable StoreKit entitlement. It must not grant unlimited quotes forever.
+update public.profiles set subscription_status = 'active', subscription_expires_at = null
+  where id = pg_temp.uid(3);
+do $$
+begin
+  set local role authenticated;
+  perform pg_temp.as_user(pg_temp.uid(3)::text);
+  begin
+    insert into public.quotes (user_id, job_summary)
+    values (pg_temp.uid(3), 'missing-expiry');
+    raise exception 'FAIL  an expiry-less subscription bypassed the quota';
+  exception when sqlstate 'PT402' then
+    perform pg_temp.t_ok(true, 'an expiry-less subscription is capped');
   end;
 end $$;
 reset role;
@@ -283,6 +323,21 @@ begin
   select count(*) into n from public.quote_line_items li
     join public.quotes q on q.id = li.quote_id where q.user_id = pg_temp.uid(7);
   perform pg_temp.t_ok(n = 1, 'the refused RPC left no orphan line items');
+end $$;
+reset role;
+
+-- Surviving quote rows are a fallback for historical gaps in quote_usage.
+delete from public.quote_usage where user_id = pg_temp.uid(7);
+do $$
+begin
+  set local role authenticated;
+  perform pg_temp.as_user(pg_temp.uid(7)::text);
+  begin
+    insert into public.quotes (user_id, job_summary) values (pg_temp.uid(7), 'ledger-gap');
+    raise exception 'FAIL  missing ledger rows bypassed the quota';
+  exception when sqlstate 'PT402' then
+    perform pg_temp.t_ok(true, 'saved quotes close historical ledger gaps');
+  end;
 end $$;
 reset role;
 

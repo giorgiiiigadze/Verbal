@@ -21,12 +21,12 @@
 //  same room as Home.
 //
 
+import StoreKit
 import SwiftUI
 
 struct AccountView: View {
     @Environment(SessionStore.self) private var session
     @Environment(Store.self) private var store
-    @Environment(\.openURL) private var openURL
 
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
     @AppStorage(ScheduledVisitNotifications.enabledKey) private var remindersEnabled = true
@@ -37,17 +37,17 @@ struct AccountView: View {
     /// Read only to refresh the row's value when the picker writes it.
     @AppStorage(DictationLanguage.defaultsKey) private var dictationLocale = ""
 
-    /// Apple's own subscription management. There is nowhere in the app to
-    /// cancel — Apple owns the billing relationship, and a Cancel button that
-    /// only deep-links elsewhere reads as one that failed.
-    private static let manageSubscriptionsURL =
-        URL(string: "https://apps.apple.com/account/subscriptions")!
-
 /// "Verbal Pro", or what is left of today. Nil remaining means the count
     /// hasn't come back yet, and guessing at it here would show someone a
     /// number that changes under them a second later.
     private var planLabel: String {
-        if store.isPro { return "Verbal Pro" }
+        if store.isPro {
+            if store.subscriptionWillAutoRenew == false,
+               let expirationDate = store.subscriptionExpirationDate {
+                return "Pro · Ends \(expirationDate.formatted(.dateTime.month(.abbreviated).day()))"
+            }
+            return "Verbal Pro"
+        }
         guard let remaining = session.freeQuotesRemaining else { return "Free" }
         return "Free · \(remaining) of \(session.dailyQuoteLimit) left today"
     }
@@ -57,6 +57,7 @@ struct AccountView: View {
     @State private var dictationLabel = ""
 
     @State private var showSignOutConfirmation = false
+    @State private var showManageSubscriptions = false
     @State private var toast: Toast?
     /// The currency the user picked, held until they say what should happen to
     /// their saved rates.
@@ -124,7 +125,7 @@ struct AccountView: View {
                 // card without introducing a custom separator.
                 Button {
                     if store.isPro {
-                        openURL(Self.manageSubscriptionsURL)
+                        showManageSubscriptions = true
                     } else {
                         store.isPaywallPresented = true
                     }
@@ -277,6 +278,15 @@ struct AccountView: View {
                     toast = Toast(style: .success, message: "Main currency set to \(target.id)")
                 }
             }
+        }
+        // Apple owns cancellation and plan changes. Present its management UI
+        // in place rather than sending a subscriber out to the App Store app.
+        .manageSubscriptionsSheet(isPresented: $showManageSubscriptions)
+        .onChange(of: showManageSubscriptions) { wasPresented, isPresented in
+            guard wasPresented, !isPresented else { return }
+            // Cancellation and plan changes happen inside Apple's sheet. Ask
+            // StoreKit again as soon as it closes so this row reflects them.
+            Task { await store.refreshEntitlement(forceReport: true) }
         }
         .toast($toast)
         // Keyed on the stored choice so the row updates when the user comes

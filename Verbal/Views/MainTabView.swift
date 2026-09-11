@@ -243,7 +243,11 @@ struct MainTabView: View {
             return
         }
 
-        guard allowance.isPro || (allowance.remaining ?? 0) > 0 else {
+        let outcome = SubscriptionFlow.recordRequestOutcome(
+            serverIsPro: allowance.isPro,
+            remaining: allowance.remaining ?? 0
+        )
+        guard outcome == .openRecorder else {
             store.isPaywallPresented = true
             return
         }
