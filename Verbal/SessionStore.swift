@@ -408,13 +408,23 @@ final class SessionStore {
         // new user's quotes. Refreshes for the same account keep their cache.
         let userID = client.auth.currentUser?.id
         guard let userID, !Task.isCancelled else { return }
-        await RevenueCatService.identify(userID)
-        guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
         if userID != cachedUserID {
             clearUserData()
         }
         cachedUserID = userID
+        // Disk is the first-paint source of truth. Do not put RevenueCat or any
+        // other network request between a restored session and its cached Home
+        // data: on a cold launch that turns an instant Upcoming section into a
+        // spinner whose duration is controlled by an unrelated service.
         restoreFromDisk(userID: userID)
+
+        // Reconcile Upcoming immediately, independently of the slower profile,
+        // avatar and subscription bootstrap below. VisitStore coalesces this
+        // with preloadLists' pass, so this cannot fan out duplicate requests.
+        Task { await visitStore.sync() }
+
+        await RevenueCatService.identify(userID)
+        guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }
 
         await refreshProfile()
         guard !Task.isCancelled, client.auth.currentUser?.id == userID else { return }

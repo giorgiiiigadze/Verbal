@@ -341,7 +341,7 @@ struct HomeView: View {
                 session.visitStore.refresh()
                 visits = session.visitStore.visits
                 promptForMissedVisitIfNeeded()
-                await load()
+                await refreshHomeData()
                 await openPendingNotificationQuoteIfNeeded()
             }
             .modifier(SessionSync(quotes: session.quotes,
@@ -367,7 +367,7 @@ struct HomeView: View {
             .onChange(of: showCreate) { _, isPresented in
                 handleCreatePresentationChange(isPresented)
             }
-            .refreshable { await load() }
+            .refreshable { await refreshHomeData() }
             .alert("Delete this quote?", isPresented: isDeleteQuoteAlertPresented,
                    presenting: quoteToDelete) { quote in
                 Button("Delete", role: .destructive) {
@@ -1670,6 +1670,15 @@ struct HomeView: View {
             }
         }
         hasLoaded = true
+    }
+
+    /// Quotes and Upcoming are independent Home data. Refresh them together so
+    /// a slow quote request never delays a visit, and pulling the screen can
+    /// recover a visit fetch that failed during launch.
+    private func refreshHomeData() async {
+        async let quoteRefresh: Void = load()
+        async let visitRefresh: Void = session.visitStore.sync()
+        _ = await (quoteRefresh, visitRefresh)
     }
 
     /// Cold launch lands on this screen deliberately holding a token that may
