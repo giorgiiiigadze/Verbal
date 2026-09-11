@@ -533,11 +533,11 @@ final class SessionStore {
         // its rows on the first frame instead of after a fetch.
         visitStore.attach(userID: userID)
         restoreLineItems(userID: userID)
-        // Lets the splash stop waiting and Home draw real rows. On a first run
-        // there is nothing to restore, so the existing wait still applies.
-        if !quotes.isEmpty || !rateCard.isEmpty {
-            listsLoaded = true
-        }
+        // Do not mark first-paint data complete just because quotes or rates
+        // were restored. Upcoming may have no device cache (or a stale one),
+        // and its server sync is part of preloadLists below. Publishing ready
+        // here dismissed the splash while that sync was still in flight, so
+        // the Upcoming section visibly appeared afterwards.
     }
 
     /// How many quotes' line items are read before the app is allowed to draw.
