@@ -25,7 +25,15 @@ struct InitialsAvatar: View {
     /// A stable hue in [0,1) derived from the name. Deliberately not
     /// `hashValue`, which Swift salts per launch — the colour has to survive the
     /// app being reopened, or a client would change colour every session.
-    private var hue: Double {
+    /// The avatar's base tone is shared with the client profile header, so the
+    /// page feels tied to the person without inventing a second colour system.
+    static func backgroundColor(for name: String) -> Color {
+        Color(hue: hue(for: name), saturation: 0.30, brightness: 0.92)
+    }
+
+    private var hue: Double { Self.hue(for: name) }
+
+    private static func hue(for name: String) -> Double {
         var h: UInt64 = 5381
         for scalar in name.lowercased().unicodeScalars {
             h = (h &* 33) &+ UInt64(scalar.value)
@@ -38,7 +46,7 @@ struct InitialsAvatar: View {
             // Soft, desaturated fill so a row of these reads as quiet variety
             // rather than a bag of highlighters — colourful enough to tell
             // people apart, muted enough to sit under the names.
-            .fill(Color(hue: hue, saturation: 0.30, brightness: 0.92))
+            .fill(Self.backgroundColor(for: name))
             .frame(width: size, height: size)
             .overlay {
                 if initials.isEmpty {

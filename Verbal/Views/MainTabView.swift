@@ -22,6 +22,8 @@ struct MainTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selection: TabItem = .home
     @State private var showCreate = false
+    /// A quote started from a client card carries that client into the recorder.
+    @State private var pendingNewQuoteClientName: String?
     /// The database owns the allowance. Refresh it before opening the recorder
     /// so a stale in-memory count cannot let somebody record and generate a
     /// quote that the server will refuse only when they tap Done.
@@ -115,7 +117,11 @@ struct MainTabView: View {
             }
             .badge(notificationRouter.hasUnreadVisitReminder ? Text("1") : nil)
             Tab("Clients", systemImage: "person.2.fill", value: .clients) {
-                NavigationStack { ClientsView() }
+                NavigationStack {
+                    ClientsView { clientName in
+                        Task { await requestCreate(for: clientName) }
+                    }
+                }
             }
             Tab(value: TabItem.account) {
                 NavigationStack { AccountView() }
@@ -183,6 +189,7 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $showCreate, onDismiss: {
             recordingVisit = nil
+            pendingNewQuoteClientName = nil
             // Now that the recorder is actually gone, the paywall has the
             // screen to itself.
             if recordingHitPaywall {
@@ -192,6 +199,7 @@ struct MainTabView: View {
         }) {
             QuoteRecordingView(
                 scheduledVisit: recordingVisit,
+                initialClientName: pendingNewQuoteClientName,
                 onSavedQuote: { quoteId in
                     // The recorder can be started from either Home or Visits.
                     // Keep the association here, at their shared owner, so a
@@ -233,7 +241,7 @@ struct MainTabView: View {
     /// The insert trigger remains the final authority for races across devices,
     /// but an ordinary exhausted account now sees the paywall before recording.
     @MainActor
-    private func requestCreate() async {
+    private func requestCreate(for clientName: String? = nil) async {
         guard !isCheckingQuoteAllowance else { return }
         isCheckingQuoteAllowance = true
         defer { isCheckingQuoteAllowance = false }
@@ -251,6 +259,8 @@ struct MainTabView: View {
             store.isPaywallPresented = true
             return
         }
+
+        pendingNewQuoteClientName = clientName
 
         if hasSeenRecordingIntro {
             showCreate = true

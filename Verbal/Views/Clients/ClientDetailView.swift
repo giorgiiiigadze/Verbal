@@ -16,8 +16,17 @@ struct ClientDetailView: View {
     /// edit made in the thread at the bottom reaches the figures at the top.
     let key: ClientKey
 
+    init(key: ClientKey) {
+        self.key = key
+        _storedPhone = State(initialValue: QuoteService.cachedCustomerPhone(named: key.name))
+        _location = State(initialValue: ClientLocation(
+            cachedAddress: QuoteService.cachedCustomerAddress(named: key.name)
+        ))
+    }
+
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
 
@@ -83,8 +92,30 @@ struct ClientDetailView: View {
         colorScheme == .light ? Color.black.opacity(0.07) : .clear
     }
 
-    private var clientDetailBackground: Color {
-        colorScheme == .dark ? Color(.homeBackground) : .white
+    private var clientDetailBackground: some View {
+        ZStack {
+            colorScheme == .dark ? Color(.homeBackground) : .white
+
+            // The avatar's tint now belongs to the entire page rather than to
+            // a rounded header panel. Its low-opacity, oversized wash gives
+            // every section a shared warmth while leaving the content surface
+            // and contrast intact.
+            RadialGradient(
+                colors: [
+                    InitialsAvatar.backgroundColor(for: client.name)
+                        .opacity(colorScheme == .dark ? 0.22 : 0.13),
+                    InitialsAvatar.backgroundColor(for: client.name)
+                        .opacity(colorScheme == .dark ? 0.08 : 0.04),
+                    .clear
+                ],
+                center: .top,
+                startRadius: 24,
+                endRadius: 720
+            )
+            .blur(radius: 38)
+            .scaleEffect(1.12)
+        }
+        .ignoresSafeArea()
     }
 
     var body: some View {
@@ -97,7 +128,10 @@ struct ClientDetailView: View {
                 clientInformationSection
             }
             .padding(.horizontal, 20)
-            .padding(.top, 12)
+            // A contact page needs its portrait to arrive as the first thing
+            // on screen, with the generous top breathing room of the system
+            // Contacts profile rather than sitting tight beneath the bar.
+            .padding(.top, 44)
             .padding(.bottom, 36)
         }
         .background(clientDetailBackground)
@@ -117,18 +151,6 @@ struct ClientDetailView: View {
                         showRename = true
                     } label: {
                         Label("Rename client", systemImage: "character.cursor.ibeam")
-                    }
-                    Button {
-                        editAddress()
-                    } label: {
-                        Label(location.hasAddress ? "Edit address" : "Add address",
-                              systemImage: "mappin.and.ellipse")
-                    }
-                    Button {
-                        editPhone()
-                    } label: {
-                        Label(storedPhone == nil ? "Add phone" : "Edit phone",
-                              systemImage: "phone")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -276,21 +298,29 @@ struct ClientDetailView: View {
     // MARK: - Profile
 
     private var profileHeader: some View {
-        VStack(spacing: 10) {
-            InitialsAvatar(name: client.name, size: 72)
+        VStack(spacing: 18) {
+            // Mirrors the large, centered Contacts portrait: this is the
+            // person's page, so their marker should lead the hierarchy rather
+            // than read like the small avatar from a list row.
+            InitialsAvatar(name: client.name, size: 156)
 
-            Text(client.name)
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(Color(.mainText))
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+            VStack(spacing: 5) {
+                Text(client.name)
+                    .font(.largeTitle.weight(.bold))
+                    .foregroundStyle(Color(.mainText))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
 
-            Text(span)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                Text(span)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
+            quickActions
         }
         .frame(maxWidth: .infinity)
+        .padding(.top, 28)
+        .padding(.bottom, 6)
     }
 
     /// How long they have been a client, and how much they have been sent.
@@ -491,67 +521,110 @@ struct ClientDetailView: View {
         matchingVisits.compactMap { cleaned($0.note) }.first
     }
 
+    private var quickActions: some View {
+        HStack(spacing: 14) {
+            quickAction(systemImage: "message.fill", label: "Message") {
+                contact(using: "sms")
+            }
+            quickAction(systemImage: "phone.fill", label: "Call") {
+                contact(using: "tel")
+            }
+            quickAction(systemImage: "video.fill", label: "Video") {
+                contact(using: "facetime")
+            }
+            quickAction(systemImage: "envelope.fill", label: "Email", isAvailable: false) {}
+        }
+        .padding(.top, 4)
+    }
+
+    private func quickAction(systemImage: String,
+                             label: String,
+                             isAvailable: Bool = true,
+                             action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(isAvailable ? Color(.mainText) : .secondary)
+                .frame(width: 60, height: 60)
+                .glassEffect(.regular.interactive(), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isAvailable)
+        .accessibilityLabel(label)
+    }
+
+    private func contact(using scheme: String) {
+        guard let phone = clientPhone else {
+            editPhone()
+            return
+        }
+        let dialable = phone.filter { $0.isNumber || $0 == "+" }
+        guard !dialable.isEmpty, let url = URL(string: "\(scheme):\(dialable)") else {
+            toast = Toast(style: .error, message: "Couldn't use this phone number")
+            return
+        }
+        openURL(url)
+    }
+
     private var clientInformationSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 sectionHeading("Client information")
                 Spacer()
-                Button(storedPhone == nil ? "Add phone" : "Edit phone") { editPhone() }
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(Color(.blueAccentText))
-                    .buttonStyle(.plain)
             }
 
             VStack(spacing: 0) {
-                Button { editPhone() } label: {
-                    informationRow("Phone", value: clientPhone ?? "Add a phone number",
-                                   showsDisclosure: true)
-                }
-                .buttonStyle(.plain)
-                Divider().padding(.leading, 16)
-
-                Button { showMap = true } label: {
-                    informationRow("Address",
-                                   value: location.address ?? location.suggestion ?? "Add an address",
-                                   showsDisclosure: true)
-                }
-                .buttonStyle(.plain)
-
+                informationRow("Phone",
+                               value: clientPhone ?? "Add a phone number",
+                               action: editPhone)
+                Divider().padding(.horizontal, 16)
+                informationRow("Address",
+                               value: location.address ?? location.suggestion ?? "Add an address",
+                               action: { showMap = true })
                 if let notes = clientNotes {
-                    Divider().padding(.leading, 16)
+                    Divider().padding(.horizontal, 16)
                     informationRow("Notes", value: notes)
                 }
             }
             .background(Color(.cardSurface),
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .strokeBorder(Color(.separator), lineWidth: 0.5)
             )
-            .shadow(color: cardShadow, radius: 12, y: 4)
+            .shadow(color: cardShadow, radius: 10, y: 3)
         }
     }
 
     private func informationRow(_ label: String,
                                 value: String,
-                                showsDisclosure: Bool = false) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(width: 62, alignment: .leading)
-            Text(value)
-                .font(.subheadline)
-                .foregroundStyle(Color(.mainText))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if showsDisclosure {
-                Image(systemName: "chevron.right")
-                    .appDisclosureIcon()
-                    .foregroundStyle(.tertiary)
+                                action: (() -> Void)? = nil) -> some View {
+        Group {
+            if let action {
+                Button(action: action) { informationCardContent(label, value) }
+                    .buttonStyle(.plain)
+            } else {
+                informationCardContent(label, value)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func informationCardContent(_ label: String,
+                                        _ value: String) -> some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(label)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.subheadline)
+                    .foregroundStyle(Color(.mainText))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
         .contentShape(.rect)
     }
 

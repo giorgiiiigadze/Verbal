@@ -50,6 +50,9 @@ nonisolated enum LocalCache {
         /// a visit booked with no signal exists here and nowhere else until the
         /// phone finds some, so this file is the original, not the cache.
         case scheduledVisits
+        /// Client contact fields are fetched independently of quotes, but a
+        /// detail page should still open with the last known phone number.
+        case customerContacts
 
         var filename: String {
             switch self {
@@ -59,6 +62,7 @@ nonisolated enum LocalCache {
             case .profile: return "profile"
             case .avatar: return "avatar"
             case .scheduledVisits: return "scheduledVisits"
+            case .customerContacts: return "customerContacts"
             case .lineItems(let quoteID): return "lineItems-\(quoteID.uuidString)"
             case .transcript(let quoteID): return "transcript-\(quoteID.uuidString)"
             }

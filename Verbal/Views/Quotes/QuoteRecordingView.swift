@@ -103,6 +103,7 @@ struct QuoteRecordingView: View {
     @FocusState private var focus: Field?
 
     init(scheduledVisit: ScheduledVisit? = nil,
+         initialClientName: String? = nil,
          onSavedQuote: ((UUID) -> Void)? = nil,
          onAllowanceExhausted: (() -> Void)? = nil) {
         self.onAllowanceExhausted = onAllowanceExhausted
@@ -116,7 +117,10 @@ struct QuoteRecordingView: View {
         // `ScheduledVisit.clientKey` prefers `clientName`, stopping the saved
         // quote from matching the visit that produced it. The title is still
         // the fallback, which is exactly where old visits keep their client.
-        _clientName = State(initialValue: QuoteRecordingView.clientName(for: scheduledVisit))
+        let suppliedClient = initialClientName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        _clientName = State(initialValue: suppliedClient.isEmpty
+                            ? QuoteRecordingView.clientName(for: scheduledVisit)
+                            : suppliedClient)
     }
 
     private static func clientName(for visit: ScheduledVisit?) -> String {

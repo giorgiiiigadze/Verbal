@@ -10,6 +10,12 @@ import Foundation
 import Supabase
 
 extension QuoteService {
+    private struct CustomerContact: Codable {
+        let name: String?
+        let phone: String?
+        let address: String?
+    }
+
     /// Escapes the characters `ILIKE` treats as wildcards, so a client name is
     /// matched literally. Without this, a name holding `%`, `_` or `*` (which
     /// PostgREST rewrites to `%`) matches some unrelated customer and the quote
@@ -118,6 +124,52 @@ extension QuoteService {
             .execute()
         let phone = response.value.first?.phone?.trimmingCharacters(in: .whitespacesAndNewlines)
         return (phone?.isEmpty ?? true) ? nil : phone
+    }
+
+    /// The disk-backed value used for the first paint of Client Details. A
+    /// fresh fetch still follows, but the person never sees an empty-state
+    /// prompt simply because their contact row is crossing the network.
+    static func cachedCustomerPhone(named name: String) -> String? {
+        let phone = cachedCustomerContact(named: name)?.phone?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (phone?.isEmpty ?? true) ? nil : phone
+    }
+
+    /// Address equivalent of `cachedCustomerPhone(named:)`, used to seed the
+    /// Client Details map and contact card before their live refresh finishes.
+    static func cachedCustomerAddress(named name: String) -> String? {
+        let address = cachedCustomerContact(named: name)?.address?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (address?.isEmpty ?? true) ? nil : address
+    }
+
+    private static func cachedCustomerContact(named name: String) -> CustomerContact? {
+        guard let userID = client.auth.currentUser?.id else { return nil }
+        let key = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !key.isEmpty,
+              let contacts = LocalCache.load([CustomerContact].self,
+                                             for: .customerContacts,
+                                             userID: userID)
+        else { return nil }
+        return contacts.first {
+            ($0.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == key
+        }
+    }
+
+    /// Refreshes all lightweight client contact fields in one request. Called
+    /// from the Clients directory, where it can finish before a card is opened.
+    static func refreshCustomerContactCache() async {
+        guard let userID = client.auth.currentUser?.id else { return }
+        do {
+            let response: PostgrestResponse<[CustomerContact]> = try await client
+                .from("customers")
+                .select("name, phone, address")
+                .eq("user_id", value: userID)
+                .execute()
+            LocalCache.save(response.data, for: .customerContacts, userID: userID)
+        } catch {
+            // The cached copy is deliberately retained when offline.
+        }
     }
 
     /// Give a client an address, or take it away.

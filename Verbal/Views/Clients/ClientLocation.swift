@@ -93,6 +93,11 @@ final class ClientLocation {
     /// Whose address this is, case-folded — the same identity `Client.id` uses.
     private var loadedKey: String?
 
+    init(cachedAddress: String? = nil) {
+        let trimmed = cachedAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
+        address = (trimmed?.isEmpty ?? true) ? nil : trimmed
+    }
+
     var hasAddress: Bool { address?.isEmpty == false }
 
     /// What the editor should open with: their address, or the visit's if they
@@ -109,11 +114,16 @@ final class ClientLocation {
         suggestion = Self.address(from: booked)
         nextVisit = booked.first { $0.date >= Date() }
 
-        let fetched = try? await QuoteService.customerAddress(named: name)
+        do {
+            // A successful nil means the address was deliberately removed;
+            // only a failed refresh leaves the cached value in place.
+            address = try await QuoteService.customerAddress(named: name)
+        } catch {
+            // Keep the cached address for this offline/failed refresh.
+        }
         // A rename mid-flight moves the page to somebody else; the answer to
         // the old question must not land on the new person.
         guard loadedKey == key else { return }
-        address = fetched
         await resolve()
         isLoading = false
     }

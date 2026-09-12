@@ -65,11 +65,14 @@ enum AppCurrency: String, CaseIterable, Identifiable {
     }
 
     /// A `FormatStyle` for the current currency, for use in `Text(_, format:)`.
+    /// Whole amounts omit their redundant cents; meaningful fractional amounts
+    /// still retain up to two digits.
     static var currentFormat: FloatingPointFormatStyle<Double>.Currency {
         .currency(code: current.rawValue)
+            .precision(.fractionLength(0...2))
     }
 
-    /// Format an amount as a string in the current currency, e.g. "£1,250.00".
+    /// Format an amount as a string in the current currency, e.g. "£1,250".
     static func format(_ amount: Double) -> String {
         amount.formatted(currentFormat)
     }
@@ -78,6 +81,7 @@ enum AppCurrency: String, CaseIterable, Identifiable {
     /// falling back to the current setting when the code is missing.
     static func format(code: String?) -> FloatingPointFormatStyle<Double>.Currency {
         .currency(code: code ?? current.rawValue)
+            .precision(.fractionLength(0...2))
     }
 
     /// Format an amount as a string in a specific currency, falling back to

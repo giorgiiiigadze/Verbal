@@ -275,6 +275,7 @@ struct PaywallSheet: View {
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
+                    planIcon(for: plan)
                     Text(product.displayPrice)
                         .font(.headline.monospacedDigit())
                         .foregroundStyle(Color(.mainText))
@@ -306,6 +307,25 @@ struct PaywallSheet: View {
         .buttonStyle(.plain)
     }
 
+    @ViewBuilder
+    private func planIcon(for plan: Plan) -> some View {
+        if plan == .monthly {
+            Image(.paywallMonthly)
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .foregroundStyle(accent)
+                .frame(width: 26, height: 26)
+        } else {
+            Image(.paywallHero)
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .foregroundStyle(accent)
+                .frame(width: 26, height: 26)
+        }
+    }
+
     #if DEBUG
     private func fallbackPlanRow(_ plan: Plan, price: String, caption: String, badge: String? = nil) -> some View {
         let isSelected = selection == plan
@@ -314,6 +334,7 @@ struct PaywallSheet: View {
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
+                    planIcon(for: plan)
                     Text(price)
                         .font(.headline.monospacedDigit())
                         .foregroundStyle(Color(.mainText))
@@ -419,9 +440,8 @@ struct PaywallSheet: View {
         #endif
     }
 
-    /// The purchase button names the billed subscription directly. Introductory
-    /// offers can differ between StoreKit environments and storefronts, so the
-    /// app must not promise a trial unless it is the product being purchased.
+    /// The purchase button names the billed subscription directly. Verbal Pro
+    /// has no introductory offer, so the first charge is the displayed price.
     private var ctaTitle: String {
         guard let price = selectedProduct?.displayPrice else { return "Go unlimited" }
         return "Subscribe for \(price) / \(selection == .yearly ? "year" : "month")"
