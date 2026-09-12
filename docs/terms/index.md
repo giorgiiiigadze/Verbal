@@ -45,8 +45,7 @@ whenever you like, subscription or not. The limit is on making new ones.
 
 **Verbal Pro** removes the daily limit. In the United States it is offered as
 either **$19 per month** or **$190 per year**; prices in other regions are
-shown in the app before you buy. Eligible customers may be offered a seven-day
-free trial on the monthly plan.
+shown in the app before you buy.
 
 Subscriptions are sold through your Apple ID:
 

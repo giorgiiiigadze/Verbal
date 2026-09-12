@@ -38,7 +38,7 @@ real Sandbox/TestFlight subscriber is visible as `active` in Supabase.
 
 | Product | Identifier | Offer |
 | --- | --- | --- |
-| Monthly | `com.giorgi.verbal.pro.monthly` | $19/month, one seven-day free introductory offer |
+| Monthly | `com.giorgi.verbal.pro.monthly` | $19/month |
 | Yearly | `com.giorgi.verbal.pro.yearly` | $190/year |
 
 - [ ] Add subscription localization, review screenshot, availability, and
@@ -119,7 +119,6 @@ https://rglpwlmkwukezvexyups.supabase.co/functions/v1/app-store-notifications
 
 - [ ] New monthly purchase gets Pro access immediately.
 - [ ] New yearly purchase gets Pro access immediately.
-- [ ] Monthly free trial behaves as advertised; yearly does not show a trial.
 - [ ] Restore Purchases works after reinstall or on a second device.
 - [ ] Sign out/in does not transfer a subscription to another Verbal account.
 - [ ] Renewal notification keeps the account Pro without opening the app.
