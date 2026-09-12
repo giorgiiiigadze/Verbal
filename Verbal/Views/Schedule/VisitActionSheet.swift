@@ -29,6 +29,10 @@ struct VisitActionSheet: View {
     let onOpenQuote: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    /// The fixed action panel only needs an edge while visit details continue
+    /// beneath it. At the end of a short sheet, leaving that line up would
+    /// turn ordinary bottom spacing into an unnecessary container.
+    @State private var isActionPanelSeparated = false
 
     var body: some View {
         NavigationStack {
@@ -39,6 +43,14 @@ struct VisitActionSheet: View {
                 .padding(.top, 8)
                 .padding(.bottom, 24)
             }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                let visibleBottom = geometry.contentOffset.y + geometry.containerSize.height
+                let contentBottom = geometry.contentSize.height + geometry.contentInsets.bottom
+                return visibleBottom < contentBottom - 1
+            } action: { _, hasContentBelow in
+                isActionPanelSeparated = hasContentBelow
+            }
+            .onDisappear { isActionPanelSeparated = false }
             .background(Color(.homeBackground))
             .navigationTitle("Visit")
             .navigationBarTitleDisplayMode(.inline)
@@ -53,6 +65,14 @@ struct VisitActionSheet: View {
                     .padding(.top, 12)
                     .padding(.bottom, 10)
                     .background(Color(.homeBackground))
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(Color(.separator))
+                            .frame(height: 0.5)
+                            .opacity(isActionPanelSeparated ? 1 : 0)
+                    }
+                    .animation(.easeInOut(duration: 0.18),
+                               value: isActionPanelSeparated)
             }
         }
         // Opens at a mid detent — enough to read the visit's headline facts and
