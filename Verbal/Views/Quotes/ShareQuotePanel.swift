@@ -38,6 +38,7 @@ struct ShareQuotePanel: View {
     @State private var pdfURL: URL?
     @State private var isPreviewing = false
     @State private var failedToRender = false
+    @State private var isRenderingPDF = false
     @State private var messageDraft: MessageDraft?
 
     /// A new identity on every tap prevents SwiftUI from trying to reuse a
@@ -46,7 +47,7 @@ struct ShareQuotePanel: View {
         let id = UUID()
     }
 
-    private var hasPDF: Bool { document != nil && !failedToRender }
+    private var hasPDF: Bool { pdfURL != nil && !failedToRender }
     private var canMessageClient: Bool {
         messageRecipient != nil && MFMessageComposeViewController.canSendText()
     }
@@ -141,6 +142,7 @@ struct ShareQuotePanel: View {
                         if !hasPDF, !requireInternetForSharing() { return }
                         showSystemShare = true
                     }
+                    .disabled(isRenderingPDF)
                     shareAction(title: linkTitle, systemImage: copied ? "checkmark" : "link",
                                 isDisabled: isLinking) {
                         copyLink()
@@ -167,14 +169,21 @@ struct ShareQuotePanel: View {
         .task {
             guard let renderedDocument = document else { return }
             guard !Task.isCancelled else { return }
-
-            preview = QuotePDF.thumbnail(renderedDocument)
+            // Let the sheet present and draw its placeholder before the
+            // main-actor SwiftUI renderer begins its expensive page work.
+            isRenderingPDF = true
+            await Task.yield()
+            let plan = QuotePDF.renderPlan(renderedDocument)
+            guard !Task.isCancelled else { return }
+            preview = QuotePDF.thumbnail(renderedDocument, plan: plan)
+            await Task.yield()
             do {
-                pdfURL = try QuotePDF.write(renderedDocument)
+                pdfURL = try QuotePDF.write(renderedDocument, plan: plan)
             } catch {
                 // Fall back to sharing text rather than blocking the send.
                 failedToRender = true
             }
+            isRenderingPDF = false
         }
         .sheet(isPresented: $showSystemShare) {
             ShareSheet(items: [pdfURL as Any? ?? shareText].compactMap { $0 }) { completed in

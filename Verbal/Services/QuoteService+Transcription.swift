@@ -15,7 +15,12 @@ extension QuoteService {
     /// on-device transcript. The caller deliberately treats failure as a
     /// fallback: a network service must never make a recording unusable.
     static func refineTranscript(audioURL: URL, rateCard: [RateCardItem]) async throws -> RefinedTranscript {
-        let data = try Data(contentsOf: audioURL)
+        // This method is main-actor isolated by the app's default isolation.
+        // Reading a several-megabyte recording before its first suspension made
+        // the Generate button appear stuck on slower storage.
+        let data = try await Task.detached(priority: .userInitiated) {
+            try Data(contentsOf: audioURL, options: [.mappedIfSafe])
+        }.value
         // The Edge Function has the same ceiling. This equates to roughly
         // twelve minutes of the 16 kHz mono capture; longer recordings retain
         // the live transcript rather than risking a huge foreground upload.

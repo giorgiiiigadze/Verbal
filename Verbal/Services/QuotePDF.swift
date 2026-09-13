@@ -9,6 +9,13 @@ import SwiftUI
 import UIKit
 
 enum QuotePDF {
+    /// Layout work is comparatively expensive: measuring a page can render it
+    /// up to fifteen times. Share previews need both a thumbnail and a PDF, so
+    /// calculate that work once and reuse it for both outputs.
+    struct RenderPlan {
+        fileprivate let scale: CGFloat?
+        fileprivate let pages: [[QuoteLineItem]]
+    }
     /// Hard caps on line items per page, kept as a backstop for the height
     /// estimate below. A page can hold fewer than these; it must never hold
     /// more.
@@ -18,9 +25,10 @@ enum QuotePDF {
     /// Render `document` to a PDF in the temporary directory and return its URL.
     /// Runs on the main actor because it rasterizes SwiftUI views.
     @MainActor
-    static func write(_ document: QuoteDocument) throws -> URL {
-        let scale = singlePageScale(document)
-        let pages = scale == nil ? paginate(document) : [document.lineItems]
+    static func write(_ document: QuoteDocument, plan: RenderPlan? = nil) throws -> URL {
+        let plan = plan ?? renderPlan(document)
+        let scale = plan.scale
+        let pages = plan.pages
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(document.fileName)
         // A previous export with the same name would otherwise linger.
@@ -58,6 +66,13 @@ enum QuotePDF {
             ofItemAtPath: url.path
         )
         return url
+    }
+
+    @MainActor
+    static func renderPlan(_ document: QuoteDocument) -> RenderPlan {
+        let scale = singlePageScale(document)
+        return RenderPlan(scale: scale,
+                          pages: scale == nil ? paginate(document) : [document.lineItems])
     }
 
     /// Split line items across pages, filling each one until the space runs out.
@@ -244,9 +259,12 @@ enum QuotePDF {
 
     /// First page as an image, for the share panel's preview.
     @MainActor
-    static func thumbnail(_ document: QuoteDocument, width: CGFloat = 320) -> UIImage? {
-        let scale = singlePageScale(document)
-        let pages = scale == nil ? paginate(document) : [document.lineItems]
+    static func thumbnail(_ document: QuoteDocument,
+                          width: CGFloat = 320,
+                          plan: RenderPlan? = nil) -> UIImage? {
+        let plan = plan ?? renderPlan(document)
+        let scale = plan.scale
+        let pages = plan.pages
         let page = QuoteDocumentPage(document: document, items: pages.first ?? [],
                                      isFirstPage: true,
                                      isLastPage: pages.count == 1,

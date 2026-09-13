@@ -193,6 +193,10 @@ final class SessionStore {
     /// Line items cached per quote so the detail screen renders instantly on open
     /// (populated by prefetching as list rows appear).
     private var lineItemsCache: [UUID: [QuoteLineItem]] = [:]
+    /// Least-recently-used order for `lineItemsCache`. A job history can grow
+    /// without limit; its decoded line items must not grow in memory with it.
+    private var lineItemsCacheRecency: [UUID] = []
+    private static let lineItemsCacheCapacity = 48
 
     /// The account everything cached here belongs to, so a switch can be told
     /// apart from an ordinary token refresh.
@@ -211,6 +215,7 @@ final class SessionStore {
     /// Store a quote's line items for instant reuse.
     func cacheLineItems(_ items: [QuoteLineItem], for quoteID: UUID) {
         lineItemsCache[quoteID] = items
+        touchLineItems(quoteID)
     }
 
     /// Drop a deleted quote from the shared list and its cached line items.
@@ -221,6 +226,7 @@ final class SessionStore {
     func removeQuote(id: UUID) {
         quotes.removeAll { $0.id == id }
         lineItemsCache[id] = nil
+        lineItemsCacheRecency.removeAll { $0 == id }
     }
 
     /// Apply an edit to the shared copy of a quote.
@@ -266,9 +272,12 @@ final class SessionStore {
     /// Fetch and cache a quote's line items unless already cached. Called as list
     /// rows appear so the detail page has them ready before the user taps.
     func prefetchLineItems(for quoteID: UUID) async {
-        guard lineItemsCache[quoteID] == nil else { return }
+        if lineItemsCache[quoteID] != nil {
+            touchLineItems(quoteID)
+            return
+        }
         if let items = try? await QuoteService.fetchLineItems(quoteId: quoteID) {
-            lineItemsCache[quoteID] = items
+            cacheLineItems(items, for: quoteID)
             return
         }
         // Offline. The stored copy is what this quote looked like last time it
@@ -277,7 +286,7 @@ final class SessionStore {
            let stored = LocalCache.load([QuoteLineItem].self,
                                         for: .lineItems(quoteID: quoteID),
                                         userID: cachedUserID) {
-            lineItemsCache[quoteID] = stored
+            cacheLineItems(stored, for: quoteID)
         }
     }
 
@@ -580,11 +589,14 @@ final class SessionStore {
             if let items = LocalCache.load([QuoteLineItem].self,
                                            for: .lineItems(quoteID: quoteID),
                                            userID: userID) {
-                lineItemsCache[quoteID] = items
+                cacheLineItems(items, for: quoteID)
             }
         }
 
-        let remaining = Array(pending.dropFirst(Self.eagerLineItemCount))
+        // Do not decode the entire history in the background only to retain it
+        // forever on the main actor. The rest stays on disk until a row needs it.
+        let remaining = Array(pending.dropFirst(Self.eagerLineItemCount)
+            .prefix(Self.lineItemsCacheCapacity - Self.eagerLineItemCount))
         guard !remaining.isEmpty else { return }
         Task.detached(priority: .utility) {
             var restored: [UUID: [QuoteLineItem]] = [:]
@@ -604,7 +616,16 @@ final class SessionStore {
     private func mergeRestoredLineItems(_ restored: [UUID: [QuoteLineItem]], userID: UUID) {
         guard cachedUserID == userID else { return }
         for (quoteID, items) in restored where lineItemsCache[quoteID] == nil {
-            lineItemsCache[quoteID] = items
+            cacheLineItems(items, for: quoteID)
+        }
+    }
+
+    private func touchLineItems(_ quoteID: UUID) {
+        lineItemsCacheRecency.removeAll { $0 == quoteID }
+        lineItemsCacheRecency.append(quoteID)
+        while lineItemsCacheRecency.count > Self.lineItemsCacheCapacity {
+            let evicted = lineItemsCacheRecency.removeFirst()
+            lineItemsCache[evicted] = nil
         }
     }
 
@@ -719,6 +740,7 @@ final class SessionStore {
         // has to report its own, even from the same handset.
         UserDefaults.standard.removeObject(forKey: Self.timeZoneKey)
         lineItemsCache = [:]
+        lineItemsCacheRecency = []
         listsLoaded = false
         cachedUserID = nil
     }

@@ -199,10 +199,22 @@ final class QuoteRecorder {
                 compatibleWith: [transcriber]
             )
 
-            let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
+            // The analyzer normally consumes at microphone speed, but it can
+            // briefly fall behind while a model is warming up. The default
+            // AsyncStream policy is unbounded, which would retain every audio
+            // buffer for the whole recording in that case. A few seconds is
+            // enough to absorb a scheduling hiccup; the retained CAF remains
+            // complete for the optional accuracy pass.
+            let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream(
+                bufferingPolicy: .bufferingNewest(64)
+            )
             inputContinuation = continuation
 
-            let (levelStream, levelCont) = AsyncStream<Float>.makeStream()
+            // The meter only needs the most recent value. Keeping historical
+            // samples while the main actor is busy makes no visual difference.
+            let (levelStream, levelCont) = AsyncStream<Float>.makeStream(
+                bufferingPolicy: .bufferingNewest(1)
+            )
             levelContinuation = levelCont
             Task { [weak self] in
                 for await level in levelStream {
