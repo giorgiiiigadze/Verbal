@@ -162,7 +162,7 @@ struct ClientThread: View {
 
     /// Read from the prefetched line items, the same as Home does — the summary
     /// row can't see inside a quote on its own.
-    private func unpricedCount(for quote: QuoteSummary) -> Int {
-        (session.lineItems(for: quote.id) ?? []).filter(\.isMissingPrice).count
+    private func unpricedCount(for quote: QuoteSummary) -> Int? {
+        session.lineItems(for: quote.id)?.filter(\.isMissingPrice).count
     }
 }

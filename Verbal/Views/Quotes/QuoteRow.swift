@@ -15,7 +15,11 @@ struct QuoteRow: View {
     let quote: QuoteSummary
     /// Lines this quote can't price yet. Passed in because the summary row
     /// doesn't know what's inside a quote — the list reads it from the prefetch.
-    var unpricedCount: Int = 0
+    /// `nil` means the line items have not arrived yet. This must stay distinct
+    /// from zero: on a fresh install the rows appear before their line-item
+    /// fetches finish, and treating that gap as zero briefly showed the wrong
+    /// badge.
+    var unpricedCount: Int?
     /// True when the row already sits under the client it belongs to.
     ///
     /// The clients thread hangs every one of a person's quotes off a header
@@ -52,7 +56,14 @@ struct QuoteRow: View {
     /// was sent deliberately as TBC, and what the customer has done with it
     /// since is the thing worth reading.
     private var showsUnpriced: Bool {
-        unpricedCount > 0 && quote.effectiveStatus == "draft"
+        (unpricedCount ?? 0) > 0 && quote.effectiveStatus == "draft"
+    }
+
+    /// Only drafts exchange their status for the unpriced-items warning. A
+    /// missing cache entry is an unknown answer, not proof that every item is
+    /// priced, so show a neutral in-between state until the fetch settles.
+    private var isCheckingPrices: Bool {
+        unpricedCount == nil && quote.effectiveStatus == "draft"
     }
 
     var body: some View {
@@ -130,7 +141,7 @@ struct QuoteRow: View {
                 Image(systemName: "eye.fill")
                     .font(.caption2)
             }
-            Text(showsUnpriced ? "\(unpricedCount) unpriced" : pillLabel)
+            Text(showsUnpriced ? "\(unpricedCount ?? 0) unpriced" : pillLabel)
                 .contentTransition(.opacity)
         }
         .font(.caption.weight(.medium))
@@ -141,6 +152,7 @@ struct QuoteRow: View {
     }
 
     private var pillLabel: String {
+        if isCheckingPrices { return "Checking…" }
         switch quote.effectiveStatus {
         case "draft": return "Draft"
         case "sent": return "Sent"
@@ -153,11 +165,13 @@ struct QuoteRow: View {
     }
 
     private var pillForeground: Color {
+        if isCheckingPrices { return Color(.statusMutedText) }
         if showsUnpriced { return Color(.statusWarningText) }
         return QuoteStatusStyle.text(quote.effectiveStatus)
     }
 
     private var pillBackground: Color {
+        if isCheckingPrices { return Color(.statusMutedFill) }
         if showsUnpriced { return Color(.statusWarningFill) }
         return QuoteStatusStyle.fill(quote.effectiveStatus)
     }

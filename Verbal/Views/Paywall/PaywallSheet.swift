@@ -401,22 +401,26 @@ struct PaywallSheet: View {
             .buttonStyle(.plain)
             .disabled(!canBuy)
 
-            HStack(spacing: 3) {
-                Text(billingNote)
-                if let terms = AppInfo.termsURL {
-                    Button { openURL(terms) } label: {
-                        Text("Terms apply").underline()
+            VStack(spacing: 4) {
+                HStack(spacing: 3) {
+                    Text(billingNote)
+                    if let terms = AppInfo.termsURL {
+                        Button { openURL(terms) } label: {
+                            Text("Terms apply").underline()
+                        }
+                        Text("and")
+                    }
+                    Button { openURL(AppInfo.privacyPolicyURL) } label: {
+                        Text("Privacy Policy").underline()
                     }
                 }
-                Text("and")
-                Button { openURL(AppInfo.privacyPolicyURL) } label: {
-                    Text("Privacy Policy").underline()
-                }
+                Text("Auto-renews unless cancelled at least 24 hours before the end of the current period. Manage or cancel in your App Store account settings.")
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .font(.caption)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
-            .frame(height: 20)
             .disabled(isPurchasing)
         }
         .padding(.horizontal, 24)

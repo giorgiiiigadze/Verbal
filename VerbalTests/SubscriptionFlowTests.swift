@@ -52,4 +52,11 @@ final class SubscriptionFlowTests: XCTestCase {
             "Your purchase is waiting for approval. We'll unlock Pro when Apple confirms it."
         )
     }
+
+    func testTransactionReportPayloadIsStableAndDuplicateFree() {
+        XCTAssertEqual(
+            SubscriptionService.canonicalTransactions(["renewal", "original", "renewal"]),
+            ["original", "renewal"]
+        )
+    }
 }

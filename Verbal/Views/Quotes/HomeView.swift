@@ -1491,7 +1491,7 @@ struct HomeView: View {
     /// Warn when the quote still has gaps, then share either way. Never blocks:
     /// a price the supplier hasn't given yet is a normal thing to send as TBC.
     private func confirmThenShare(_ quote: QuoteSummary) {
-        if unpricedCount(for: quote) > 0 {
+        if (unpricedCount(for: quote) ?? 0) > 0 {
             shareAfterWarning = quote
         } else {
             shareOrAskForClient(quote)
@@ -1521,12 +1521,12 @@ struct HomeView: View {
 
     /// Reads the line items prefetched just before this — the summary row alone
     /// doesn't know what's inside a quote.
-    private func unpricedCount(for quote: QuoteSummary) -> Int {
-        (session.lineItems(for: quote.id) ?? []).filter(\.isMissingPrice).count
+    private func unpricedCount(for quote: QuoteSummary) -> Int? {
+        session.lineItems(for: quote.id)?.filter(\.isMissingPrice).count
     }
 
     private var unpricedTitle: String {
-        let count = shareAfterWarning.map(unpricedCount(for:)) ?? 0
+        let count = shareAfterWarning.flatMap(unpricedCount(for:)) ?? 0
         return "Share with \(count) item\(count == 1 ? "" : "s") unpriced?"
     }
 

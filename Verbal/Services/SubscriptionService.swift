@@ -49,7 +49,13 @@ enum SubscriptionService {
     @MainActor
     static func report(signedTransactions: [String], force: Bool = false) async -> ReportOutcome {
         guard client.auth.currentUser != nil else { return .unavailable }
-        guard force || lastReported != signedTransactions else { return .accepted }
+        // AsyncSequences do not promise an ordering.  Comparing their raw
+        // output made an unchanged subscription look new whenever StoreKit
+        // yielded the same transactions in a different order (and the status
+        // fallback can surface the same transaction twice).  Keep the wire
+        // payload deterministic so this remains real de-duplication.
+        let transactions = canonicalTransactions(signedTransactions)
+        guard force || lastReported != transactions else { return .accepted }
 
         struct Payload: Encodable {
             let signed_transactions: [String]
@@ -57,9 +63,9 @@ enum SubscriptionService {
         do {
             try await client.functions.invoke(
                 "verify-subscription",
-                options: FunctionInvokeOptions(body: Payload(signed_transactions: signedTransactions))
+                options: FunctionInvokeOptions(body: Payload(signed_transactions: transactions))
             )
-            lastReported = signedTransactions
+            lastReported = transactions
             return .accepted
         } catch FunctionsError.httpError(let code, _) where code == 403 {
             // The server only uses 403 when Apple's signed appAccountToken names
@@ -81,5 +87,11 @@ enum SubscriptionService {
     @MainActor
     static func forgetLastReport() {
         lastReported = nil
+    }
+
+    /// A stable, duplicate-free representation of an entitlement snapshot.
+    /// Internal so the non-StoreKit portion can be unit tested.
+    static func canonicalTransactions(_ transactions: [String]) -> [String] {
+        Array(Set(transactions)).sorted()
     }
 }

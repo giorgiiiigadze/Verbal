@@ -176,7 +176,7 @@ struct ClientsView: View {
             NavigationLink(value: ClientKey(id: client.id, name: client.name)) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(client.name)
-                        .font(.callout.weight(.semibold))
+                        .font(.body.weight(.heavy))
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(2)
                         .frame(minHeight: 40, alignment: .topLeading)
@@ -190,12 +190,12 @@ struct ClientsView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(meta(for: client))
-                            .font(.callout.weight(.bold))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color(.mainText))
 
                         if let total = client.singleCurrencyTotal {
                             Text(total)
-                                .font(.callout.weight(.bold).monospacedDigit())
+                                .font(.subheadline.weight(.semibold).monospacedDigit())
                                 .foregroundStyle(Color(.mainText))
                         }
                     }
