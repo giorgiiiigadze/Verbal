@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct EditQuoteView: View {
     let quoteId: UUID
@@ -148,7 +149,8 @@ struct EditQuoteView: View {
             return
         }
 
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        // A saved quote is a durable result, not just a button press.
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         onSaved(newSummary, newScope)
         dismiss()
     }

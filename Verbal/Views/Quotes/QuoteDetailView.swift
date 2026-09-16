@@ -892,7 +892,11 @@ struct QuoteDetailView: View {
         // write reverts `status` and ticks again, which is honest — the state
         // did change back.
         .sensoryFeedback(trigger: status) { _, new in
-            new == "accepted" ? .success : .selection
+            switch new {
+            case "accepted": .success
+            case "declined", "expired": .warning
+            default: .selection
+            }
         }
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -1004,6 +1008,9 @@ struct QuoteDetailView: View {
         }
         .alert("Delete this quote?", isPresented: $showDeleteConfirm) {
             Button("Delete", role: .destructive) {
+                // The confirmation has passed; warn about the irreversible step
+                // before the write begins, then confirm the removal when it lands.
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 Task {
                     do {
                         try await QuoteService.deleteQuote(id: quote.id)
@@ -1018,6 +1025,7 @@ struct QuoteDetailView: View {
                     // their last. `onDeleted` only tells the screen we came from.
                     session.removeQuote(id: quote.id)
                     onDeleted()
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     dismiss()
                 }
             }

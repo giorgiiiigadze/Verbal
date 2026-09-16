@@ -86,6 +86,9 @@ struct QuoteRecordingView: View {
 
     private let scheduledVisit: ScheduledVisit?
     private let onSavedQuote: ((UUID) -> Void)?
+    /// The sheet is intentionally visible during the server quota preflight,
+    /// but recording cannot begin until that check says the account may create.
+    private let isPreparingLaunch: Bool
     /// Called instead of `onSavedQuote` when the server refused the save
     /// because today's free quotes are gone.
     ///
@@ -104,11 +107,13 @@ struct QuoteRecordingView: View {
 
     init(scheduledVisit: ScheduledVisit? = nil,
          initialClientName: String? = nil,
+         isPreparingLaunch: Bool = false,
          onSavedQuote: ((UUID) -> Void)? = nil,
          onAllowanceExhausted: (() -> Void)? = nil) {
         self.onAllowanceExhausted = onAllowanceExhausted
         self.scheduledVisit = scheduledVisit
         self.onSavedQuote = onSavedQuote
+        self.isPreparingLaunch = isPreparingLaunch
         _title = State(initialValue: "")
         // The client, not the job. A visit's title is what the work is
         // ("Bathroom rip-out"); its `clientName` is who it's for. Reading the
@@ -434,6 +439,7 @@ struct QuoteRecordingView: View {
                 }
             )
         }
+        .disabled(isPreparingLaunch)
         // A recording is work in progress. The close button routes through the
         // discard confirmation; prevent the sheet gesture from bypassing it.
         .interactiveDismissDisabled(recorder.isSessionActive || hasText || generated != nil || isGenerating)
@@ -515,6 +521,11 @@ struct QuoteRecordingView: View {
                 // before its final buffers had been written.
                 if recorder.isSessionActive {
                     await recorder.stop()
+                    // Recording is a mode change. Confirm that the mic is off
+                    // before the screen moves into the slower generation state.
+                    if recordingHapticsEnabled {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    }
                     // `onChange` intentionally follows words only while the
                     // mic is live; take this final snapshot ourselves so the
                     // last phrase reaches both transcription paths.
@@ -866,6 +877,7 @@ struct QuoteRecordingView: View {
                     toast = Toast(style: .error, message: "Couldn't save your changes")
                     return
                 }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 onSavedQuote?(id)
                 dismiss()
                 return
@@ -875,6 +887,7 @@ struct QuoteRecordingView: View {
             do {
                 let id = try await QuoteService.save(generated, transcript: transcriptText, title: title,
                                                      currency: currency, clientName: clientName)
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 onSavedQuote?(id)
                 toast = Toast(style: .success, message: "Quote saved")
                 try? await Task.sleep(for: .seconds(1.0))
@@ -906,6 +919,7 @@ struct QuoteRecordingView: View {
         do {
             let id = try await QuoteService.save(quote, transcript: transcriptText, title: title,
                                                  currency: currency, clientName: clientName)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
             onSavedQuote?(id)
             toast = Toast(style: .success, message: "Quote saved")
             try? await Task.sleep(for: .seconds(1.0))

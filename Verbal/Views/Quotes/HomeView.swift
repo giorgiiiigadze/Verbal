@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct HomeView: View {
     @Environment(SessionStore.self) private var session
@@ -1713,6 +1714,7 @@ struct HomeView: View {
             // makes the list look like it lost its place rather than obeyed.
             withAnimation(Self.rowRemoval) { quotes.removeAll { $0.id == quote.id } }
             toast = Toast(style: .success, message: "Quote deleted")
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         } catch {
             toast = Toast(style: .error, message: "Couldn't delete quote")
         }
@@ -1795,6 +1797,10 @@ struct HomeView: View {
             // The user just won the job — make it land physically.
             if newStatus == "accepted" {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } else if newStatus == "declined" || newStatus == "expired" {
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            } else {
+                UISelectionFeedbackGenerator().selectionChanged()
             }
         } catch {
             withAnimation { quotes[index].status = previous }

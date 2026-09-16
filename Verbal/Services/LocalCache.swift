@@ -106,6 +106,21 @@ nonisolated enum LocalCache {
         return try? Data(contentsOf: directory.appendingPathComponent(key.filename))
     }
 
+    /// Keep the first-paint quote cache in sync with a confirmed status edit.
+    /// Quotes are intentionally stored as the server's raw JSON, so mutate
+    /// only this one field rather than re-encoding a model and risking drift
+    /// when the response shape gains a column.
+    static func updateQuoteStatus(id: UUID, status: String, userID: UUID) {
+        guard let data = loadData(for: .quotes, userID: userID),
+              var rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              let index = rows.firstIndex(where: { ($0["id"] as? String) == id.uuidString })
+        else { return }
+
+        rows[index]["status"] = status
+        guard let updated = try? JSONSerialization.data(withJSONObject: rows) else { return }
+        save(updated, for: .quotes, userID: userID)
+    }
+
     /// Whether something is already stored, without paying to decode it.
     static func exists(for key: Key, userID: UUID) -> Bool {
         guard let directory = directory(for: userID) else { return false }

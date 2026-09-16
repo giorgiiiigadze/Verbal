@@ -20,6 +20,7 @@
 
 import StoreKit
 import SwiftUI
+import UIKit
 
 struct PaywallSheet: View {
     /// How many quotes they have left today, if the count is known. Only used
@@ -461,6 +462,7 @@ struct PaywallSheet: View {
             #if DEBUG
             if store.products.isEmpty {
                 store.unlockForDebug()
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 dismiss()
             }
             #endif
@@ -472,7 +474,10 @@ struct PaywallSheet: View {
             do {
                 // Only on success: a cancelled purchase should leave the sheet
                 // exactly where it was, not close as if something happened.
-                if try await store.purchase(product) { dismiss() }
+                if try await store.purchase(product) {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    dismiss()
+                }
             } catch let error as StoreError {
                 toast = Toast(style: .error, message: error.localizedDescription)
             } catch {
@@ -488,6 +493,7 @@ struct PaywallSheet: View {
             do {
                 switch SubscriptionFlow.restoreOutcome(isPro: try await store.restore()) {
                 case .restored:
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     dismiss()
                 case .noActiveSubscription:
                     toast = Toast(style: .error, message: "No active purchases were found")

@@ -96,7 +96,11 @@ final class QuoteRecorder {
     /// otherwise be undone by the setup finishing on top of it.
     private var sessionToken = 0
 
-    private let audioEngine = AVAudioEngine()
+    /// Creating `AVAudioEngine` may wake the system audio stack. Do that only
+    /// when the user actually starts recording, not while SwiftUI is building
+    /// the recorder sheet; a fresh app launch can otherwise make presentation
+    /// visibly stall before the microphone control is even touched.
+    @ObservationIgnored private lazy var audioEngine = AVAudioEngine()
     /// A 16 kHz mono CAF is small enough to upload promptly (about 2 MB/minute)
     /// and is accepted by the accuracy-pass provider. It is never a permanent
     /// recording and is deliberately outside the user's documents directory.

@@ -29,6 +29,9 @@ struct MainTabView: View {
     /// quote that the server will refuse only when they tap Done.
     @State private var isCheckingQuoteAllowance = false
     @State private var allowanceCheckFailed = false
+    /// A failed preflight is reported after the recorder has finished
+    /// dismissing; presenting an alert over that sheet can be dropped by UIKit.
+    @State private var recordingLaunchCheckFailed = false
     @State private var recordingVisit: ScheduledVisit?
     @State private var savedRecordingQuoteID: UUID?
     /// Set when the recorder's save was refused for want of allowance. Acted on
@@ -190,6 +193,10 @@ struct MainTabView: View {
         .sheet(isPresented: $showCreate, onDismiss: {
             recordingVisit = nil
             pendingNewQuoteClientName = nil
+            if recordingLaunchCheckFailed {
+                recordingLaunchCheckFailed = false
+                allowanceCheckFailed = true
+            }
             // Now that the recorder is actually gone, the paywall has the
             // screen to itself.
             if recordingHitPaywall {
@@ -200,6 +207,7 @@ struct MainTabView: View {
             QuoteRecordingView(
                 scheduledVisit: recordingVisit,
                 initialClientName: pendingNewQuoteClientName,
+                isPreparingLaunch: isCheckingQuoteAllowance,
                 onSavedQuote: { quoteId in
                     // The recorder can be started from either Home or Visits.
                     // Keep the association here, at their shared owner, so a
@@ -246,8 +254,29 @@ struct MainTabView: View {
         isCheckingQuoteAllowance = true
         defer { isCheckingQuoteAllowance = false }
 
+        // First-time users should see the recording introduction before a
+        // recorder exists. Returning users, however, get the sheet immediately
+        // while this server-authoritative check runs behind its loading veil.
+        guard hasSeenRecordingIntro else {
+            guard await session.refreshQuoteUsage() != nil else {
+                allowanceCheckFailed = true
+                return
+            }
+            guard session.canCreateQuote else {
+                store.isPaywallPresented = true
+                return
+            }
+            pendingNewQuoteClientName = clientName
+            showRecordingIntro = true
+            return
+        }
+
+        pendingNewQuoteClientName = clientName
+        showCreate = true
+
         guard await session.refreshQuoteUsage() != nil else {
-            allowanceCheckFailed = true
+            recordingLaunchCheckFailed = true
+            showCreate = false
             return
         }
 
@@ -256,16 +285,9 @@ struct MainTabView: View {
         // follow the backend quota-off switch instead of re-applying the
         // numeric free allowance here.
         guard session.canCreateQuote else {
-            store.isPaywallPresented = true
+            recordingHitPaywall = true
+            showCreate = false
             return
-        }
-
-        pendingNewQuoteClientName = clientName
-
-        if hasSeenRecordingIntro {
-            showCreate = true
-        } else {
-            showRecordingIntro = true
         }
     }
 

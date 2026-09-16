@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
     @State private var network = NetworkMonitor()
     @State private var session: SessionStore
     /// What they're entitled to. Owned here rather than by the tab view so the
@@ -59,6 +60,16 @@ struct ContentView: View {
             && !offlineBannerDismissed
     }
 
+    /// The signed-in app follows the saved appearance preference. Auth is the
+    /// one deliberate exception: it is a fixed dark threshold into the product.
+    /// This preference must live at this scene-root level; a child preference
+    /// cannot reliably override the app-wide light preference that used to be
+    /// applied in `VerbalApp`.
+    private var preferredColorScheme: ColorScheme? {
+        if session.state == .signedOut && hasSeenOnboarding { return .dark }
+        return (AppAppearance(rawValue: appearance) ?? .system).colorScheme
+    }
+
     var body: some View {
         ZStack {
             content
@@ -98,6 +109,7 @@ struct ContentView: View {
         .environment(session)
         .environment(network)
         .environment(store)
+        .preferredColorScheme(preferredColorScheme)
         .animation(.easeInOut(duration: 0.35), value: showSplash)
         .animation(.spring(duration: 0.4), value: network.isOnline)
         .onChange(of: network.isOnline) { _, isOnline in

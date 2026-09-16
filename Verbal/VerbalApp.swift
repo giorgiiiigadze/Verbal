@@ -14,12 +14,6 @@ import UserNotifications
 struct VerbalApp: App {
     private static let notificationDelegate = AppNotificationDelegate()
 
-    @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
-
-    private var preferredColorScheme: ColorScheme? {
-        (AppAppearance(rawValue: appearance) ?? .system).colorScheme
-    }
-
     init() {
         GoogleAuth.configure()
         RevenueCatService.configure()
@@ -46,7 +40,6 @@ struct VerbalApp: App {
         WindowGroup {
             ContentView()
                 .environment(AppNotificationRouter.shared)
-                .preferredColorScheme(preferredColorScheme)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }

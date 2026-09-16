@@ -115,7 +115,9 @@ struct EmailAuthView: View {
                 .textFieldStyle(.plain)
                 .font(.body)
                 .foregroundStyle(Color(.mainText))
-                .tint(Color(.blueAccentText))
+                // Inputs stay neutral; blue is a brand accent, not a focus
+                // state competing with the words someone is entering.
+                .tint(Color(.mainText))
                 .keyboardType(.emailAddress)
                 .textContentType(.emailAddress)
                 .textInputAutocapitalization(.never)
@@ -131,7 +133,7 @@ struct EmailAuthView: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(
-                            focused == .email ? Color(.blueAccentText) : Color(.separator),
+                            focused == .email ? Color(.mainText).opacity(0.72) : Color(.separator),
                             lineWidth: 1
                         )
                 }
@@ -223,7 +225,7 @@ struct EmailAuthView: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(
-                        isActive ? Color(.blueAccentText) : Color(.separator),
+                        isActive ? Color(.mainText).opacity(0.72) : Color(.separator),
                         lineWidth: isActive ? 1.5 : 1
                     )
             }

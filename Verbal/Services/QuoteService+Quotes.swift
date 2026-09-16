@@ -170,6 +170,11 @@ extension QuoteService {
             .update(["status": status])
             .eq("id", value: id)
             .execute()
+        // Home restores this raw response before the next network fetch. Keep
+        // it current so a quote never flashes its old Draft badge at login.
+        if let userID = client.auth.currentUser?.id {
+            LocalCache.updateQuoteStatus(id: id, status: status, userID: userID)
+        }
     }
 
     /// Move a quote's validity date. Sent as "yyyy-MM-dd" because the column is

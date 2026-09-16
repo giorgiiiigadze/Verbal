@@ -183,7 +183,8 @@ struct LineItemsSheet: View {
             return
         }
 
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        // The revised total is now safely stored, so make the confirmation clear.
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         onSaved(newSubtotal, newTotal)
         dismiss()
     }
