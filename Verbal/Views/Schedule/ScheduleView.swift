@@ -121,7 +121,7 @@ struct ScheduleView: View {
         }
     }
     private var loadingState: some View {
-        ScrollView { LazyVStack(alignment: .leading, spacing: 10) { RoundedRectangle(cornerRadius: 7).fill(Color(.separator)).frame(width: 116, height: 20); ForEach(0..<5, id: \.self) { _ in RoundedRectangle(cornerRadius: 14).fill(Color(.cardSurface)).frame(height: 68).overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color(.separator), lineWidth: 0.5)) } }.padding(20) }.shimmer(active: true).accessibilityLabel("Loading your visits")
+        ScheduleLoadingSkeleton()
     }
     private func liveVisit(_ visit: ScheduledVisit) -> ScheduledVisit { visits.first { $0.id == visit.id } ?? visit }
     private func liveQuote(_ quote: QuoteSummary) -> QuoteSummary { session.quotes.first { $0.id == quote.id } ?? quote }
@@ -150,6 +150,108 @@ struct ScheduleView: View {
     private func presentRecordedQuote(_ quote: QuoteSummary) async { await session.prefetchLineItems(for: quote.id); try? await Task.sleep(for: .seconds(0.3)); quoteToOpen = quote }
     private func openDirections(for visit: ScheduledVisit) { guard let address = visit.address?.trimmingCharacters(in: .whitespacesAndNewlines), !address.isEmpty, let encoded = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed), let url = URL(string: "http://maps.apple.com/?q=\(encoded)") else { toast = Toast(style: .error, message: "No address saved"); return }; openURL(url) }
     private func callClient(for visit: ScheduledVisit) { guard let phone = visit.phone?.trimmingCharacters(in: .whitespacesAndNewlines), !phone.isEmpty else { toast = Toast(style: .error, message: "No phone number saved"); return }; let dialable = phone.filter { $0.isNumber || $0 == "+" }; guard !dialable.isEmpty, let url = URL(string: "tel:\(dialable)") else { toast = Toast(style: .error, message: "Couldn't call this number"); return }; openURL(url) }
+}
+
+/// Mirrors the calendar's actual information hierarchy while visits are being
+/// read: a fixed day control, then a time rail and appointment blocks. This is
+/// deliberately not a list of generic cards; the loaded view is a day canvas.
+private struct ScheduleLoadingSkeleton: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let hourHeight: CGFloat = 74
+    private let labelWidth: CGFloat = 52
+    private let visibleHours = [8, 9, 10, 11, 12, 13, 14, 15]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            daySelectorSkeleton
+
+            ScrollView(.vertical, showsIndicators: false) {
+                ZStack(alignment: .topLeading) {
+                    VStack(spacing: 0) {
+                        ForEach(visibleHours, id: \.self) { hour in
+                            hourRow(hour)
+                        }
+                    }
+
+                    appointmentBlock(width: 0.68, height: 58)
+                        .offset(x: labelWidth + 18, y: hourHeight * 1 + 9)
+                    appointmentBlock(width: 0.48, height: 104)
+                        .offset(x: labelWidth + 68, y: hourHeight * 3 + 12)
+                    appointmentBlock(width: 0.76, height: 68)
+                        .offset(x: labelWidth + 16, y: hourHeight * 5 + 8)
+                }
+                .padding(.top, 12)
+                .padding(.bottom, 100)
+            }
+            .padding(.top, 10)
+        }
+        .background(Color(.homeBackground))
+        .shimmer(active: true)
+        .accessibilityLabel("Loading your visits")
+    }
+
+    private var daySelectorSkeleton: some View {
+        HStack {
+            Circle().fill(placeholderInk).frame(width: 18, height: 18)
+            Spacer()
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(placeholderInk)
+                .frame(width: 126, height: 18)
+            Spacer()
+            Circle().fill(placeholderInk).frame(width: 18, height: 18)
+        }
+        .padding(.horizontal, 29)
+        .frame(maxWidth: .infinity, minHeight: 56)
+        .background {
+            Rectangle().fill(colorScheme == .dark ? Color("DaySelectorBar") : Color(.cardSurface))
+        }
+    }
+
+    private func hourRow(_ hour: Int) -> some View {
+        HStack(spacing: 0) {
+            Text(hourLabel(hour))
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(placeholderInk)
+                .frame(width: labelWidth - 6, alignment: .trailing)
+                .padding(.trailing, 6)
+                .offset(y: -7)
+
+            Rectangle()
+                .fill(Color(.separator).opacity(0.6))
+                .frame(height: 0.5)
+        }
+        .frame(height: hourHeight, alignment: .top)
+    }
+
+    private func appointmentBlock(width: CGFloat, height: CGFloat) -> some View {
+        GeometryReader { proxy in
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(.cardSurface))
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(placeholderInk)
+                        .frame(width: 3, height: 26)
+                        .padding(.leading, 10)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                }
+                .frame(width: max(96, proxy.size.width * width), height: height, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: height)
+    }
+
+    private var placeholderInk: Color {
+        colorScheme == .dark ? .white.opacity(0.16) : Color(.mainText).opacity(0.10)
+    }
+
+    private func hourLabel(_ hour: Int) -> String {
+        let date = Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: .now) ?? .now
+        return date.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated)))
+    }
 }
 
 private enum CalendarVisitStatus {
