@@ -147,7 +147,8 @@ struct ShareQuotePanel: View {
                                 isDisabled: isLinking) {
                         copyLink()
                     }
-                    shareAction(title: "View PDF", systemImage: "doc.text") {
+                    shareAction(title: "View PDF", systemImage: "doc.text",
+                                isDisabled: pdfURL == nil) {
                         if pdfURL != nil { isPreviewing = true }
                     }
                 }

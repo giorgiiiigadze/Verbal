@@ -108,6 +108,9 @@ struct QuoteDetailView: View {
     /// Seeded from the quote and kept in sync after an edit, so the chip
     /// updates without refetching the list.
     @State private var clientName: String
+    /// Stops the rollback after a failed client write from starting a second,
+    /// redundant write for the value the server already has.
+    @State private var isRevertingClientName = false
     /// Live title, summary & scope — editable via the edit sheet.
     @State private var title: String
     @State private var jobSummary: String
@@ -775,11 +778,31 @@ struct QuoteDetailView: View {
         .onChange(of: clientName) { previous, current in
             // Persist only real edits, not the initial seed.
             guard previous != current else { return }
+            guard !isRevertingClientName else {
+                isRevertingClientName = false
+                return
+            }
             // This one moves the quote between people: the Clients tab groups by
             // the name on it, so naming a different client has to reach the
             // shared list or the quote stays hanging under the old one.
             session.updateQuote(id: quote.id) { $0.clientName = current }
-            Task { try? await QuoteService.setClient(quoteId: quote.id, name: current) }
+            Task {
+                do {
+                    if current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        try await QuoteService.clearClient(quoteId: quote.id)
+                    } else {
+                        try await QuoteService.setClient(quoteId: quote.id, name: current)
+                    }
+                } catch {
+                    // A newer selection is already being saved. Its result, not
+                    // this older request, now decides what the chip should say.
+                    guard clientName == current else { return }
+                    isRevertingClientName = true
+                    clientName = previous
+                    session.updateQuote(id: quote.id) { $0.clientName = previous }
+                    toast = Toast(style: .error, message: "Couldn't save the client")
+                }
+            }
         }
         .sheet(isPresented: $showTranscript) {
             TranscriptSheet(text: transcriptText, unreachable: transcriptUnreachable)
