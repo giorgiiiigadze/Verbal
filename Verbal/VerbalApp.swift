@@ -41,7 +41,11 @@ struct VerbalApp: App {
             ContentView()
                 .environment(AppNotificationRouter.shared)
                 .onOpenURL { url in
-                    GIDSignIn.sharedInstance.handle(url)
+                    if url.scheme == "verbal" {
+                        AppNotificationRouter.shared.handleDeepLink(url)
+                    } else {
+                        GIDSignIn.sharedInstance.handle(url)
+                    }
                 }
         }
     }

@@ -128,6 +128,9 @@ final class VisitStore {
     ///
     /// Account deletion passes `false`: there is nothing left to push to.
     func detach(preservingCache: Bool) {
+        // Widgets outlive the app process, so never leave the previous
+        // account's appointment visible after sign-out.
+        NextVisitWidgetStore.publish(from: [])
         defer {
             userID = nil
             visits = []
@@ -432,6 +435,7 @@ final class VisitStore {
                     unsynced: Array(unsynced),
                     tombstones: tombstones),
               userID: userID)
+        NextVisitWidgetStore.publish(from: visits)
     }
 
     private func write(_ cache: Cache, userID: UUID) {

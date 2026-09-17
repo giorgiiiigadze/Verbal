@@ -98,8 +98,7 @@ struct MainTabView: View {
             Tab(value: TabItem.home) {
                 HomeView(showCreate: createBinding,
                          recordingVisit: $recordingVisit,
-                         savedRecordingQuoteID: $savedRecordingQuoteID,
-                         onShowCalendar: { selection = .schedule })
+                         savedRecordingQuoteID: $savedRecordingQuoteID)
             } label: {
                 Label {
                     Text("Home")
@@ -154,6 +153,10 @@ struct MainTabView: View {
             presentShareLinkNewsIfNeeded()
         }
         .task { await notificationRouter.refreshVisitReminderBadge() }
+        // A widget can cold-launch the app before this view has attached its
+        // change observer. Read any already-pending route once as well.
+        .task { openRequestedVisitIfNeeded() }
+        .task { openRequestedCalendarIfNeeded() }
         .sheet(isPresented: $showShareLinkNews, onDismiss: { seenShareLinkNews = true }) {
             ShareLinkNewsSheet()
         }
@@ -229,11 +232,12 @@ struct MainTabView: View {
             selection = .home
         }
         .onChange(of: notificationRouter.requestedVisitId) { _, visitId in
-            guard let visitId else { return }
-            calendarVisitRequestID = visitId
-            selection = .schedule
-            notificationRouter.clearVisitReminder()
-            notificationRouter.requestedVisitId = nil
+            guard visitId != nil else { return }
+            openRequestedVisitIfNeeded()
+        }
+        .onChange(of: notificationRouter.requestedCalendar) { _, requested in
+            guard requested else { return }
+            openRequestedCalendarIfNeeded()
         }
         .onChange(of: selection) { _, selectedTab in handleTabSelection(selectedTab) }
         .onChange(of: scenePhase) { _, phase in
@@ -243,6 +247,20 @@ struct MainTabView: View {
         .onChange(of: session.visitStore.hasCompletedInitialSync) { _, _ in
             presentCalendarIntroIfNeeded()
         }
+    }
+
+    private func openRequestedVisitIfNeeded() {
+        guard let visitId = notificationRouter.requestedVisitId else { return }
+        calendarVisitRequestID = visitId
+        selection = .schedule
+        notificationRouter.clearVisitReminder()
+        notificationRouter.requestedVisitId = nil
+    }
+
+    private func openRequestedCalendarIfNeeded() {
+        guard notificationRouter.requestedCalendar else { return }
+        selection = .schedule
+        notificationRouter.requestedCalendar = false
     }
 
     /// Reconcile the cached count with the server at the moment it matters.

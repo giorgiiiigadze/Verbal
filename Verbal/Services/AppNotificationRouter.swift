@@ -16,6 +16,7 @@ final class AppNotificationRouter {
 
     var requestedQuoteId: UUID?
     var requestedVisitId: UUID?
+    var requestedCalendar = false
     var hasUnreadVisitReminder = false
 
     private init() {}
@@ -32,6 +33,17 @@ final class AppNotificationRouter {
     func openVisit(id: UUID) {
         requestedVisitId = id
         hasUnreadVisitReminder = true
+    }
+
+    /// Widget links use the same navigation path as a visit-reminder tap.
+    func handleDeepLink(_ url: URL) {
+        guard url.scheme == "verbal" else { return }
+        if url.host == "calendar" {
+            requestedCalendar = true
+        } else if url.host == "visit",
+                  let id = url.pathComponents.dropFirst().first.flatMap(UUID.init(uuidString:)) {
+            requestedVisitId = id
+        }
     }
 
     func clearVisitReminder() {

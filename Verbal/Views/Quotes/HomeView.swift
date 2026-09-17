@@ -19,8 +19,6 @@ struct HomeView: View {
     @Binding var showCreate: Bool
     @Binding var recordingVisit: ScheduledVisit?
     @Binding var savedRecordingQuoteID: UUID?
-    /// Home is a preview; Calendar owns the complete visit list.
-    var onShowCalendar: () -> Void = {}
     @State private var path = NavigationPath()
     @State private var quotes: [QuoteSummary] = []
     @State private var hasLoaded = false
@@ -570,11 +568,6 @@ struct HomeView: View {
                                      bottomInset: closesWarmSurface ? 20 : 5)
                         }
                     }
-
-                    if section.id == lastUpcomingSectionID,
-                       upcomingVisitOverflowCount > 0 {
-                        upcomingVisitOverflowRow
-                    }
                 }
             }
             .listStyle(.plain)
@@ -631,34 +624,6 @@ struct HomeView: View {
             Self.upcomingVisitCardShape
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         )
-        .listRowBackground(TimelineSection.Surface.warm.color(for: colorScheme))
-        .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 20, trailing: 20))
-    }
-
-    private var upcomingVisitOverflowRow: some View {
-        Button(action: onShowCalendar) {
-            HStack(spacing: 10) {
-                Image(systemName: "calendar")
-                    .font(.subheadline.weight(.semibold))
-                Text("See \(upcomingVisitOverflowCount) more upcoming \(upcomingVisitOverflowCount == 1 ? "visit" : "visits")")
-                    .font(.subheadline.weight(.semibold))
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .appDisclosureIcon()
-            }
-            .foregroundStyle(OnboardingStyle.action)
-            .padding(.horizontal, 16)
-            .frame(minHeight: 52)
-            .background(upcomingVisitCardFill,
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("See \(upcomingVisitOverflowCount) more upcoming visits in Calendar")
         .listRowBackground(TimelineSection.Surface.warm.color(for: colorScheme))
         .listRowSeparator(.hidden)
         .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 20, trailing: 20))
@@ -1455,14 +1420,6 @@ struct HomeView: View {
         return allUpcomingVisits.filter {
             nextThreeIDs.contains($0.id) || isVisitOverdue($0)
         }
-    }
-
-    private var upcomingVisitOverflowCount: Int {
-        max(0, allUpcomingVisits.count - timelineVisits.count)
-    }
-
-    private var lastUpcomingSectionID: String? {
-        sections.last(where: { $0.surface == .warm })?.id
     }
 
     private func isVisitOverdue(_ visit: ScheduledVisit) -> Bool {

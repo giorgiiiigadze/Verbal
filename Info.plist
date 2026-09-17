@@ -23,6 +23,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>com.googleusercontent.apps.730414346653-7mm7bs8q82qonlbhupugckcq0h4ngl57</string>
+				<string>verbal</string>
 			</array>
 		</dict>
 	</array>
