@@ -41,6 +41,10 @@ enum NextVisitWidgetStore {
         let data = try? JSONEncoder().encode(Payload(visits: upcoming))
         let defaults = UserDefaults(suiteName: appGroup)
         defaults?.set(data, forKey: snapshotKey)
+        // The widget is a separate process. Flushing the app-group defaults
+        // before requesting its timeline avoids a physical device rendering
+        // the previous snapshot while the new value is still buffered.
+        defaults?.synchronize()
         WidgetCenter.shared.reloadTimelines(ofKind: "NextVisitWidget")
     }
 }

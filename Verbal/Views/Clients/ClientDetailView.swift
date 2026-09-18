@@ -11,6 +11,7 @@ import SwiftUI
 import UIKit
 
 struct ClientDetailView: View {
+    private static let clientButtonBackground = Color(red: 70 / 255, green: 70 / 255, blue: 70 / 255)
     /// Who this page is about — their case-folded name, nothing more. The page
     /// holds no copy of them: everything drawn comes from `client` below, so an
     /// edit made in the thread at the bottom reaches the figures at the top.
@@ -544,9 +545,9 @@ struct ClientDetailView: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(isAvailable ? Color(.mainText) : .secondary)
+                .foregroundStyle(isAvailable ? .white : .secondary)
                 .frame(width: 60, height: 60)
-                .glassEffect(.regular.interactive(), in: Circle())
+                .background(Self.clientButtonBackground, in: Circle())
         }
         .buttonStyle(.plain)
         .disabled(!isAvailable)
