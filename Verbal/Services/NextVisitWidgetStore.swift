@@ -37,7 +37,7 @@ enum NextVisitWidgetStore {
     static func publish(from visits: [ScheduledVisit]) {
         let now = Date()
         let upcoming = visits.filter { $0.endDate >= now && $0.recordedQuoteId == nil }
-            .prefix(4).map(Snapshot.init)
+            .prefix(5).map(Snapshot.init)
         let data = try? JSONEncoder().encode(Payload(visits: upcoming))
         let defaults = UserDefaults(suiteName: appGroup)
         defaults?.set(data, forKey: snapshotKey)

@@ -46,19 +46,30 @@ struct NextVisitWidgetView: View {
             ? UIColor(red: 217 / 255, green: 115 / 255, blue: 13 / 255, alpha: 0.20)
             : UIColor(red: 250 / 255, green: 235 / 255, blue: 221 / 255, alpha: 1)
     })
+    private var usesDarkGradient: Bool {
+        family == .systemSmall || family == .systemMedium
+    }
 
     var body: some View {
         Group { if let visit = entry.visit { content(visit) } else { empty } }
+            // The reference uses a deliberately tighter inset than WidgetKit's
+            // standard small-widget margin. Other widget families retain it.
+            .padding(family == .systemSmall ? 0 : 16)
             .containerBackground(for: .widget) {
-                if family == .systemSmall, entry.visit != nil {
-                    ZStack(alignment: .leading) {
-                        visitAmberFill
-                        Rectangle().fill(visitAmber).frame(width: 4)
-                    }
+                if usesDarkGradient {
+                    LinearGradient(
+                        colors: [
+                            Color(red: 20 / 255, green: 27 / 255, blue: 56 / 255),
+                            Color(red: 52 / 255, green: 80 / 255, blue: 196 / 255)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
                 } else {
                     surface
                 }
             }
+            .preferredColorScheme(usesDarkGradient ? .dark : nil)
             .widgetURL(entry.visit.map(url) ?? URL(string: "verbal://calendar")!)
     }
 
@@ -69,26 +80,91 @@ struct NextVisitWidgetView: View {
         case .accessoryRectangular: lockScreen(visit)
         case .systemMedium: medium(visit, upcoming: Array(entry.visits.dropFirst()))
         case .systemLarge: large(visit, upcoming: Array(entry.visits.dropFirst()))
-        default: small(visit)
+        default: small(visit, upcoming: Array(entry.visits.dropFirst()))
         }
     }
 
     private func medium(_ visit: NextVisitWidgetStore.Snapshot, upcoming: [NextVisitWidgetStore.Snapshot]) -> some View {
         GeometryReader { proxy in
-            HStack(spacing: 0) {
-                summaryPanel(visit, compact: true)
-                    .frame(width: proxy.size.width * 0.53)
-                    .frame(maxHeight: .infinity)
+            ZStack(alignment: .bottomLeading) {
+                HStack(alignment: .top, spacing: 12) {
+                    mediumCurrentQuote(visit)
+                        .frame(width: proxy.size.width * 0.43, alignment: .leading)
+                        .frame(maxHeight: .infinity, alignment: .top)
 
-                Rectangle()
-                    .fill(Color.primary.opacity(0.10))
-                    .frame(width: 1)
-                    .padding(.vertical, 10)
+                    Rectangle()
+                        .fill(.white.opacity(0.28))
+                        .frame(width: 1)
+                        .padding(.vertical, 5)
 
-                itinerary(upcoming, limit: 3, compact: true)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    mediumUpcomingQuotes(upcoming)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+
+                Image("VisitsEmpty")
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .foregroundStyle(.white.opacity(0.2))
+                    .frame(width: 31, height: 31)
+                    .padding(.bottom, 2)
             }
         }
+    }
+
+    private func mediumCurrentQuote(_ visit: NextVisitWidgetStore.Snapshot) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(visitDateLabel(for: visit.date))
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white)
+            Text(visit.title)
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+            Text(timeRange(for: visit))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.white.opacity(0.8))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func mediumUpcomingQuotes(_ quotes: [NextVisitWidgetStore.Snapshot]) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("UP NEXT")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white)
+
+            ForEach(Array(quotes.prefix(3)), id: \.id) { quote in
+                HStack(alignment: .top, spacing: 7) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(quote.date, format: .dateTime.day())
+                            .font(.caption.weight(.bold).monospacedDigit())
+                        Text(weekday(for: quote.date))
+                            .font(.caption2.weight(.medium))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 25, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(quote.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        Text(timeRange(for: quote))
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.white.opacity(0.75))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private func large(_ visit: NextVisitWidgetStore.Snapshot, upcoming: [NextVisitWidgetStore.Snapshot]) -> some View {
@@ -220,22 +296,48 @@ struct NextVisitWidgetView: View {
     }()
 
 
-    private func small(_ visit: NextVisitWidgetStore.Snapshot) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(visitDateLabel(for: visit.date))
-                .font(.caption.weight(.semibold))
-                .padding(.bottom, 4)
-            Text(visit.title)
-                .font(.headline.weight(.semibold))
-                .lineLimit(2)
-            Text(timeRange(for: visit))
-                .font(.subheadline)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-            Spacer(minLength: 0)
+    private func small(_ visit: NextVisitWidgetStore.Snapshot,
+                       upcoming: [NextVisitWidgetStore.Snapshot]) -> some View {
+        let quotes = Array(([visit] + upcoming).prefix(5))
+
+        return VStack(spacing: 0) {
+            Text(Date.now, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
+                .font(.caption.weight(.bold))
+                .textCase(.uppercase)
+                .foregroundStyle(.white.opacity(0.9))
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 11)
+
+            VStack(spacing: 7) {
+                ForEach(Array(quotes.enumerated()), id: \.element.id) { index, quote in
+                    smallQuoteRow(quote, position: index + 1)
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
-        .foregroundStyle(visitAmber)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .foregroundStyle(.white)
+    }
+
+    private func smallQuoteRow(_ quote: NextVisitWidgetStore.Snapshot, position: Int) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            Text(String(format: "%02d", position))
+                .font(.system(size: 13, weight: .bold).monospacedDigit())
+                .frame(width: 19, alignment: .leading)
+
+            Text(quote.title)
+                .font(.system(size: 13, weight: position == 1 ? .bold : .regular))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            Spacer(minLength: 3)
+
+            Text(quote.date, format: .dateTime.hour().minute())
+                .font(.system(size: 13, weight: .bold).monospacedDigit())
+                .lineLimit(1)
+                .layoutPriority(1)
+        }
     }
     private func lockScreen(_ visit: NextVisitWidgetStore.Snapshot) -> some View { VStack(alignment: .leading, spacing: 2) { Text("Next Visit").font(.caption2.weight(.bold)); Text(visit.title).font(.headline).lineLimit(1); Text(visit.date, format: .dateTime.weekday(.abbreviated).hour().minute()).font(.caption).foregroundStyle(.secondary) } }
     private var empty: some View { VStack(alignment: .leading, spacing: 8) { Label("Next Visit", systemImage: "calendar").font(.caption.weight(.bold)).foregroundStyle(blue); Spacer(); Text("No visit booked").font(.headline); Text("Your next job will appear here.").font(.caption).foregroundStyle(.secondary); Text("Open Calendar  →").font(.caption.weight(.semibold)).foregroundStyle(blue) }.padding(6) }
@@ -249,4 +351,4 @@ extension NextVisitWidgetStore.Snapshot {
 }
 
 @main struct VerbalWidgetsBundle: WidgetBundle { var body: some Widget { NextVisitWidget() } }
-struct NextVisitWidget: Widget { let kind = "NextVisitWidget"; var body: some WidgetConfiguration { StaticConfiguration(kind: kind, provider: NextVisitProvider()) { NextVisitWidgetView(entry: $0) }.configurationDisplayName("Next visit").description("See your next booked job at a glance.").supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryCircular, .accessoryRectangular, .accessoryInline]) } }
+struct NextVisitWidget: Widget { let kind = "NextVisitWidget"; var body: some WidgetConfiguration { StaticConfiguration(kind: kind, provider: NextVisitProvider()) { NextVisitWidgetView(entry: $0) }.configurationDisplayName("Next visit").description("See your next booked job at a glance.").supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryCircular, .accessoryRectangular, .accessoryInline]).contentMarginsDisabled() } }
