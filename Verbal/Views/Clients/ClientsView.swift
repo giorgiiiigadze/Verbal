@@ -31,6 +31,8 @@ struct ClientsView: View {
     // elsewhere for compact controls.
     private static let cardShape = RoundedRectangle(cornerRadius: 28, style: .continuous)
     private static let cardAspectRatio: CGFloat = 0.70
+    /// The same adaptive surface used by Rate Card containers.
+    private static let clientSurface = Color(.cardSurface)
 
     /// Everyone with a name on at least one quote, most recently quoted first.
     ///
@@ -105,7 +107,7 @@ struct ClientsView: View {
     // MARK: - Feed
 
     private var clientsBackground: Color {
-        colorScheme == .dark ? Color(.homeBackground) : .white
+        Color(.homeBackground)
     }
 
     private var loadingState: some View {
@@ -137,7 +139,7 @@ struct ClientsView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .aspectRatio(Self.cardAspectRatio, contentMode: .fit)
-        .background(Color(.cardSurface), in: Self.cardShape)
+        .background(Self.clientSurface, in: Self.cardShape)
         .overlay(Self.cardShape.strokeBorder(Color(.separator), lineWidth: 0.5))
     }
 
@@ -205,7 +207,7 @@ struct ClientsView: View {
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .aspectRatio(Self.cardAspectRatio, contentMode: .fit)
-                .background(Color(.cardSurface), in: Self.cardShape)
+                .background(Self.clientSurface, in: Self.cardShape)
                 .overlay(Self.cardShape.strokeBorder(Color(.separator), lineWidth: 0.5))
                 .shadow(color: .black.opacity(colorScheme == .dark ? 0.26 : 0.10),
                         radius: 8, x: 0, y: 3)
@@ -220,7 +222,7 @@ struct ClientsView: View {
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(Color(.mainText))
                     .frame(width: 44, height: 44)
-                    .glassEffect(.regular.interactive(), in: Circle())
+                    .background(Self.clientSurface, in: Circle())
             }
             .buttonStyle(.plain)
             .contentShape(Circle())
