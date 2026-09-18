@@ -46,30 +46,12 @@ struct NextVisitWidgetView: View {
             ? UIColor(red: 217 / 255, green: 115 / 255, blue: 13 / 255, alpha: 0.20)
             : UIColor(red: 250 / 255, green: 235 / 255, blue: 221 / 255, alpha: 1)
     })
-    private var usesDarkGradient: Bool {
-        family == .systemSmall || family == .systemMedium
-    }
-
     var body: some View {
         Group { if let visit = entry.visit { content(visit) } else { empty } }
             // The reference uses a deliberately tighter inset than WidgetKit's
             // standard small-widget margin. Other widget families retain it.
             .padding(family == .systemSmall ? 0 : 16)
-            .containerBackground(for: .widget) {
-                if usesDarkGradient {
-                    LinearGradient(
-                        colors: [
-                            Color(red: 20 / 255, green: 27 / 255, blue: 56 / 255),
-                            Color(red: 52 / 255, green: 80 / 255, blue: 196 / 255)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                } else {
-                    surface
-                }
-            }
-            .preferredColorScheme(usesDarkGradient ? .dark : nil)
+            .containerBackground(for: .widget) { surface }
             .widgetURL(entry.visit.map(url) ?? URL(string: "verbal://calendar")!)
     }
 
@@ -93,7 +75,7 @@ struct NextVisitWidgetView: View {
                         .frame(maxHeight: .infinity, alignment: .top)
 
                     Rectangle()
-                        .fill(.white.opacity(0.28))
+                        .fill(Color(.separator))
                         .frame(width: 1)
                         .padding(.vertical, 5)
 
@@ -105,7 +87,7 @@ struct NextVisitWidgetView: View {
                     .resizable()
                     .renderingMode(.template)
                     .scaledToFit()
-                    .foregroundStyle(.white.opacity(0.2))
+                    .foregroundStyle(Color.primary.opacity(0.15))
                     .frame(width: 31, height: 31)
                     .padding(.bottom, 2)
             }
@@ -116,15 +98,15 @@ struct NextVisitWidgetView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(visitDateLabel(for: visit.date))
                 .font(.caption.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.primary)
             Text(visit.title)
-                .font(.headline.weight(.bold))
-                .foregroundStyle(.white)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color.primary)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
             Text(timeRange(for: visit))
                 .font(.caption.weight(.medium))
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(Color.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Spacer(minLength: 0)
@@ -134,32 +116,49 @@ struct NextVisitWidgetView: View {
 
     private func mediumUpcomingQuotes(_ quotes: [NextVisitWidgetStore.Snapshot]) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("UP NEXT")
+            Text("Up next")
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.primary)
 
-            ForEach(Array(quotes.prefix(3)), id: \.id) { quote in
-                HStack(alignment: .top, spacing: 7) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(quote.date, format: .dateTime.day())
-                            .font(.caption.weight(.bold).monospacedDigit())
-                        Text(weekday(for: quote.date))
-                            .font(.caption2.weight(.medium))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(width: 25, alignment: .leading)
+            if quotes.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Nothing else booked")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Color.primary)
+                    Text("You’re all clear after this visit.")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "calendar.badge.checkmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.secondary)
+                    .padding(.bottom, 2)
+            } else {
+                ForEach(Array(quotes.prefix(3)), id: \.id) { quote in
+                    HStack(alignment: .top, spacing: 7) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(quote.date, format: .dateTime.day())
+                                .font(.caption.weight(.bold).monospacedDigit())
+                            Text(weekday(for: quote.date))
+                                .font(.caption2.weight(.medium))
+                        }
+                        .foregroundStyle(Color.primary)
+                        .frame(width: 25, alignment: .leading)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(quote.title)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                        Text(timeRange(for: quote))
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.75))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(quote.title)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.primary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                            Text(timeRange(for: quote))
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(Color.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
                     }
                 }
             }
@@ -222,7 +221,7 @@ struct NextVisitWidgetView: View {
     }
 
     private func visitDateLabel(for date: Date) -> String {
-        date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)).uppercased()
+        date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 
     private func itinerary(_ visits: [NextVisitWidgetStore.Snapshot], limit: Int, compact: Bool) -> some View {
@@ -285,7 +284,7 @@ struct NextVisitWidgetView: View {
     }
 
     private func weekday(for date: Date) -> String {
-        date.formatted(.dateTime.weekday(.abbreviated)).uppercased()
+        date.formatted(.dateTime.weekday(.abbreviated))
     }
 
     private static let clockFormatter: DateFormatter = {
@@ -303,8 +302,7 @@ struct NextVisitWidgetView: View {
         return VStack(spacing: 0) {
             Text(Date.now, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
                 .font(.caption.weight(.bold))
-                .textCase(.uppercase)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(Color.primary.opacity(0.9))
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, 11)
 
@@ -317,7 +315,7 @@ struct NextVisitWidgetView: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 8)
-        .foregroundStyle(.white)
+        .foregroundStyle(Color.primary)
     }
 
     private func smallQuoteRow(_ quote: NextVisitWidgetStore.Snapshot, position: Int) -> some View {
@@ -329,18 +327,101 @@ struct NextVisitWidgetView: View {
             Text(quote.title)
                 .font(.system(size: 13, weight: position == 1 ? .bold : .regular))
                 .lineLimit(1)
-                .minimumScaleFactor(0.72)
 
             Spacer(minLength: 3)
 
-            Text(quote.date, format: .dateTime.hour().minute())
+            Text(quote.date, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
                 .font(.system(size: 13, weight: .bold).monospacedDigit())
                 .lineLimit(1)
                 .layoutPriority(1)
         }
     }
     private func lockScreen(_ visit: NextVisitWidgetStore.Snapshot) -> some View { VStack(alignment: .leading, spacing: 2) { Text("Next Visit").font(.caption2.weight(.bold)); Text(visit.title).font(.headline).lineLimit(1); Text(visit.date, format: .dateTime.weekday(.abbreviated).hour().minute()).font(.caption).foregroundStyle(.secondary) } }
-    private var empty: some View { VStack(alignment: .leading, spacing: 8) { Label("Next Visit", systemImage: "calendar").font(.caption.weight(.bold)).foregroundStyle(blue); Spacer(); Text("No visit booked").font(.headline); Text("Your next job will appear here.").font(.caption).foregroundStyle(.secondary); Text("Open Calendar  →").font(.caption.weight(.semibold)).foregroundStyle(blue) }.padding(6) }
+
+    @ViewBuilder private var empty: some View {
+        switch family {
+        case .systemSmall:
+            emptySmall
+        case .systemMedium:
+            emptyMedium
+        default:
+            emptyStandard
+        }
+    }
+
+    private var emptySmall: some View {
+        VStack {
+            Spacer(minLength: 0)
+            VStack(spacing: 5) {
+                Image("VisitsEmpty")
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .frame(width: 30, height: 30)
+                Text("No visits booked")
+                    .font(.caption.weight(.bold))
+                Text("Your next job will appear here")
+                    .font(.caption2)
+                    .foregroundStyle(Color.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(Color.primary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+    }
+
+    private var emptyMedium: some View {
+        HStack(spacing: 14) {
+            Image("VisitsEmpty")
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .foregroundStyle(Color.primary.opacity(0.78))
+                .frame(width: 58, height: 58)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("No visits booked")
+                    .font(.headline.weight(.bold))
+                Text("Your upcoming jobs will appear here once they are booked.")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(3)
+                openCalendarLabel(color: Color.primary)
+                    .padding(.top, 2)
+            }
+            .foregroundStyle(Color.primary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var emptyStandard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Next Visit", systemImage: "calendar")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(blue)
+            Spacer()
+            Text("No visit booked").font(.headline)
+            Text("Your next job will appear here.").font(.caption).foregroundStyle(.secondary)
+            openCalendarLabel(color: blue)
+        }
+        .padding(6)
+    }
+
+    private func openCalendarLabel(color: Color) -> some View {
+        HStack(spacing: 4) {
+            Text("Open Calendar")
+            Image("OpenCalendarArrow")
+                .resizable()
+                .renderingMode(.template)
+                .scaledToFit()
+                .frame(width: 18, height: 18)
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(color)
+    }
     private func clean(_ value: String?) -> String? { let value = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""; return value.isEmpty ? nil : value }
     private func url(_ visit: NextVisitWidgetStore.Snapshot) -> URL { URL(string: "verbal://visit/\(visit.id.uuidString)")! }
 }
@@ -351,4 +432,4 @@ extension NextVisitWidgetStore.Snapshot {
 }
 
 @main struct VerbalWidgetsBundle: WidgetBundle { var body: some Widget { NextVisitWidget() } }
-struct NextVisitWidget: Widget { let kind = "NextVisitWidget"; var body: some WidgetConfiguration { StaticConfiguration(kind: kind, provider: NextVisitProvider()) { NextVisitWidgetView(entry: $0) }.configurationDisplayName("Next visit").description("See your next booked job at a glance.").supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryCircular, .accessoryRectangular, .accessoryInline]).contentMarginsDisabled() } }
+struct NextVisitWidget: Widget { let kind = "NextVisitWidget"; var body: some WidgetConfiguration { StaticConfiguration(kind: kind, provider: NextVisitProvider()) { NextVisitWidgetView(entry: $0) }.configurationDisplayName("Next visit").description("See your next booked job at a glance.").supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline]).contentMarginsDisabled() } }

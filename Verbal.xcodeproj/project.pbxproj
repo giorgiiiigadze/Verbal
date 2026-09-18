@@ -121,6 +121,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000004 /* NextVisitWidget.swift */,
+				C20000000000000000000002 /* Assets.xcassets */,
 				B10000000000000000000005 /* Info.plist */,
 				B10000000000000000000006 /* VerbalWidgets.entitlements */,
 			);
