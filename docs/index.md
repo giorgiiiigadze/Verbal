@@ -11,5 +11,6 @@ tradespeople.
 
 - [Privacy Policy](privacy/)
 - [Terms of Service](terms/)
+- [Development documentation](development/)
 
 Questions or problems: **gio.giorgigiorgadze20@gmail.com**

@@ -40,7 +40,7 @@
 		B10000000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10000000000000000000006 /* VerbalWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VerbalWidgets.entitlements; sourceTree = "<group>"; };
 		C20000000000000000000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Verbal/Assets.xcassets; sourceTree = SOURCE_ROOT; };
-		310CF4B3303F693A00456090 /* Verbal.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Verbal.storekit; sourceTree = SOURCE_ROOT; };
+		310CF4B3303F693A00456090 /* Verbal.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Configuration/Verbal.storekit; sourceTree = SOURCE_ROOT; };
 		31D5DF473015E943004D1E99 /* Verbal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Verbal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000001 /* VerbalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VerbalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000002 /* VerbalUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VerbalUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -473,7 +473,7 @@
 				CODE_SIGN_ENTITLEMENTS = Verbal/Verbal.entitlements;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_FILE = Configuration/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
@@ -507,7 +507,7 @@
 				CODE_SIGN_ENTITLEMENTS = Verbal/Verbal.entitlements;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_FILE = Configuration/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
