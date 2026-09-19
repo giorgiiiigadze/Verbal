@@ -659,8 +659,10 @@ struct HomeView: View {
             selectedVisit = visit
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "calendar")
-                    .font(.system(size: 20, weight: .medium))
+                Image("VisitsEmpty")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 20, height: 20)
                     .foregroundStyle(Color(.mainText).opacity(0.72))
                     .frame(width: 42, height: 42)
                     .background(Color(.fieldFill),

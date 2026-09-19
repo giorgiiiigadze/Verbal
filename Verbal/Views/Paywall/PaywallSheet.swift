@@ -171,7 +171,7 @@ struct PaywallSheet: View {
 
     /// A compact brand accent, intentionally not a competing hero illustration.
     private var proMark: some View {
-        Image(.paywallHero)
+        Image(selection == .monthly ? .paywallMonthly : .paywallHero)
             .resizable()
             .scaledToFit()
             .frame(width: 88, height: 88)
@@ -276,7 +276,6 @@ struct PaywallSheet: View {
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    planIcon(for: plan)
                     Text(product.displayPrice)
                         .font(.headline.monospacedDigit())
                         .foregroundStyle(Color(.mainText))
@@ -308,25 +307,6 @@ struct PaywallSheet: View {
         .buttonStyle(.plain)
     }
 
-    @ViewBuilder
-    private func planIcon(for plan: Plan) -> some View {
-        if plan == .monthly {
-            Image(.paywallMonthly)
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-                .foregroundStyle(accent)
-                .frame(width: 26, height: 26)
-        } else {
-            Image(.paywallHero)
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-                .foregroundStyle(accent)
-                .frame(width: 26, height: 26)
-        }
-    }
-
     #if DEBUG
     private func fallbackPlanRow(_ plan: Plan, price: String, caption: String, badge: String? = nil) -> some View {
         let isSelected = selection == plan
@@ -335,7 +315,6 @@ struct PaywallSheet: View {
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    planIcon(for: plan)
                     Text(price)
                         .font(.headline.monospacedDigit())
                         .foregroundStyle(Color(.mainText))
@@ -415,9 +394,6 @@ struct PaywallSheet: View {
                         Text("Privacy Policy").underline()
                     }
                 }
-                Text("Auto-renews unless cancelled at least 24 hours before the end of the current period. Manage or cancel in your App Store account settings.")
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .font(.caption)
             .foregroundStyle(.secondary)
