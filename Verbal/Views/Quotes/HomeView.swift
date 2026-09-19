@@ -73,12 +73,6 @@ struct HomeView: View {
     @State private var visitToDelete: ScheduledVisit?
     /// The visit whose action sheet is open.
     @State private var selectedVisit: ScheduledVisit?
-    /// A red visit that has been sitting for 24h and needs a decision.
-    @State private var missedVisitPrompt: ScheduledVisit?
-    /// Visits the user tapped "Later" on this session. Kept in memory only so
-    /// the reminder returns on the next app open, but a mid-session sync that
-    /// adds another visit can't spring the same alert back up seconds later.
-    @State private var deferredMissedVisitIDs: Set<UUID> = []
 
     /// What the booking sheet opened on: nothing, or a visit already made.
     private enum VisitEditor: Identifiable {
@@ -339,7 +333,6 @@ struct HomeView: View {
                 // that with no network involved, so it still happens in a loft.
                 session.visitStore.refresh()
                 visits = session.visitStore.visits
-                promptForMissedVisitIfNeeded()
                 await refreshHomeData()
                 await openPendingNotificationQuoteIfNeeded()
             }
@@ -353,9 +346,6 @@ struct HomeView: View {
             .onChange(of: quotes.isEmpty) { _, isEmpty in
                 guard !isEmpty else { return }
                 hasEverHadQuotes = true
-            }
-            .onChange(of: visits) { _, _ in
-                promptForMissedVisitIfNeeded()
             }
             .onChange(of: notificationRouter.requestedQuoteId) { _, quoteId in
                 handleRequestedQuoteChange(quoteId)
@@ -388,14 +378,6 @@ struct HomeView: View {
         }
         .toast($toast)
         .modifier(VisitDeleteConfirmation(visit: $visitToDelete, onDelete: remove))
-        .modifier(MissedVisitConfirmation(visit: $missedVisitPrompt,
-                                           onRecord: { visit in
-            beginRecording(for: visit)
-        },
-                                           onDidNotHappen: markPromptedAndClear,
-                                           onLater: { visit in
-            deferredMissedVisitIDs.insert(visit.id)
-        }))
         .sheet(item: $selectedVisit) { visit in
             let currentVisit = live(visit)
             VisitActionSheet(
@@ -406,7 +388,7 @@ struct HomeView: View {
                 onCall: { callClient(for: currentVisit) },
                 onReschedule: { visitEditor = .existing(currentVisit) },
                 onCancel: { visitToDelete = currentVisit },
-                onDidNotHappen: { missedVisitPrompt = currentVisit },
+                onDidNotHappen: { visitToDelete = currentVisit },
                 onOpenQuote: { openRecordedQuote(for: currentVisit) }
             )
         }
@@ -776,7 +758,6 @@ struct HomeView: View {
     private func applyVisits(_ fresh: [ScheduledVisit]) {
         guard fresh != visits else { return }
         visits = fresh
-        promptForMissedVisitIfNeeded()
     }
 
     /// New booking, or a correction to one. Sorted on the way in so the list
@@ -859,19 +840,9 @@ struct HomeView: View {
     ///
     /// `MainTabView` has already linked it to the visit it was recorded for —
     /// that is the one place both Home and Calendar route through. All that is
-    /// left here is to take the prompt down and repaint the row as recorded.
-    ///
-    /// Recording from the missed-visit prompt used to *delete* the visit at
-    /// this point, on top of the link that had just been made: the booking
-    /// vanished from Calendar's Recorded filter, and deleting the quote later
-    /// had no visit left to hand back. The ordinary "Record now" path keeps the
-    /// linked visit until its day is over, and this one now does the same.
+    /// left here is to repaint the row as recorded.
     private func handleSavedRecordingQuote(_ quoteId: UUID?) {
         guard quoteId != nil else { return }
-        missedVisitPrompt = nil
-        if let recordingVisit {
-            deferredMissedVisitIDs.remove(recordingVisit.id)
-        }
         withAnimation(Self.rowInsert) {
             visits = session.visitStore.visits
         }
@@ -908,25 +879,6 @@ struct HomeView: View {
             for visit in unlinked {
                 await ScheduledVisitNotifications.schedule(visit)
             }
-        }
-    }
-
-    private func markPromptedAndClear(_ visit: ScheduledVisit) {
-        missedVisitPrompt = nil
-        ScheduledVisitNotifications.cancel(visit)
-        session.visitStore.markPromptedAndClear(visit)
-        withAnimation(Self.rowRemoval) {
-            visits = session.visitStore.visits
-        }
-    }
-
-    private func promptForMissedVisitIfNeeded() {
-        guard missedVisitPrompt == nil else { return }
-        missedVisitPrompt = visits.first { visit in
-            !hasRecordedQuote(for: visit)
-                && !visit.didPromptForMissedVisit
-                && !deferredMissedVisitIDs.contains(visit.id)
-                && Date() >= visit.date.addingTimeInterval(24 * 60 * 60)
         }
     }
 
@@ -1569,7 +1521,6 @@ struct HomeView: View {
             guard listsLoaded, !fresh.isEmpty else { return }
             quotes = fresh
             loadFailed = false
-            promptForMissedVisitIfNeeded()
             Task { await QuoteExpiryNotifications.rescheduleAll(quotes: quotes) }
             return
         }
@@ -1601,7 +1552,6 @@ struct HomeView: View {
             } else {
                 quotes = fresh
             }
-            promptForMissedVisitIfNeeded()
             loadFailed = false
             // Push the authoritative list into the session so the Clients tab —
             // drawn from it — shows a just-made quote (and its client) without

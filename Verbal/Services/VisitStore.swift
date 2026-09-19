@@ -231,14 +231,6 @@ final class VisitStore {
         return indices.map { visits[$0] }
     }
 
-    /// The user has answered the one-time "did this go ahead?" prompt, and the
-    /// visit is finished with either way.
-    func markPromptedAndClear(_ visit: ScheduledVisit) {
-        visits.removeAll { $0.id == visit.id }
-        markDeleted(visit.id)
-        saveAndSync()
-    }
-
     /// A row the server was never told about still gets a tombstone. It may have
     /// reached the server on an earlier pass, and a delete for a row that isn't
     /// there costs nothing — where a missed delete hands back a cancelled visit.
@@ -387,9 +379,9 @@ final class VisitStore {
 
     // MARK: - Pruning
 
-    /// Drop what the list is finished with: a visit that became a quote, once
-    /// its day has been and gone, and a missed one the user has already been
-    /// asked about.
+    /// Drop only visits that became a quote once their day has been and gone.
+    /// Unrecorded visits remain available in Calendar, where they are shown as
+    /// overdue until the user records or explicitly removes them.
     ///
     /// These become tombstones rather than quiet local removals. The row is on
     /// the server now, and a prune that only happened here would be undone by
@@ -407,8 +399,7 @@ final class VisitStore {
         var kept: [ScheduledVisit] = []
         for visit in cache.visits {
             let isFinished = visit.recordedQuoteId != nil
-                ? calendar.startOfDay(for: visit.date) < today
-                : visit.didPromptForMissedVisit
+                && calendar.startOfDay(for: visit.date) < today
             if isFinished {
                 if !cache.tombstones.contains(where: { $0.id == visit.id }) {
                     cache.tombstones.append(Tombstone(id: visit.id, deletedAt: .now))

@@ -87,9 +87,9 @@ struct NextVisitWidgetView: View {
                     .resizable()
                     .renderingMode(.template)
                     .scaledToFit()
-                    .foregroundStyle(Color.primary.opacity(0.15))
-                    .frame(width: 31, height: 31)
-                    .padding(.bottom, 2)
+                    .foregroundStyle(Color.primary.opacity(0.3))
+                    .frame(width: 42, height: 42)
+                    .padding(.bottom, 4)
             }
         }
     }
@@ -116,20 +116,15 @@ struct NextVisitWidgetView: View {
 
     private func mediumUpcomingQuotes(_ quotes: [NextVisitWidgetStore.Snapshot]) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("Up next")
-                .font(.caption2.weight(.bold))
+            Text("Next visit")
+                .font(.caption.weight(.bold))
                 .foregroundStyle(Color.primary)
 
             if quotes.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Nothing else booked")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(Color.primary)
-                    Text("You’re all clear after this visit.")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Color.secondary)
-                        .lineLimit(2)
-                }
+                Text("Nothing else booked")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
                 Spacer(minLength: 0)
                 Image(systemName: "calendar.badge.checkmark")
                     .font(.caption.weight(.semibold))
@@ -138,7 +133,7 @@ struct NextVisitWidgetView: View {
             } else {
                 ForEach(Array(quotes.prefix(3)), id: \.id) { quote in
                     HStack(alignment: .top, spacing: 7) {
-                        VStack(alignment: .leading, spacing: 1) {
+                        VStack(alignment: .leading, spacing: 0) {
                             Text(quote.date, format: .dateTime.day())
                                 .font(.caption.weight(.bold).monospacedDigit())
                             Text(weekday(for: quote.date))
@@ -297,18 +292,47 @@ struct NextVisitWidgetView: View {
 
     private func small(_ visit: NextVisitWidgetStore.Snapshot,
                        upcoming: [NextVisitWidgetStore.Snapshot]) -> some View {
-        let quotes = Array(([visit] + upcoming).prefix(5))
+        let allQuotes = [visit] + upcoming
+        let quotes = Array(allQuotes.prefix(3))
+        let remainingCount = allQuotes.count - quotes.count
 
         return VStack(spacing: 0) {
             Text(Date.now, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Color.primary.opacity(0.9))
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
                 .padding(.bottom, 11)
 
-            VStack(spacing: 7) {
-                ForEach(Array(quotes.enumerated()), id: \.element.id) { index, quote in
-                    smallQuoteRow(quote, position: index + 1)
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(quotes, id: \.id) { quote in
+                    HStack(alignment: .top, spacing: 9) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(Color(.statusWarningText))
+                            .frame(width: 4, height: 32)
+
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(quote.title)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Color.primary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+
+                            Text(timeRange(for: quote))
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                if remainingCount > 0 {
+                    Text("+\(remainingCount) more")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.secondary)
+                        .padding(.leading, 13)
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)
@@ -318,24 +342,6 @@ struct NextVisitWidgetView: View {
         .foregroundStyle(Color.primary)
     }
 
-    private func smallQuoteRow(_ quote: NextVisitWidgetStore.Snapshot, position: Int) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 7) {
-            Text(String(format: "%02d", position))
-                .font(.system(size: 13, weight: .bold).monospacedDigit())
-                .frame(width: 19, alignment: .leading)
-
-            Text(quote.title)
-                .font(.system(size: 13, weight: position == 1 ? .bold : .regular))
-                .lineLimit(1)
-
-            Spacer(minLength: 3)
-
-            Text(quote.date, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
-                .font(.system(size: 13, weight: .bold).monospacedDigit())
-                .lineLimit(1)
-                .layoutPriority(1)
-        }
-    }
     private func lockScreen(_ visit: NextVisitWidgetStore.Snapshot) -> some View { VStack(alignment: .leading, spacing: 2) { Text("Next Visit").font(.caption2.weight(.bold)); Text(visit.title).font(.headline).lineLimit(1); Text(visit.date, format: .dateTime.weekday(.abbreviated).hour().minute()).font(.caption).foregroundStyle(.secondary) } }
 
     @ViewBuilder private var empty: some View {

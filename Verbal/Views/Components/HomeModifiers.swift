@@ -31,47 +31,6 @@ struct VisitDeleteConfirmation: ViewModifier {
     }
 }
 
-struct MissedVisitConfirmation: ViewModifier {
-    @Binding var visit: ScheduledVisit?
-    let onRecord: (ScheduledVisit) -> Void
-    let onDidNotHappen: (ScheduledVisit) -> Void
-    let onLater: (ScheduledVisit) -> Void
-
-    func body(content: Content) -> some View {
-        content.alert("Did this visit happen?", isPresented: Binding(
-            get: { visit != nil },
-            set: { if !$0 { visit = nil } }
-        ), presenting: visit) { visit in
-            // "Record it" is the outcome this prompt exists to lead to, so it
-            // takes the default emphasis — the destructive red beneath it was
-            // otherwise the only visually loud option, quietly nudging users
-            // toward dismissing the visit rather than quoting it.
-            Button("Record it") {
-                onRecord(visit)
-                self.visit = nil
-            }
-            .keyboardShortcut(.defaultAction)
-
-            Button("Didn't happen", role: .destructive) {
-                onDidNotHappen(visit)
-                self.visit = nil
-            }
-
-            // A way out that doesn't commit either way. Deliberately without a
-            // side effect on `didPromptForMissedVisit`: someone tapping past
-            // this on a busy morning shouldn't have the reminder retired
-            // silently — the visit is still un-quoted, so the app should ask
-            // again next time it opens.
-            Button("Later", role: .cancel) {
-                onLater(visit)
-                self.visit = nil
-            }
-        } message: { visit in
-            Text("“\(visit.title)” is still on your upcoming list. Record it now, or mark it as didn't happen.")
-        }
-    }
-}
-
 // MARK: - Search
 
 /// Adds `.searchable` only once search has been asked for, and takes it away
