@@ -30,7 +30,6 @@ struct PaywallSheet: View {
     @Environment(Store.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @Environment(\.colorScheme) private var colorScheme
 
     @State private var selection: Plan = .yearly
     @State private var isPurchasing = false
@@ -150,21 +149,17 @@ struct PaywallSheet: View {
             plans
                 .padding(.top, 24)
 
-            VStack(alignment: .leading, spacing: 17) {
-                checkmark("Create unlimited AI-powered quotes")
-                checkmark("Keep quoting after your two free quotes")
-                checkmark("Send a professional PDF for every job")
-                checkmark("Use your saved rates on every quote")
-                checkmark("Keep every client and job in one place")
-                checkmark("Plan visits and stay on top of reminders")
-                checkmark("Your existing quotes always stay yours")
+            VStack(alignment: .leading, spacing: 20) {
+                benefit("sparkles", "Create unlimited AI-powered quotes")
+                benefit("infinity", "Keep quoting after your two free quotes")
+                benefit("doc.richtext", "Send a professional PDF for every job")
+                benefit("list.clipboard", "Use your saved rates on every quote")
+                benefit("person.2", "Keep every client and job in one place")
+                benefit("calendar.badge.clock", "Plan visits and stay on top of reminders")
+                benefit("lock.shield", "Your existing quotes always stay yours")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 22)
-            .background(benefitsBackground,
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .padding(.top, 18)
+            .padding(.top, 28)
         }
         .frame(maxWidth: .infinity)
     }
@@ -184,15 +179,21 @@ struct PaywallSheet: View {
         return "That's your two quotes for today"
     }
 
-    private func checkmark(_ title: String) -> some View {
-        HStack(spacing: 13) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Color(.mainText))
-                .frame(width: 18)
+    /// Feature rows use familiar SF Symbols in a fixed leading column, matching
+    /// the visual rhythm of the reference while letting every icon remain legible
+    /// at larger accessibility sizes.
+    private func benefit(_ symbol: String, _ title: String) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: .semibold))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .accessibilityHidden(true)
             Text(title)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Color(.mainText))
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
     }
@@ -353,11 +354,6 @@ struct PaywallSheet: View {
         Color(.royalBlue600)
     }
 
-    private var benefitsBackground: Color {
-        colorScheme == .dark
-            ? Color(red: 42 / 255, green: 42 / 255, blue: 44 / 255)
-            : Color(red: 248 / 255, green: 248 / 255, blue: 247 / 255)
-    }
 
     // MARK: - Actions
 
