@@ -87,77 +87,12 @@ struct HomeView: View {
         }
     }
 
-    private enum TimelineItem: Identifiable {
-        case quote(QuoteSummary)
-        case visit(ScheduledVisit)
-
-        var id: String {
-            switch self {
-            case .quote(let quote): "quote-\(quote.id.uuidString)"
-            case .visit(let visit): "visit-\(visit.id.uuidString)"
-            }
-        }
-    }
-
-    private struct TimelineSection: Identifiable {
-        enum Surface: Equatable {
-            case warm
-            case white
-
-            /// The two timeline surfaces are intentionally reversed only in
-            /// Dark Mode, so the upcoming and saved-quote sections retain the
-            /// light appearance while their dark hierarchy is swapped.
-            func color(for colorScheme: ColorScheme) -> Color {
-                switch (self, colorScheme) {
-                case (.warm, .dark): Color(.cardSurface)
-                case (.white, .dark): Color(.homeBackground)
-                case (.warm, .light): Color(.homeBackground)
-                case (.white, .light): Color(.cardSurface)
-                @unknown default: Color(.homeBackground)
-                }
-            }
-        }
-
-        let title: String
-        let items: [TimelineItem]
-        let surface: Surface
-        let id: String
-    }
-
-    private enum UpcomingVisitStatus {
-        case next, upcoming, overdue
-
-        var color: Color {
-            switch self {
-            case .next: Color(.statusWarningText)
-            case .upcoming: Color(.statusWarningText)
-            case .overdue: Color(.statusDeclinedText)
-            }
-        }
-
-        var fillColor: Color {
-            switch self {
-            case .next: Color(.statusWarningFill)
-            case .upcoming: Color(.statusWarningFill)
-            case .overdue: Color(.statusDeclinedFill)
-            }
-        }
-
-        var accessibilityLabel: String {
-            switch self {
-            case .next: "Next visit"
-            case .upcoming: "Upcoming visit"
-            case .overdue: "Overdue visit"
-            }
-        }
-    }
-
     var body: some View {
         NavigationStack(path: $path) {
             homeContent
             .background(topTimelineSurface)
-            // Empty on purpose — the name of the screen is `pageTitle`, in the
-            // list itself. Left as a large title it would fold into the bar on
+            // Empty on purpose — the name of the screen lives in the timeline
+            // list. Left as a large title it would fold into the bar on
             // scroll; left inline it would sit there permanently. Both put the
             // heading in two places at once.
             .navigationTitle("")
@@ -480,7 +415,7 @@ struct HomeView: View {
         guard !timelineVisits.isEmpty || showsUpcomingVisitsEmptyCard else {
             return Color(.homeBackground)
         }
-        return TimelineSection.Surface.warm.color(for: colorScheme)
+        return HomeTimelineSection.Surface.warm.color(for: colorScheme)
     }
 
     private var showsUpcomingVisitsEmptyCard: Bool {
@@ -494,145 +429,24 @@ struct HomeView: View {
 
     // MARK: - List
 
-    /// The screen's name, set as the page's own heading rather than as a
-    /// navigation title.
-    ///
-    /// It scrolls away with the list and never reappears in the bar. A large
-    /// title would collapse into the bar on the way up, which puts the name of
-    /// the screen you are already on back in front of you — and the bar has
-    /// the filter, the rate card and search in it, which are the things worth
-    /// reaching for once the list is moving.
-    private var pageTitle: some View {
-        Text("Your quotes")
-            .font(.robotoSlab(30, relativeTo: .title))
-            .foregroundStyle(Color(.mainText))
-            .id(Self.topAnchor)
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 10, trailing: 20))
-    }
-
     private var quotesList: some View {
-        ScrollViewReader { proxy in
-            List {
-                pageTitle
-
-                if showsUpcomingVisitsEmptyCard {
-                    upcomingVisitsEmptyCard
-                }
-
-                ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
-                    // Header as a normal row (not a Section header) so it scrolls
-                    // away with the content instead of pinning to the top.
-                    Text(section.title)
-                        // A shade heavier than the body around it. Not darker as
-                        // well: a date carries less than a status heading did, and
-                        // it only has to mark where one day ends and the next
-                        // begins.
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .listRowBackground(section.surface.color(for: colorScheme))
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 0, trailing: 20))
-
-                    ForEach(Array(section.items.enumerated()), id: \.element.id) { itemIndex, item in
-                        let closesWarmSurface = section.surface == .warm
-                            && sections.indices.contains(index + 1)
-                            && sections[index + 1].surface == .white
-                            && itemIndex == section.items.indices.last
-
-                        switch item {
-                        case .quote(let quote):
-                            quoteTimelineRow(quote, surface: section.surface)
-                        case .visit(let visit):
-                            visitRow(visit,
-                                     surface: section.surface,
-                                     bottomInset: closesWarmSurface ? 20 : 5)
-                        }
-                    }
-                }
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            // Room under the last row for the floating tab bar, which draws
-            // over the list rather than beside it. Without this the bottom
-            // quote is permanently cut in half, and the one below it is the one
-            // you can never quite reach. The Record safe-area inset adds its
-            // own 50-point height and 12-point gap above this margin.
-            .contentMargins(.bottom, 88, for: .scrollContent)
-            // Back to the top when a quote arrives — see `load()`. The token is
-            // what carries the news down here, since `load()` has no way to
-            // reach the proxy.
-            .onChange(of: scrollToTopToken) { _, _ in
-                withAnimation(Self.rowInsert) {
-                    proxy.scrollTo(Self.topAnchor, anchor: .top)
-                }
-            }
-        }
-    }
-
-    private var upcomingVisitsEmptyCard: some View {
-        HStack(spacing: 12) {
-            Image("VisitsEmpty")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 24, height: 24)
-                .foregroundStyle(Color(.statusMutedText))
-                .frame(width: 42, height: 42)
-                .background(Color(.fieldFill),
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color(.separator), lineWidth: 0.5)
-                }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("No upcoming visits yet")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color(.mainText))
-                Text("Book a visit and it will appear here.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(upcomingVisitCardFill,
-                    in: Self.upcomingVisitCardShape)
-        .clipShape(Self.upcomingVisitCardShape)
-        .overlay(
-            Self.upcomingVisitCardShape
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        HomeTimelineList(
+            sections: sections,
+            showsUpcomingVisitsEmptyCard: showsUpcomingVisitsEmptyCard,
+            colorScheme: colorScheme,
+            scrollToTopToken: scrollToTopToken,
+            unpricedCount: unpricedCount,
+            onPrefetchQuote: { quote in
+                Task { await session.prefetchLineItems(for: quote.id) }
+            },
+            onDeleteQuote: { quote in quoteToDelete = quote },
+            onSelectVisit: { visit in selectedVisit = visit },
+            onDeleteVisit: { visit in visitToDelete = visit },
+            visitPresentation: { visit in
+                .init(status: upcomingVisitStatus(for: visit), detail: visitDetail(visit))
+            },
+            quoteMenu: quoteMenu
         )
-        .listRowBackground(TimelineSection.Surface.warm.color(for: colorScheme))
-        .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 20, trailing: 20))
-    }
-
-    private func quoteTimelineRow(_ quote: QuoteSummary,
-                                  surface: TimelineSection.Surface) -> some View {
-        ZStack {
-            QuoteRow(quote: quote, unpricedCount: unpricedCount(for: quote))
-            NavigationLink(value: quote) { EmptyView() }
-                .opacity(0)
-        }
-        .listRowBackground(surface.color(for: colorScheme))
-        .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 5, trailing: 20))
-        .onAppear {
-            Task { await session.prefetchLineItems(for: quote.id) }
-        }
-        .contextMenu { quoteMenu(for: quote) }
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button {
-                quoteToDelete = quote
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .tint(.red)
-        }
     }
 
     private func hasRecordedQuote(for visit: ScheduledVisit) -> Bool {
@@ -648,94 +462,10 @@ struct HomeView: View {
         }
     }
 
-    /// One booked visit, drawn as the quote rows are drawn: the list has one
-    /// row language, and a visit is a quote that hasn't been spoken yet.
-    private func visitRow(_ visit: ScheduledVisit,
-                          surface: TimelineSection.Surface,
-                          bottomInset: CGFloat = 5) -> some View {
-        let status = upcomingVisitStatus(for: visit)
-
-        return Button {
-            selectedVisit = visit
-        } label: {
-            HStack(spacing: 12) {
-                Image("VisitsEmpty")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 20, height: 20)
-                    .foregroundStyle(Color(.mainText).opacity(0.72))
-                    .frame(width: 42, height: 42)
-                    .background(Color(.fieldFill),
-                                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Color(.separator), lineWidth: 0.5)
-                    }
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(visit.title)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color(.mainText))
-                        .lineLimit(1)
-
-                    Text(visit.timeRangeText)
-                        .font(.caption2)
-                        .foregroundStyle(status.color)
-                        .lineLimit(1)
-
-                    if let detail = visitDetail(visit) {
-                        Text(detail)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(upcomingVisitCardFill,
-                        in: Self.upcomingVisitCardShape)
-            .clipShape(Self.upcomingVisitCardShape)
-            .overlay(
-                Self.upcomingVisitCardShape
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
-            .contentShape(.contextMenuPreview,
-                          Self.upcomingVisitCardShape)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(visit.accessibilityText). \(status.accessibilityLabel). Record a quote")
-        .listRowBackground(surface.color(for: colorScheme))
-        .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: bottomInset, trailing: 20))
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button {
-                visitToDelete = visit
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .tint(.red)
-        }
-    }
-
-    /// Upcoming visits sit on the lighter Dark Mode timeline surface. Giving
-    /// their containers this near-black fill keeps that section layered without
-    /// changing the existing white appearance in Light Mode.
-    private var upcomingVisitCardFill: Color {
-        colorScheme == .dark
-            ? Color(red: 28 / 255, green: 28 / 255, blue: 30 / 255)
-            : Color(.cardSurface)
-    }
-
-    private static let upcomingVisitCardShape = RoundedRectangle(cornerRadius: 22,
-                                                                 style: .continuous)
-
     /// Match Calendar's two-hour grace period before an unquoted appointment
     /// becomes overdue. The next non-overdue appointment gets the calmer green
     /// rail so it is the one the user can find at a glance.
-    private func upcomingVisitStatus(for visit: ScheduledVisit) -> UpcomingVisitStatus {
+    private func upcomingVisitStatus(for visit: ScheduledVisit) -> HomeVisitStatus {
         if isVisitOverdue(visit) {
             return .overdue
         }
@@ -1212,9 +942,6 @@ struct HomeView: View {
     /// existence is the one thing on this screen worth a spring.
     private static let rowInsert = Animation.snappy(duration: 0.35)
 
-    /// The row the list scrolls back to when a quote arrives.
-    private static let topAnchor = "top"
-
     /// Quotes exist but the active search or filter matched none of them.
     private var noMatchesState: some View {
         placeholder(
@@ -1286,7 +1013,7 @@ struct HomeView: View {
     /// Booked work stays in the Home timeline without becoming a separate card.
     /// Upcoming work stays on the warm surface; pinned and historical quotes
     /// continue on white.
-    private var sections: [TimelineSection] {
+    private var sections: [HomeTimelineSection] {
         let query = searchQuery.lowercased()
         let filtered = quotes.filter { quote in
             guard filter.matches(quote.effectiveStatus) else { return false }
@@ -1297,17 +1024,17 @@ struct HomeView: View {
         let pinned = filtered.filter(\.pinned)
         let rest = filtered.filter { !$0.pinned }
         let calendar = Calendar.current
-        var quoteDays: [Date: [TimelineItem]] = [:]
+        var quoteDays: [Date: [HomeTimelineSection.Item]] = [:]
         for quote in rest {
             quoteDays[calendar.startOfDay(for: quote.createdAt), default: []].append(.quote(quote))
         }
-        var visitDays: [Date: [TimelineItem]] = [:]
+        var visitDays: [Date: [HomeTimelineSection.Item]] = [:]
         for visit in timelineVisits {
             visitDays[calendar.startOfDay(for: visit.date), default: []].append(.visit(visit))
         }
 
         var result = visitDays.keys.sorted().map { day in
-            TimelineSection(title: upcomingVisitSectionTitle(day),
+            HomeTimelineSection(title: upcomingVisitSectionTitle(day),
                             items: (visitDays[day] ?? []).sorted { left, right in
                                 guard case .visit(let lhs) = left,
                                       case .visit(let rhs) = right else { return false }
@@ -1317,16 +1044,16 @@ struct HomeView: View {
                             id: "visit-day-\(day.timeIntervalSince1970)")
         }
         if !pinned.isEmpty {
-            result.append(TimelineSection(
+            result.append(HomeTimelineSection(
                 title: "Pinned",
-                items: pinned.map(TimelineItem.quote),
+                items: pinned.map(HomeTimelineSection.Item.quote),
                 surface: .white,
                 id: "pinned"
             ))
         }
 
         result += quoteDays.keys.sorted(by: >).map { day in
-            return TimelineSection(title: quoteSectionTitle(day),
+            return HomeTimelineSection(title: quoteSectionTitle(day),
                                    items: quoteDays[day] ?? [],
                                    surface: .white,
                                    id: "quote-day-\(day.timeIntervalSince1970)")

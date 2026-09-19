@@ -19,9 +19,11 @@ struct NextVisitProvider: TimelineProvider {
     func placeholder(in context: Context) -> NextVisitEntry { .init(date: .now, visits: [.sample, .sampleFollowUp]) }
     func getSnapshot(in context: Context, completion: @escaping (NextVisitEntry) -> Void) { completion(currentEntry()) }
     func getTimeline(in context: Context, completion: @escaping (Timeline<NextVisitEntry>) -> Void) {
-        let entry = currentEntry()
-        let refresh = [entry.date.addingTimeInterval(15 * 60), entry.visit?.date, entry.visit?.endDate].compactMap { $0 }.filter { $0 > entry.date }.min() ?? entry.date.addingTimeInterval(15 * 60)
-        completion(Timeline(entries: [entry], policy: .after(refresh)))
+        // The containing app writes the snapshot and explicitly reloads this
+        // timeline whenever bookings change. Keeping this initial timeline
+        // stable avoids WidgetKit deferring the first Home Screen render while
+        // it reconciles a near-term calendar refresh request.
+        completion(Timeline(entries: [currentEntry()], policy: .never))
     }
     private func currentEntry() -> NextVisitEntry {
         let data = UserDefaults(suiteName: NextVisitWidgetStore.appGroup)?.data(forKey: NextVisitWidgetStore.snapshotKey)

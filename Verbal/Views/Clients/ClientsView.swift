@@ -27,9 +27,8 @@ struct ClientsView: View {
     @State private var isSearching = false
 
     // FaceTime-like tiles: deliberately taller than they are wide, with a
-    // generous continuous corner rather than the small rounded-rectangle used
-    // elsewhere for compact controls.
-    private static let cardShape = RoundedRectangle(cornerRadius: 28, style: .continuous)
+    // restrained continuous corner that keeps the grid crisp.
+    private static let cardShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
     private static let cardAspectRatio: CGFloat = 0.70
     /// The same adaptive surface used by Rate Card containers.
     private static let clientSurface = Color(.cardSurface)
@@ -112,7 +111,7 @@ struct ClientsView: View {
 
     private var loadingState: some View {
         ScrollView {
-            LazyVGrid(columns: gridColumns, spacing: 12) {
+            LazyVGrid(columns: gridColumns, spacing: 18) {
                 clientSkeleton(titleWidth: 74, detailWidth: 60)
                 clientSkeleton(titleWidth: 88, detailWidth: 68)
                 clientSkeleton(titleWidth: 64, detailWidth: 52)
@@ -155,14 +154,14 @@ struct ClientsView: View {
 
     private var gridColumns: [GridItem] {
         [
-            GridItem(.flexible(), spacing: 12),
-            GridItem(.flexible(), spacing: 12)
+            GridItem(.flexible(), spacing: 16),
+            GridItem(.flexible(), spacing: 16)
         ]
     }
 
     private var gridFeed: some View {
         ScrollView(showsIndicators: false) {
-            LazyVGrid(columns: gridColumns, spacing: 12) {
+            LazyVGrid(columns: gridColumns, spacing: 18) {
                 ForEach(filtered) { client in
                     clientCard(client)
                 }
@@ -178,7 +177,7 @@ struct ClientsView: View {
             NavigationLink(value: ClientKey(id: client.id, name: client.name)) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(client.name)
-                        .font(.body.weight(.heavy))
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(Color(.mainText))
                         .lineLimit(2)
                         .frame(minHeight: 40, alignment: .topLeading)
