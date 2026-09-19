@@ -381,7 +381,7 @@ struct ClientMapSheet: View {
             return
         }
         let query = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        guard let url = URL(string: "http://maps.apple.com/?\(directions ? "daddr" : "q")=\(query)") else {
+        guard let url = URL(string: "https://maps.apple.com/?\(directions ? "daddr" : "q")=\(query)") else {
             return
         }
         UIApplication.shared.open(url)

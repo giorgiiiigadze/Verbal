@@ -655,7 +655,7 @@ struct HomeView: View {
         guard let address = visit.address?.trimmingCharacters(in: .whitespacesAndNewlines),
               !address.isEmpty,
               let encoded = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "http://maps.apple.com/?q=\(encoded)") else {
+              let url = URL(string: "https://maps.apple.com/?q=\(encoded)") else {
             toast = Toast(style: .error, message: "No address saved")
             return
         }

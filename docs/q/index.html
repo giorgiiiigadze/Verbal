@@ -91,7 +91,7 @@ function money(amount, currency) {
     }).format(amount);
   } catch (e) {
     // An unfamiliar currency code shouldn't cost the reader the whole page.
-    return Number(amount).toFixed(2) + " " + currency;
+    return esc(Number(amount).toFixed(2) + " " + currency);
   }
 }
 

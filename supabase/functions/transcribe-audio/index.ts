@@ -76,42 +76,47 @@ Deno.serve(async (req) => {
   const upload = await fetch("https://api.assemblyai.com/v2/upload", { method: "POST", headers, body: audio });
   if (!upload.ok) return json({ error: "Could not upload recording for transcription." }, 502);
   const { upload_url } = await upload.json();
-  const created = await fetch("https://api.assemblyai.com/v2/transcript", {
-    method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      audio_url: upload_url,
-      // Universal-3 Pro is the documented high-accuracy model. Universal-2
-      // remains the ordered fallback for languages it does not support.
-      speech_models: ["universal-3-pro", "universal-2"],
-      keyterms_prompt: keyterms(req),
-      format_text: true,
-    }),
-  });
-  if (!created.ok) return json({ error: "Could not start the accuracy pass." }, 502);
-  const { id } = await created.json();
+  let transcriptID: string | null = null;
+  try {
+    const created = await fetch("https://api.assemblyai.com/v2/transcript", {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        audio_url: upload_url,
+        // Universal-3 Pro is the documented high-accuracy model. Universal-2
+        // remains the ordered fallback for languages it does not support.
+        speech_models: ["universal-3-pro", "universal-2"],
+        keyterms_prompt: keyterms(req),
+        format_text: true,
+      }),
+    });
+    if (!created.ok) return json({ error: "Could not start the accuracy pass." }, 502);
+    const { id } = await created.json();
+    if (typeof id !== "string" || id.length === 0) {
+      return json({ error: "Could not start the accuracy pass." }, 502);
+    }
+    transcriptID = id;
 
-  // Quotes are short. A bounded poll gives the app a final transcript in one
-  // request; on a timeout it simply uses Apple's already-complete transcript.
-  for (let attempt = 0; attempt < 30; attempt++) {
-    await new Promise(resolve => setTimeout(resolve, 1_000));
-    const poll = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, { headers });
-    if (!poll.ok) return json({ error: "The accuracy pass failed." }, 502);
-    const result = await poll.json();
-    if (result.status === "completed") {
-      // AssemblyAI deletes the transcript data and its associated /upload file
-      // when this request succeeds. Keep the text in memory before deleting it.
-      const transcript = result.text;
-      const model = result.speech_model_used ?? null;
-      await deleteTranscript(id, headers);
-      // Return provenance to the app. This is intentionally not inferred from
-      // the requested model: AssemblyAI may select a configured fallback.
-      return json({ transcript, model });
+    // Quotes are short. A bounded poll gives the app a final transcript in one
+    // request; on a timeout it simply uses Apple's already-complete transcript.
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      const poll = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptID}`, { headers });
+      if (!poll.ok) return json({ error: "The accuracy pass failed." }, 502);
+      const result = await poll.json();
+      if (result.status === "completed") {
+        // Keep the text in memory before the finally block deletes the
+        // provider's transcript and associated upload.
+        return json({ transcript: result.text, model: result.speech_model_used ?? null });
+      }
+      if (result.status === "error") {
+        return json({ error: "The accuracy pass could not transcribe this recording." }, 422);
+      }
     }
-    if (result.status === "error") {
-      await deleteTranscript(id, headers);
-      return json({ error: "The accuracy pass could not transcribe this recording." }, 422);
-    }
+    return json({ error: "The accuracy pass took too long." }, 504);
+  } finally {
+    // Cleanup must run for every terminal path after AssemblyAI accepted the
+    // upload: completed, provider error, polling failure, and our timeout.
+    if (transcriptID) await deleteTranscript(transcriptID, headers);
   }
-  return json({ error: "The accuracy pass took too long." }, 504);
 });
