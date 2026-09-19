@@ -32,6 +32,15 @@ enum AppAppearance: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Full sentence-style descriptions used in the appearance sheet.
+    var sheetSubtitle: String {
+        switch self {
+        case .system: return "Match your device setting."
+        case .light: return "Use Verbal's light surfaces."
+        case .dark: return "Keep the app in dark mode."
+        }
+    }
+
     var icon: String {
         switch self {
         case .system: return "iphone"

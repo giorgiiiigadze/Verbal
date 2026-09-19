@@ -58,6 +58,7 @@ struct AccountView: View {
 
     @State private var showSignOutConfirmation = false
     @State private var showManageSubscriptions = false
+    @State private var showAppearance = false
     @State private var toast: Toast?
     /// The currency the user picked, held until they say what should happen to
     /// their saved rates.
@@ -155,11 +156,18 @@ struct AccountView: View {
                 } label: {
                     LabeledContent("Notifications", value: notificationSummary)
                 }
-                NavigationLink {
-                    AppearanceView()
+                Button {
+                    showAppearance = true
                 } label: {
-                    LabeledContent("Appearance", value: appearanceLabel)
+                    HStack(spacing: 8) {
+                        LabeledContent("Appearance", value: appearanceLabel)
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(.rect)
                 }
+                .buttonStyle(.plain)
             }
             .listRowBackground(Color(.cardSurface))
 
@@ -278,6 +286,9 @@ struct AccountView: View {
                     toast = Toast(style: .success, message: "Main currency set to \(target.id)")
                 }
             }
+        }
+        .sheet(isPresented: $showAppearance) {
+            AppearanceSheet()
         }
         // Apple owns cancellation and plan changes. Present its management UI
         // in place rather than sending a subscriber out to the App Store app.

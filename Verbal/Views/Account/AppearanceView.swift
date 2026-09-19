@@ -2,65 +2,78 @@
 //  AppearanceView.swift
 //  Verbal
 //
-//  Lets the user choose whether Verbal follows the device or uses a fixed theme.
+//  A native settings sheet. The selection is applied immediately, while the
+//  sheet itself uses the standard iOS navigation and list affordances.
 //
 
 import SwiftUI
 
-struct AppearanceView: View {
-    @Environment(\.colorScheme) private var colorScheme
+struct AppearanceSheet: View {
+    @Environment(\.dismiss) private var dismiss
     @AppStorage(AppAppearance.defaultsKey) private var selected = AppAppearance.system.rawValue
-
-    private var selectedIconColor: Color {
-        colorScheme == .dark ? .white : Color(.royalBlue600)
-    }
 
     private var current: AppAppearance {
         AppAppearance(rawValue: selected) ?? .system
     }
 
     var body: some View {
-        List {
-            Section {
-                ForEach(AppAppearance.allCases) { appearance in
-                    Button {
-                        selected = appearance.rawValue
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: appearance.icon)
-                                .font(.body.weight(.medium))
-                                .foregroundStyle(Color(.royalBlue600))
-                                .frame(width: 24)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(appearance.label)
-                                    .foregroundStyle(Color(.mainText))
-                                Text(appearance.subtitle)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            if current == appearance {
-                                Image(systemName: "checkmark")
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(selectedIconColor)
-                            }
-                        }
-                        .contentShape(.rect)
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(AppAppearance.allCases) { appearance in
+                        appearanceRow(appearance)
                     }
-                    .buttonStyle(.plain)
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    Text("System matches your iPhone. Light and Dark keep Verbal in the appearance you choose until you change it again.")
                 }
-            } footer: {
-                Text("System follows your iPhone's appearance. Light and Dark keep Verbal fixed until you change it again.")
             }
-            .listRowBackground(Color(.cardSurface))
+            .navigationTitle("Appearance")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
-        .scrollContentBackground(.hidden)
-        .background(Color(.accountBackground))
-        .navigationTitle("Appearance")
-        .navigationBarTitleDisplayMode(.inline)
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
+
+    private func appearanceRow(_ appearance: AppAppearance) -> some View {
+        Button {
+            guard current != appearance else { return }
+            selected = appearance.rawValue
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(appearance.label)
+                    Text(appearance.sheetSubtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if current == appearance {
+                    Image(systemName: "checkmark")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel("Selected")
+                }
+            }
+            .foregroundStyle(Color(.mainText))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(current == appearance
+            ? "Current appearance"
+            : "Sets Verbal to \(appearance.label.lowercased()) appearance")
+    }
+}
+
+#Preview {
+    AppearanceSheet()
 }
