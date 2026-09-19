@@ -22,7 +22,9 @@ struct BusinessDetailsSheet: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
+    @State private var showsForm = false
     @State private var businessName = ""
     @State private var phone = ""
     @State private var isTaxRegistered = false
@@ -41,118 +43,13 @@ struct BusinessDetailsSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 0) {
-                    Image(systemName: "storefront")
-                        .font(.system(size: 34, weight: .medium))
-                        .foregroundStyle(Color(.blueAccentText))
-                        .frame(height: 42)
-
-                    Text("These print at the top of every quote you send, and tell the client how to say yes.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 12)
-
-                    VStack(spacing: 10) {
-                        field("Business name", text: $businessName)
-                            .focused($focus, equals: .businessName)
-                            .textInputAutocapitalization(.words)
-                        field("Phone", text: $phone)
-                            .focused($focus, equals: .phone)
-                            .keyboardType(.phonePad)
-
-                        Toggle("I'm tax registered", isOn: $isTaxRegistered)
-                            .font(.callout)
-                            .tint(Color(.royalBlue600))
-                            .padding(.horizontal, 4)
-
-                        if isTaxRegistered {
-                            HStack(spacing: 8) {
-                                Text("Tax rate")
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                TextField("20", text: $taxRate)
-                                    .keyboardType(.decimalPad)
-                                    .multilineTextAlignment(.trailing)
-                                    .focused($focus, equals: .taxRate)
-                                    .frame(width: 64)
-                                Text("%").foregroundStyle(.secondary)
-                            }
-                            .font(.body)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
-                            .background(Color(.fieldFill),
-                                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-                            )
-                        }
-                    }
-                    .padding(.top, 24)
+            introduction
+                .navigationDestination(isPresented: $showsForm) {
+                    detailsForm
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .background(Color(.systemBackground))
-            .navigationTitle("Business details")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close) { finish() }
-                        .disabled(isSaving)
-                }
-
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-
-                    Button {
-                        focus = nil
-                    } label: {
-                        Image(systemName: "keyboard.chevron.compact.down")
-                    }
-                    .accessibilityLabel("Hide keyboard")
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 6) {
-                    Button {
-                        save()
-                    } label: {
-                        Group {
-                            if isSaving {
-                                ProgressView().tint(.white)
-                            } else {
-                                Text("Save and continue").font(.headline)
-                            }
-                        }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 52)
-                        .background(canSave ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
-                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canSave || isSaving)
-
-                    Button("Not now") { finish() }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .disabled(isSaving)
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-                .background(Color(.systemBackground))
-            }
         }
-        .presentationDetents([.height(650)])
-        .presentationBackground(Color(.systemBackground))
+        .presentationDetents([.large])
+        .presentationBackground(Color(.homeBackground))
         .alert("Couldn't save business details", isPresented: $saveFailed) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -167,25 +64,250 @@ struct BusinessDetailsSheet: View {
             taxRate = savedTaxRate > 0
                 ? savedTaxRate.formatted(.number.precision(.fractionLength(0...2)))
                 : ""
-            try? await Task.sleep(for: .seconds(0.35))
-            focus = .businessName
         }
     }
 
-    private func field(_ placeholder: String, text: Binding<String>) -> some View {
-        TextField(placeholder, text: text)
-            .textFieldStyle(.plain)
-            .font(.body)
+    private var introduction: some View {
+        VStack(spacing: 0) {
+            Image(systemName: "storefront")
+                .font(.system(size: 74, weight: .medium))
+                .foregroundStyle(Color(.mainText))
+                .frame(width: 150, height: 150)
+                .padding(.top, 70)
+
+            Text("Put your business\non every quote.")
+                .font(.scaledSystem(38, relativeTo: .largeTitle, weight: .medium, design: .serif))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color(.mainText))
+                .padding(.top, 30)
+
+            VStack(alignment: .center, spacing: 24) {
+                benefit("building.2", "Show clients who the quote is from")
+                benefit("phone", "Make it easy for them to get in touch")
+                benefit("doc.text", "Print your details on every quote")
+            }
+            .padding(.top, 42)
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            Spacer(minLength: 24)
+
+            Button {
+                showsForm = true
+            } label: {
+                Text("Continue")
+                    .font(.headline)
+                    .foregroundStyle(colorScheme == .dark ? Color(.homeBackground) : .white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(Color(.mainText), in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button("Not now") { finish() }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .padding(.bottom, 8)
+        }
+        .padding(.horizontal, 24)
+        .background(Color(.homeBackground))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(role: .close) { finish() }
+            }
+        }
+    }
+
+    private var detailsForm: some View {
+        ZStack {
+            Color(.accountBackground)
+                .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Your business information")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color(.mainText))
+
+                        Text("These details appear at the top of every quote you send.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        field(
+                            "Business name",
+                            placeholder: "Your business name",
+                            text: $businessName,
+                            focus: .businessName,
+                            isRequired: true
+                        )
+                        .textInputAutocapitalization(.words)
+
+                        field(
+                            "Phone",
+                            placeholder: "Phone number",
+                            text: $phone,
+                            focus: .phone
+                        )
+                        .keyboardType(.phonePad)
+                    }
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Tax")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Color(.mainText))
+
+                        Toggle("I'm tax registered", isOn: $isTaxRegistered)
+                            .font(.body)
+                            .foregroundStyle(Color(.mainText))
+                            .tint(Color(.royalBlue600))
+                            .padding(.horizontal, 16)
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .background(Color(.cardSurface))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(Color(.separator), lineWidth: 1)
+                            }
+
+                        if isTaxRegistered {
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text("Tax rate")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(focus == .taxRate ? Color(.blueAccentText) : .secondary)
+
+                                HStack(spacing: 8) {
+                                    TextField("20", text: $taxRate)
+                                        .keyboardType(.decimalPad)
+                                        .focused($focus, equals: .taxRate)
+                                    Spacer()
+                                    Text("%")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .font(.body.monospacedDigit())
+                                .foregroundStyle(Color(.mainText))
+                                .tint(Color(.blueAccentText))
+                                .padding(.horizontal, 16)
+                                .frame(maxWidth: .infinity, minHeight: 48)
+                                .background(Color(.cardSurface))
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(
+                                            focus == .taxRate ? Color(.blueAccentText) : Color(.separator),
+                                            lineWidth: 1
+                                        )
+                                }
+                            }
+                        }
+
+                        Text("Tax is added to the quote total and shown as a separate line.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 18)
+                .padding(.bottom, 40)
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .navigationTitle("Business details")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+
+                Button {
+                    focus = nil
+                } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                }
+                .accessibilityLabel("Hide keyboard")
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 6) {
+                Button {
+                    save()
+                } label: {
+                    Group {
+                        if isSaving {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text("Save and continue").font(.headline)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(canSave ? Color(.royalBlue600) : Color(.royalBlue600).opacity(0.4),
+                                in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSave || isSaving)
+
+                Button("Not now") { finish() }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .disabled(isSaving)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            .background(Color(.accountBackground))
+        }
+        .onAppear {
+            Task {
+                try? await Task.sleep(for: .seconds(0.35))
+                focus = .businessName
+            }
+        }
+    }
+
+    private func benefit(_ icon: String, _ text: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.body.weight(.medium))
             .foregroundStyle(Color(.mainText))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            // Tinted, not white. The sheet behind it is white, so a white
-            // field was a hairline outline around nothing.
-            .background(Color(.fieldFill), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color(.separator), lineWidth: 0.5)
-            )
+            .labelStyle(.titleAndIcon)
+    }
+
+    private func field(
+        _ label: String,
+        placeholder: String,
+        text: Binding<String>,
+        focus field: Field,
+        isRequired: Bool = false
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(label + (isRequired ? " *" : ""))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(focus == field ? Color(.blueAccentText) : .secondary)
+
+            TextField(placeholder, text: text)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .foregroundStyle(Color(.mainText))
+                .tint(Color(.blueAccentText))
+                .focused($focus, equals: field)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .background(Color(.cardSurface))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(
+                            focus == field ? Color(.blueAccentText) : Color(.separator),
+                            lineWidth: 1
+                        )
+                }
+        }
     }
 
     private func save() {
