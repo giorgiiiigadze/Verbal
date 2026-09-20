@@ -135,13 +135,8 @@ struct AccountView: View {
                         .foregroundStyle(Color(.mainText))
                 }
 
-            } footer: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Your business name, number and address as a client sees them, and the trade Verbal reads your jobs against.")
-                    if !store.isPro {
-                        Text("Free includes \(session.dailyQuoteLimit) new quotes a day. Quotes you have already made stay yours to open, edit and send.")
-                    }
-                }
+            } header: {
+                Text("Profile")
             }
             .listRowBackground(Color(.cardSurface))
 
@@ -156,11 +151,21 @@ struct AccountView: View {
                 } label: {
                     LabeledContent("Notifications", value: notificationSummary)
                 }
+            } header: {
+                Text("General")
+            }
+            .listRowBackground(Color(.cardSurface))
+
+            Section {
                 Button {
                     showAppearance = true
                 } label: {
                     HStack(spacing: 8) {
-                        LabeledContent("Appearance", value: appearanceLabel)
+                        LabeledContent {
+                            Text(appearanceLabel)
+                        } label: {
+                            Label("Light and Dark Mode", systemImage: "circle.lefthalf.filled")
+                        }
                         Image(systemName: "chevron.right")
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.tertiary)
@@ -168,6 +173,8 @@ struct AccountView: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+            } header: {
+                Text("Appearance")
             }
             .listRowBackground(Color(.cardSurface))
 
@@ -176,8 +183,6 @@ struct AccountView: View {
                     .tint(.green)
             } header: {
                 Text("Home")
-            } footer: {
-                Text("Hide booked visits from the Home timeline. They remain available in Schedule and their reminders are unchanged.")
             }
             .listRowBackground(Color(.cardSurface))
 
@@ -197,8 +202,6 @@ struct AccountView: View {
                 }
             } header: {
                 Text("Quotes")
-            } footer: {
-                Text("Your letterhead, validity, tax and standard terms, applied to every new quote. The currency also formats your rate card.")
             }
             .listRowBackground(Color(.cardSurface))
 
@@ -237,6 +240,8 @@ struct AccountView: View {
                 } label: {
                     Label("About", systemImage: "info.circle")
                 }
+            } header: {
+                Text("Support")
             }
             .listRowBackground(Color(.cardSurface))
 
@@ -247,6 +252,8 @@ struct AccountView: View {
                 Button("Sign out", role: .destructive) {
                     showSignOutConfirmation = true
                 }
+            } header: {
+                Text("Account Access")
             }
             .listRowBackground(Color(.cardSurface))
         }

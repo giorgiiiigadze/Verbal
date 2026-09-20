@@ -24,12 +24,12 @@ struct AppearanceSheet: View {
                         appearanceRow(appearance)
                     }
                 } header: {
-                    Text("Appearance")
+                    Text("Mode")
                 } footer: {
                     Text("System matches your iPhone. Light and Dark keep Verbal in the appearance you choose until you change it again.")
                 }
             }
-            .navigationTitle("Appearance")
+            .navigationTitle("Light and Dark Mode")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
