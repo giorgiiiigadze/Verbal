@@ -140,9 +140,11 @@ struct NextVisitWidgetView: View {
                                 .font(.caption.weight(.bold).monospacedDigit())
                             Text(weekday(for: quote.date))
                                 .font(.caption2.weight(.medium))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
                         .foregroundStyle(Color.primary)
-                        .frame(width: 25, alignment: .leading)
+                        .frame(width: 32, alignment: .leading)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(quote.title)

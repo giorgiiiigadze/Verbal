@@ -426,10 +426,10 @@ struct ScheduleVisitSheet: View {
         .accessibilityLabel(trimmedClient.isEmpty ? "Add a client" : "Client, \(trimmedClient)")
     }
 
-    /// The address, and the phone with it — both are "how do I reach this job",
-    /// and neither is worth a divider of its own.
+    /// The address and phone are both ways to reach the job, but remain separate
+    /// rows so each is easy to scan and edit.
     private var locationRow: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             Button {
                 showingLocationSearch = true
             } label: {
@@ -454,6 +454,10 @@ struct ScheduleVisitSheet: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(trimmedAddress.isEmpty ? "Add a location" : "Location, \(trimmedAddress)")
+            .padding(.vertical, 16)
+
+            Divider()
+                .overlay(Color(.separator).opacity(0.6))
 
             HStack(spacing: 14) {
                 phoneIcon
@@ -464,9 +468,9 @@ struct ScheduleVisitSheet: View {
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
             }
+            .padding(.vertical, 16)
         }
         .padding(.horizontal, 24)
-        .padding(.vertical, 16)
     }
 
     /// A gate code, a measurement to take. It has always been stored and until
@@ -526,22 +530,18 @@ struct ScheduleVisitSheet: View {
     }
 
     private var phoneIcon: some View {
-        Image("PhoneCall")
-            .resizable()
-            .renderingMode(.template)
-            .scaledToFit()
+        Image(systemName: "phone")
+            .font(.body)
             .foregroundStyle(.secondary)
-            .frame(width: 22, height: 22)
+            .frame(width: 22, alignment: .leading)
             .accessibilityHidden(true)
     }
 
     private var clientIcon: some View {
-        Image("VisitClient")
-            .resizable()
-            .renderingMode(.template)
-            .scaledToFit()
+        Image(systemName: "person")
+            .font(.body)
             .foregroundStyle(.secondary)
-            .frame(width: 22, height: 22)
+            .frame(width: 22, alignment: .leading)
             .accessibilityHidden(true)
     }
 

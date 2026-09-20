@@ -29,9 +29,9 @@ struct VisitActionSheet: View {
     let onOpenQuote: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    /// The fixed action panel only needs an edge while visit details continue
-    /// beneath it. At the end of a short sheet, leaving that line up would
-    /// turn ordinary bottom spacing into an unnecessary container.
+    /// The fixed action panel gains an edge only once visit details scroll
+    /// beneath it. At rest, it stays part of the sheet rather than reading as
+    /// a separate container.
     @State private var isActionPanelSeparated = false
 
     var body: some View {
@@ -44,11 +44,9 @@ struct VisitActionSheet: View {
                 .padding(.bottom, 24)
             }
             .onScrollGeometryChange(for: Bool.self) { geometry in
-                let visibleBottom = geometry.contentOffset.y + geometry.containerSize.height
-                let contentBottom = geometry.contentSize.height + geometry.contentInsets.bottom
-                return visibleBottom < contentBottom - 1
-            } action: { _, hasContentBelow in
-                isActionPanelSeparated = hasContentBelow
+                geometry.contentOffset.y > 1
+            } action: { _, detailsAreUnderActionPanel in
+                isActionPanelSeparated = detailsAreUnderActionPanel
             }
             .onDisappear { isActionPanelSeparated = false }
             .background(Color(.homeBackground))
@@ -75,11 +73,9 @@ struct VisitActionSheet: View {
                                value: isActionPanelSeparated)
             }
         }
-        // Opens at a mid detent — enough to read the visit's headline facts and
-        // reach the primary actions — with the handle inviting a drag up when
-        // the full note or address needs the room.
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        // A visit card is already a compact summary. Opening it goes straight
+        // to the complete view, where the details and actions fit together.
+        .presentationDetents([.large])
         .presentationBackground(Color(.homeBackground))
     }
 
@@ -107,7 +103,7 @@ struct VisitActionSheet: View {
             divider
 
             HStack(spacing: 14) {
-                assetIcon("VisitClient")
+                systemIcon("person")
                 Text(value(visit.clientName, placeholder: "Client"))
                     .font(.body)
                     .foregroundStyle(hasValue(visit.clientName) ? Color(.mainText) : .secondary)
@@ -118,7 +114,7 @@ struct VisitActionSheet: View {
 
             divider
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top, spacing: 14) {
                     assetIcon("LocationPin")
                     Text(value(visit.address, placeholder: "Location"))
@@ -126,17 +122,21 @@ struct VisitActionSheet: View {
                         .foregroundStyle(hasValue(visit.address) ? Color(.mainText) : .secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .padding(.vertical, 16)
+
+                Divider()
+                    .overlay(Color(.separator).opacity(0.6))
 
                 HStack(spacing: 14) {
-                    assetIcon("PhoneCall")
+                    systemIcon("phone")
                     Text(value(visit.phone, placeholder: "Phone"))
                         .font(.body)
                         .foregroundStyle(hasValue(visit.phone) ? Color(.mainText) : .secondary)
                     Spacer(minLength: 0)
                 }
+                .padding(.vertical, 16)
             }
             .padding(.horizontal, 24)
-            .padding(.vertical, 16)
 
             divider
 
