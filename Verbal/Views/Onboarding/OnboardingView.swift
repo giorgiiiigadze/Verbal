@@ -258,6 +258,8 @@ struct OnboardingView: View {
         switch current {
         case .hook:
             OnboardingHookStep(currencyCode: currencyCode)
+        case .message:
+            OnboardingMessageStep()
         case .profile:
             OnboardingProfileStep(model: model,
                                   isProgressHeaderSeparated: $isProgressHeaderSeparated,

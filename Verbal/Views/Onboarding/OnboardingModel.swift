@@ -33,7 +33,7 @@ final class OnboardingModel {
     /// of them fill no field at all.
     enum Step: Hashable {
         // Introduction — the problem, their own numbers, and the setup.
-        case hook, profile, method, quoteVolume, quoteDuration, stat
+        case hook, message, profile, method, quoteVolume, quoteDuration, stat
         case setup, trade, jobs, prices, business, summary
         // The preview of the setup they have just completed.
         case result, milestone
@@ -94,10 +94,10 @@ final class OnboardingModel {
     /// nothing ticked means there is nothing to price.
     var steps: [Step] {
         if usesShortFlow {
-            return [.hook, .profile, .stat, .setup, .notifications]
+            return [.hook, .message, .profile, .stat, .setup, .notifications]
         }
 
-        var list: [Step] = [.hook, .method, .quoteVolume, .quoteDuration, .stat, .trade]
+        var list: [Step] = [.hook, .message, .method, .quoteVolume, .quoteDuration, .stat, .trade]
         // Pricing a whole list of jobs before the first quote is admin work,
         // not setup. Collect one useful anchor now; the Rate Card can grow
         // once the user has seen a real quote.

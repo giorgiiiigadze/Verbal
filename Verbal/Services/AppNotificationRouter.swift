@@ -16,6 +16,10 @@ final class AppNotificationRouter {
 
     var requestedQuoteId: UUID?
     var requestedVisitId: UUID?
+    /// A widget can cold-launch the app while the system launch screen is still
+    /// on screen. Let Calendar make its first appearance before it raises the
+    /// visit panel; notification taps retain their immediate presentation.
+    var requestedVisitWaitsForCalendarAppearance = false
     var requestedCalendar = false
     var hasUnreadVisitReminder = false
 
@@ -32,6 +36,7 @@ final class AppNotificationRouter {
 
     func openVisit(id: UUID) {
         requestedVisitId = id
+        requestedVisitWaitsForCalendarAppearance = false
         hasUnreadVisitReminder = true
     }
 
@@ -43,7 +48,14 @@ final class AppNotificationRouter {
         } else if url.host == "visit",
                   let id = url.pathComponents.dropFirst().first.flatMap(UUID.init(uuidString:)) {
             requestedVisitId = id
+            requestedVisitWaitsForCalendarAppearance = true
         }
+    }
+
+    func clearVisitRequest(id: UUID) {
+        guard requestedVisitId == id else { return }
+        requestedVisitId = nil
+        requestedVisitWaitsForCalendarAppearance = false
     }
 
     func clearVisitReminder() {

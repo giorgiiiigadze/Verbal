@@ -48,6 +48,7 @@ struct MainTabView: View {
     @State private var startBookingAfterCalendarIntro = false
     @State private var calendarBookingRequest = false
     @State private var calendarVisitRequestID: UUID?
+    @State private var calendarVisitWaitsForAppearance = false
 
     /// Announcements are shown once and never again. A promo that comes back is
     /// how people learn to dismiss your sheets without reading them.
@@ -114,7 +115,8 @@ struct MainTabView: View {
                     ScheduleView(showCreate: createBinding,
                                  recordingVisit: $recordingVisit,
                                  startBooking: $calendarBookingRequest,
-                                 requestedVisitID: $calendarVisitRequestID)
+                                 requestedVisitID: $calendarVisitRequestID,
+                                 requestedVisitWaitsForAppearance: $calendarVisitWaitsForAppearance)
                 }
             }
             .badge(notificationRouter.hasUnreadVisitReminder ? Text("1") : nil)
@@ -252,9 +254,10 @@ struct MainTabView: View {
     private func openRequestedVisitIfNeeded() {
         guard let visitId = notificationRouter.requestedVisitId else { return }
         calendarVisitRequestID = visitId
+        calendarVisitWaitsForAppearance = notificationRouter.requestedVisitWaitsForCalendarAppearance
         selection = .schedule
         notificationRouter.clearVisitReminder()
-        notificationRouter.requestedVisitId = nil
+        notificationRouter.clearVisitRequest(id: visitId)
     }
 
     private func openRequestedCalendarIfNeeded() {
@@ -329,6 +332,7 @@ struct MainTabView: View {
               !showRecordingIntro,
               !showCreate,
               !showCalendarIntro,
+              calendarVisitRequestID == nil,
               !store.isPaywallPresented
         else { return }
         showShareLinkNews = true

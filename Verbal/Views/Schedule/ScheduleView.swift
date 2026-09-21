@@ -12,6 +12,9 @@ struct ScheduleView: View {
     /// Raised by Calendar's one-time intro after its sheet is fully gone.
     @Binding var startBooking: Bool
     @Binding var requestedVisitID: UUID?
+    /// Widget routes wait until Calendar is visibly established, so the panel
+    /// follows the launch screen instead of replacing it.
+    @Binding var requestedVisitWaitsForAppearance: Bool
 
     @State private var quoteToOpen: QuoteSummary?
     @State private var selectedVisit: ScheduledVisit?
@@ -21,6 +24,7 @@ struct ScheduleView: View {
     @State private var selectedDay = Calendar.current.startOfDay(for: .now)
     @State private var showVisitsSearch = false
     @State private var toast: Toast?
+    @State private var isPresentingRequestedVisit = false
 
     private enum VisitEditor: Identifiable { case new, existing(ScheduledVisit); var id: String { switch self { case .new: return "new"; case .existing(let visit): return visit.id.uuidString } } }
     private enum ScheduleFilter: String, CaseIterable, Identifiable {
@@ -75,26 +79,43 @@ struct ScheduleView: View {
         .task {
             session.visitStore.refresh()
             await session.visitStore.sync()
-            presentRequestedVisitIfNeeded()
         }
+        .task(id: requestedVisitID) { await presentRequestedVisitIfNeeded() }
         .onChange(of: startBooking) { _, shouldStartBooking in
             guard shouldStartBooking else { return }
             startBooking = false
             editor = .new
         }
-        .onChange(of: requestedVisitID) { _, _ in presentRequestedVisitIfNeeded() }
+        .onChange(of: session.visitStore.hasCompletedInitialSync) { _, _ in
+            Task { await presentRequestedVisitIfNeeded() }
+        }
         .refreshable { await session.visitStore.sync(); await session.refreshQuotes() }
         .toast($toast)
     }
 
-    private func presentRequestedVisitIfNeeded() {
+    @MainActor
+    private func presentRequestedVisitIfNeeded() async {
         guard let id = requestedVisitID,
-              let visit = visits.first(where: { $0.id == id })
+              let visit = visits.first(where: { $0.id == id }),
+              !isPresentingRequestedVisit
         else { return }
+        isPresentingRequestedVisit = true
+        defer { isPresentingRequestedVisit = false }
         filter = .all
         selectedDay = Calendar.current.startOfDay(for: visit.date)
-        selectedVisit = visit
+
+        if requestedVisitWaitsForAppearance {
+            // The widget's system launch screen is gone before SwiftUI offers
+            // a lifecycle callback. This task starts only after Calendar has
+            // appeared, giving that first paint a brief moment to settle.
+            try? await Task.sleep(for: .seconds(0.4))
+            guard !Task.isCancelled, requestedVisitID == id else { return }
+        }
+
+        guard let currentVisit = visits.first(where: { $0.id == id }) else { return }
+        selectedVisit = currentVisit
         requestedVisitID = nil
+        requestedVisitWaitsForAppearance = false
     }
 
     private var calendar: some View {
