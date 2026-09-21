@@ -305,7 +305,7 @@ struct NextVisitWidgetView: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Color.primary.opacity(0.9))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
+                .padding(.top, 8)
                 .padding(.bottom, 11)
 
             VStack(alignment: .leading, spacing: 7) {
@@ -336,7 +336,8 @@ struct NextVisitWidgetView: View {
                     Text("+\(remainingCount) more")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.secondary)
-                        .padding(.leading, 13)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .offset(y: -4)
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)

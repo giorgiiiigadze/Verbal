@@ -30,6 +30,7 @@ struct PaywallSheet: View {
     @Environment(Store.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var selection: Plan = .yearly
     @State private var isPurchasing = false
@@ -83,6 +84,8 @@ struct PaywallSheet: View {
             }
             .toolbarBackground(Color(.systemBackground), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+            .navigationTitle("Verbal Pro")
+            .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.large])
         // No `presentationCornerRadius`: the system's own radius is the one
@@ -187,7 +190,7 @@ struct PaywallSheet: View {
             Image(systemName: symbol)
                 .font(.system(size: 22, weight: .semibold))
                 .symbolRenderingMode(.monochrome)
-                .foregroundStyle(.white)
+                .foregroundStyle(colorScheme == .dark ? .white : accent)
                 .frame(width: 30, height: 30)
                 .accessibilityHidden(true)
             Text(title)

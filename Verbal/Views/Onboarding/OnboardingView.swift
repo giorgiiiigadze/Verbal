@@ -395,7 +395,7 @@ struct OnboardingView: View {
 
     private var footerTitle: String {
         switch current {
-        case .hook: return "Get started"
+        case .hook: return "Continue"
         case .result: return "Nice"
         default: return "Continue"
         }

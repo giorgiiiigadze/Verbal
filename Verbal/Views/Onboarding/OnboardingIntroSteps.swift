@@ -32,49 +32,37 @@ struct OnboardingHookStep: View {
     let currencyCode: String
 
     var body: some View {
-        VStack(spacing: 14) {
-            Text("Quotes shouldn't cost\nyou your evenings.")
-                .font(.robotoSlab(28, relativeTo: .title))
-                .foregroundStyle(Color(.mainText))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 4)
+        VStack(spacing: 0) {
+            Spacer(minLength: 4)
 
             DevicePreview {
                 OnboardingPhoneScreen(currencyCode: currencyCode)
             }
-            // Held to a share of the width rather than filling it. At full
-            // width the phone crowded its own caption and reached for the
-            // button, which made a screen with three things on it feel full.
-            .frame(width: 246)
+            // Let the product be the hero. The preview is intentionally much
+            // larger than the content on later steps, like a device sitting in
+            // the middle of an App Store-style welcome screen.
+            .frame(width: 292)
             .frame(maxWidth: .infinity)
 
-            // These two flexible gaps deliberately match: the promise belongs
-            // halfway between the phone showing the result and the button that
-            // lets someone try it, rather than visually attached to either.
-            Spacer(minLength: 16)
+            Spacer(minLength: 24)
 
-            VStack(alignment: .center, spacing: 10) {
-                promiseLine("Speak it.", icon: "OnboardingSpeak")
-                promiseLine("Send it.", icon: "OnboardingSend")
+            VStack(spacing: 8) {
+                Text("Welcome to Verbal")
+                    .font(.robotoSlab(27, relativeTo: .title))
+                    .foregroundStyle(Color(.mainText))
+
+                Text("A faster way to turn the work\nyou do into a quote.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
 
-            Spacer(minLength: 16)
+            // Keep the copy from feeling attached to the persistent action.
+            Spacer(minLength: 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func promiseLine(_ text: String, icon: String) -> some View {
-        HStack(spacing: 10) {
-            Text(text)
-            Image(icon)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 34, height: 34)
-        }
-        .font(.robotoSlab(32, relativeTo: .title))
-        .foregroundStyle(Color(.mainText))
     }
 }
 

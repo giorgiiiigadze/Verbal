@@ -109,7 +109,7 @@ struct QuoteRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // The page background remains visible, while the leading plate gives
         // each row a stable visual anchor before the title is read.
-        .padding(.vertical, 12)
+        .padding(.vertical, 6)
         // Keep the hit target shaped like the row without opting the long-press
         // menu into a lifted card preview, which reads as an unwanted shadow on
         // an otherwise flat list item.
