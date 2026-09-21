@@ -237,6 +237,11 @@ struct MainTabView: View {
             guard visitId != nil else { return }
             openRequestedVisitIfNeeded()
         }
+        .onChange(of: notificationRouter.isReadyForDeepLinkPresentation) { _, isReady in
+            guard isReady else { return }
+            openRequestedVisitIfNeeded()
+            openRequestedCalendarIfNeeded()
+        }
         .onChange(of: notificationRouter.requestedCalendar) { _, requested in
             guard requested else { return }
             openRequestedCalendarIfNeeded()
@@ -249,10 +254,15 @@ struct MainTabView: View {
         .onChange(of: session.visitStore.hasCompletedInitialSync) { _, _ in
             presentCalendarIntroIfNeeded()
         }
+        .onAppear {
+            openRequestedVisitIfNeeded()
+            openRequestedCalendarIfNeeded()
+        }
     }
 
     private func openRequestedVisitIfNeeded() {
-        guard let visitId = notificationRouter.requestedVisitId else { return }
+        guard notificationRouter.isReadyForDeepLinkPresentation,
+              let visitId = notificationRouter.requestedVisitId else { return }
         calendarVisitRequestID = visitId
         calendarVisitWaitsForAppearance = notificationRouter.requestedVisitWaitsForCalendarAppearance
         selection = .schedule
@@ -261,7 +271,8 @@ struct MainTabView: View {
     }
 
     private func openRequestedCalendarIfNeeded() {
-        guard notificationRouter.requestedCalendar else { return }
+        guard notificationRouter.isReadyForDeepLinkPresentation,
+              notificationRouter.requestedCalendar else { return }
         selection = .schedule
         notificationRouter.requestedCalendar = false
     }

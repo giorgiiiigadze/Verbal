@@ -22,6 +22,10 @@ final class AppNotificationRouter {
     var requestedVisitWaitsForCalendarAppearance = false
     var requestedCalendar = false
     var hasUnreadVisitReminder = false
+    /// Deep links can arrive while the app's launch screen still covers SwiftUI.
+    /// MainTabView waits for ContentView to expose the real app before routing
+    /// a widget tap into a sheet.
+    var isReadyForDeepLinkPresentation = false
 
     private init() {}
 

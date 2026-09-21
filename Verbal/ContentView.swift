@@ -112,6 +112,12 @@ struct ContentView: View {
         .preferredColorScheme(preferredColorScheme)
         .animation(.easeInOut(duration: 0.35), value: showSplash)
         .animation(.spring(duration: 0.4), value: network.isOnline)
+        .onAppear {
+            AppNotificationRouter.shared.isReadyForDeepLinkPresentation = !showSplash
+        }
+        .onChange(of: showSplash) { _, isShowingSplash in
+            AppNotificationRouter.shared.isReadyForDeepLinkPresentation = !isShowingSplash
+        }
         .onChange(of: network.isOnline) { _, isOnline in
             // Re-arm on reconnect: the next time the signal goes, that's news
             // again and worth saying.
