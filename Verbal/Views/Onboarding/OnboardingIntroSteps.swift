@@ -78,41 +78,7 @@ struct OnboardingHookStep: View {
     }
 }
 
-// MARK: - 2 · The promise
-
-/// A quiet beat between the product preview and the setup questions. The first
-/// screen proves what Verbal makes; this one gives that result a human-sized
-/// reason to matter before asking for any information.
-struct OnboardingMessageStep: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Spacer(minLength: 72)
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Your words.")
-                    .foregroundStyle(Color(.mainText))
-                Text("A ready-to-send quote.")
-                    .foregroundStyle(OnboardingStyle.action)
-                Text("No evening admin.")
-                    .foregroundStyle(Color(.mainText))
-            }
-            .font(.robotoSlab(38, relativeTo: .largeTitle))
-            .fixedSize(horizontal: false, vertical: true)
-
-            Spacer()
-
-            Text("Tell Verbal what happened on the job. It turns the details into a clear quote, ready to send.")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 24)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-// MARK: - 3 · How they do it today
+// MARK: - 2 · How they do it today
 
 /// Naming the problem in their own words, before the app claims to solve it.
 ///
