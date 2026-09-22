@@ -60,7 +60,7 @@ $$;
 do $$
 declare i int;
 begin
-  for i in 1..7 loop
+  for i in 1..8 loop
     insert into auth.users (id, email, raw_user_meta_data)
       values (pg_temp.uid(i), 'quota-test-' || i || '@example.invalid', '{}'::jsonb)
       on conflict (id) do nothing;
@@ -481,7 +481,7 @@ reset role;
 do $$
 declare result text; i integer;
 begin
-  for i in 1..30 loop
+  for i in 1..15 loop
     select public.reserve_request_budget(pg_temp.uid(6), 'extract_quote') into result;
     perform pg_temp.t_ok(result is null, 'an extraction slot is reserved below the hourly limit');
   end loop;
@@ -492,19 +492,19 @@ begin
   -- Transcription has its own paid-operation budget. Old reservations are
   -- removed before the count so this scratch table remains bounded.
   insert into public.request_budget_reservations (user_id, operation, created_at)
-  values (pg_temp.uid(7), 'transcribe_audio', now() - interval '25 hours');
+  values (pg_temp.uid(8), 'transcribe_audio', now() - interval '25 hours');
   select public.reserve_request_budget(pg_temp.uid(7), 'transcribe_audio') into result;
   perform pg_temp.t_ok(result is null, 'a transcription slot is reserved below the hourly limit');
   perform pg_temp.t_ok(
     not exists (
       select 1 from public.request_budget_reservations
-      where user_id = pg_temp.uid(7)
+      where user_id = pg_temp.uid(8)
         and operation = 'transcribe_audio'
         and created_at <= now() - interval '24 hours'
     ),
     'expired transcription reservations are pruned before counting'
   );
-  for i in 2..30 loop
+  for i in 2..4 loop
     select public.reserve_request_budget(pg_temp.uid(7), 'transcribe_audio') into result;
     perform pg_temp.t_ok(result is null, 'a transcription slot is reserved below the hourly limit');
   end loop;

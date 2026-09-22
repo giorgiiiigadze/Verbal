@@ -62,15 +62,25 @@ Deno.serve(async (req) => {
   const declared = Number(req.headers.get("Content-Length") ?? "");
   if (Number.isFinite(declared) && declared > MAX_AUDIO_BYTES) return json({ error: "Recording is too long." }, 413);
 
-  const audio = new Uint8Array(await req.arrayBuffer());
-  if (audio.byteLength === 0 || audio.byteLength > MAX_AUDIO_BYTES) return json({ error: "Recording is too long." }, 413);
-
-  // This is independently metered: transcribing is a paid external call even
-  // if the later quote-extraction call fails.
+  // Reserve before buffering the request. Otherwise a caller who has already
+  // exhausted their allowance can keep making the Edge Runtime receive and
+  // allocate up to 25 MB per request — no AssemblyAI charge, but still a
+  // practical resource-exhaustion path. Counting an invalid/truncated upload
+  // is intentional: this endpoint is paid work and a rejected large request
+  // has already consumed network and runtime capacity.
   const { data: budget, error: budgetError } = await admin.rpc("reserve_request_budget", {
     p_user_id: userId, p_operation: "transcribe_audio",
   });
-  if (budgetError || budget) return json({ error: "The accuracy pass is temporarily unavailable. Try again shortly." }, 429);
+  if (budgetError) {
+    console.error("transcription request-budget reservation failed:", budgetError.message);
+    return json({ error: "The accuracy pass is temporarily unavailable. Try again shortly." }, 503);
+  }
+  if (budget) {
+    return json({ error: "You've reached the accuracy-pass limit. Try again later." }, 429);
+  }
+
+  const audio = new Uint8Array(await req.arrayBuffer());
+  if (audio.byteLength === 0 || audio.byteLength > MAX_AUDIO_BYTES) return json({ error: "Recording is too long." }, 413);
 
   const headers = { Authorization: ASSEMBLYAI_API_KEY };
   const upload = await fetch("https://api.assemblyai.com/v2/upload", { method: "POST", headers, body: audio });
