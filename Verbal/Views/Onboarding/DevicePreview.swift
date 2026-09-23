@@ -5,6 +5,33 @@
 
 import SwiftUI
 
+/// All editable dimensions for the onboarding phone preview.
+///
+/// `displayedFrameWidth` is the main visual-size control. The remaining values
+/// describe the source artwork and the full-size canvas used to compose the app
+/// screen. Keeping them together makes future preview adjustments explicit and
+/// avoids scattering unexplained numbers across three views.
+enum OnboardingPhonePreviewMeasurements {
+    /// Width of the complete phone on the opening onboarding screen.
+    static let displayedFrameWidth: CGFloat = 292
+
+    /// Logical iPhone canvas at which `OnboardingPhoneScreen` is composed
+    /// before it is scaled into the frame's transparent opening.
+    static let contentReferenceSize = CGSize(width: 393, height: 852)
+
+    /// Pixel dimensions of `deviceFrame` in the asset catalog.
+    static let frameArtworkSize = CGSize(width: 489, height: 1000)
+
+    /// Pixel dimensions and origin of the transparent screen opening in that
+    /// artwork. The opening starts at x: 25, y: 22.
+    static let screenOpeningSize = CGSize(width: 438, height: 955)
+    static let screenLeadingInset: CGFloat = 25
+    static let screenTopInset: CGFloat = 22
+
+    /// Corner radius of the glass as a fraction of its rendered width.
+    static let screenCornerRadiusRatio: CGFloat = 0.135
+}
+
 /// Apple's own iPhone artwork, with whatever is given to it showing through the
 /// screen.
 ///
@@ -19,14 +46,20 @@ import SwiftUI
 struct DevicePreview<Screen: View>: View {
     @ViewBuilder var screen: Screen
 
-    /// Measured from the 489 × 1000 export: the transparent screen runs from
-    /// x 25–463 and y 22–977.
-    private static var imageAspect: CGFloat { 489.0 / 1000.0 }
-    private static var screenAspect: CGFloat { 438.0 / 955.0 }
-    private static var leadingInset: CGFloat { 25.0 / 489.0 }
-    private static var topInset: CGFloat { 22.0 / 1000.0 }
-    /// The corner radius of the glass itself, as a share of the screen's width.
-    private static var screenRadius: CGFloat { 0.135 }
+    private typealias Measurements = OnboardingPhonePreviewMeasurements
+
+    private static var imageAspect: CGFloat {
+        Measurements.frameArtworkSize.width / Measurements.frameArtworkSize.height
+    }
+    private static var screenAspect: CGFloat {
+        Measurements.screenOpeningSize.width / Measurements.screenOpeningSize.height
+    }
+    private static var leadingInset: CGFloat {
+        Measurements.screenLeadingInset / Measurements.frameArtworkSize.width
+    }
+    private static var topInset: CGFloat {
+        Measurements.screenTopInset / Measurements.frameArtworkSize.height
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -38,8 +71,10 @@ struct DevicePreview<Screen: View>: View {
             ZStack {
                 screen
                     .frame(width: screenWidth, height: screenHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: screenWidth * Self.screenRadius,
-                                                style: .continuous))
+                    .clipShape(RoundedRectangle(
+                        cornerRadius: screenWidth * Measurements.screenCornerRadiusRatio,
+                        style: .continuous
+                    ))
                     .position(x: width / 2,
                               y: height * Self.topInset + screenHeight / 2)
 

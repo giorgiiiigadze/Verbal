@@ -55,6 +55,7 @@ struct PaywallSheet: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 24)
             }
+            .scrollIndicators(.hidden)
             .scrollBounceBehavior(.basedOnSize)
             .safeAreaInset(edge: .bottom) {
                 if store.subscriptionBelongsToAnotherAccount {
@@ -82,8 +83,6 @@ struct PaywallSheet: View {
                     .accessibilityLabel("Subscription options")
                 }
             }
-            .toolbarBackground(Color(.systemBackground), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .navigationTitle("Verbal Pro")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -141,11 +140,9 @@ struct PaywallSheet: View {
                 .multilineTextAlignment(.center)
                 .padding(.top, 16)
 
-            Text("Keep quoting without waiting for tomorrow's free allowance.")
-                .font(.callout)
+            Label("Cancel anytime. No commitment.", systemImage: "checkmark.shield.fill")
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 8)
                 .padding(.horizontal, 8)
 
@@ -153,13 +150,13 @@ struct PaywallSheet: View {
                 .padding(.top, 24)
 
             VStack(alignment: .leading, spacing: 20) {
-                benefit("sparkles", "Create unlimited AI-powered quotes")
-                benefit("infinity", "Keep quoting after your two free quotes")
-                benefit("doc.richtext", "Send a professional PDF for every job")
-                benefit("list.clipboard", "Use your saved rates on every quote")
-                benefit("person.2", "Keep every client and job in one place")
-                benefit("calendar.badge.clock", "Plan visits and stay on top of reminders")
-                benefit("lock.shield", "Your existing quotes always stay yours")
+                benefit("sparkles", "Create unlimited AI-powered quotes", "Turn job conversations into clear, professional quotes.")
+                benefit("infinity", "Keep quoting after your two free quotes", "No daily limit while your subscription is active.")
+                benefit("doc.richtext", "Send a professional PDF for every job", "Share polished quotes that clients can review easily.")
+                benefit("list.clipboard", "Use your saved rates on every quote", "Build your pricing once, then reuse it whenever you quote.")
+                benefit("person.2", "Keep every client and job in one place", "Keep your customers, jobs, and quote history organised.")
+                benefit("calendar.badge.clock", "Plan visits and stay on top of reminders", "Schedule jobs and know what needs your attention next.")
+                benefit("lock.shield", "Your existing quotes always stay yours", "Read, edit, share, and delete them on the free plan too.")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 28)
@@ -185,18 +182,23 @@ struct PaywallSheet: View {
     /// Feature rows use familiar SF Symbols in a fixed leading column, matching
     /// the visual rhythm of the reference while letting every icon remain legible
     /// at larger accessibility sizes.
-    private func benefit(_ symbol: String, _ title: String) -> some View {
-        HStack(alignment: .center, spacing: 16) {
+    private func benefit(_ symbol: String, _ title: String, _ description: String) -> some View {
+        HStack(alignment: .top, spacing: 16) {
             Image(systemName: symbol)
                 .font(.system(size: 22, weight: .semibold))
                 .symbolRenderingMode(.monochrome)
                 .foregroundStyle(colorScheme == .dark ? .white : accent)
                 .frame(width: 30, height: 30)
                 .accessibilityHidden(true)
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Color(.mainText))
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(.mainText))
+                Text(description)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
     }

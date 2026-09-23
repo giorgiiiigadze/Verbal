@@ -36,7 +36,7 @@ struct OnboardingHookStep: View {
             // Let the product be the hero. The preview is intentionally much
             // larger than the content on later steps, like a device sitting in
             // the middle of an App Store-style welcome screen.
-            .frame(width: 292)
+            .frame(width: OnboardingPhonePreviewMeasurements.displayedFrameWidth)
             .frame(maxWidth: .infinity)
 
             Spacer(minLength: 24)
