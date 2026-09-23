@@ -39,8 +39,25 @@ jobs:
       # from starting, so remove only this project's known local container.
       - name: Clear stale local Supabase database
         run: docker rm -f supabase_db_rglpwlmkwukezvexyups || true
+      # These are SQL-only tests: Postgres provides the schemas, extensions,
+      # migrations, and pgTAP runner. Starting the API, Studio, functions, and
+      # image services only adds Docker image pulls, which can be rate-limited
+      # on GitHub-hosted runners. Retry the remaining database image pull rather
+      # than turning a temporary registry response into a failed test suite.
       - name: Start local Supabase database
-        run: supabase db start
+        run: |
+          for attempt in 1 2 3; do
+            if supabase start --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+
+            supabase stop --no-backup || true
+            sleep $((attempt * 20))
+          done
       - name: Apply migrations from scratch
         run: supabase db reset
       - name: Test quota and subscription integrity
