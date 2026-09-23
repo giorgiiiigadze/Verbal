@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   entitlement:
@@ -34,6 +35,12 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      # Supabase's local Postgres image is hosted on GHCR. Authenticate before
+      # the CLI pulls it so the job does not share anonymous registry limits.
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       # Self-hosted runners can retain a stopped or previous-run Supabase
       # database. Its published 54322 port prevents this job's clean stack
       # from starting, so remove only this project's known local container.
@@ -41,9 +48,9 @@ jobs:
         run: docker rm -f supabase_db_rglpwlmkwukezvexyups || true
       # These are SQL-only tests: Postgres provides the schemas, extensions,
       # migrations, and pgTAP runner. Starting the API, Studio, functions, and
-      # image services only adds Docker image pulls, which can be rate-limited
-      # on GitHub-hosted runners. Retry the remaining database image pull rather
-      # than turning a temporary registry response into a failed test suite.
+      # image services only adds Docker image pulls. Retry the remaining
+      # database image pull rather than turning a transient registry response
+      # into a failed test suite.
       - name: Start local Supabase database
         run: |
           for attempt in 1 2 3; do
