@@ -304,6 +304,11 @@ struct ClientsView: View {
             VStack(spacing: 24) {
                 smartCollections
 
+                Text("Showing " + selectedCollection.title.lowercased())
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
                 if filtered.isEmpty {
                     filteredEmptyState
                         .frame(minHeight: 260)
@@ -325,7 +330,7 @@ struct ClientsView: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("At a glance")
-                    .font(.title2.bold())
+                    .font(.robotoSlab(24, relativeTo: .title2))
                     .foregroundStyle(Color(.mainText))
 
                 Text("Find who needs attention or what's coming next.")

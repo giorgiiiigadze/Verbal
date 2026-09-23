@@ -604,7 +604,7 @@ private struct CurrentTimeIndicator: View {
                 .frame(width: labelWidth - 6, alignment: .trailing)
                 .padding(.trailing, 6)
                 .offset(y: labelVerticalOffset)
-            Circle().fill(Color(.mainText)).frame(width: 6, height: 6)
+            Rectangle().fill(Color(.mainText)).frame(width: 1, height: 14)
             Rectangle().fill(Color(.mainText)).frame(height: 1)
         }
         .accessibilityLabel("Current time, \(date.formatted(date: .omitted, time: .shortened))")

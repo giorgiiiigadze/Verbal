@@ -257,7 +257,7 @@ struct OnboardingView: View {
     private var stepView: some View {
         switch current {
         case .hook:
-            OnboardingHookStep(currencyCode: currencyCode)
+            OnboardingHookStep()
         case .profile:
             OnboardingProfileStep(model: model,
                                   isProgressHeaderSeparated: $isProgressHeaderSeparated,
@@ -353,10 +353,11 @@ struct OnboardingView: View {
                 advance()
             } label: {
                 Text(footerTitle)
-                    .font(.headline)
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(isFirstStep ? Color(.homeBackground) : .white)
+                    .padding(.horizontal, 22)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 58)
+                    .frame(height: 56)
                     .background(barFill, in: Capsule())
             }
             .buttonStyle(.plain)

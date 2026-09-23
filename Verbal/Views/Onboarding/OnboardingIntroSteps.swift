@@ -14,7 +14,7 @@ import SwiftUI
 
 // MARK: - 1 · The hook
 
-/// The first thing anyone sees: the real app, in a phone, under the problem it
+/// The first thing anyone sees: a phone placeholder under the problem the app
 /// exists to solve.
 ///
 /// The phone was here before and carried the promise on its own, which said
@@ -22,21 +22,16 @@ import SwiftUI
 /// the missing half — the screen now answers something rather than announcing
 /// something.
 ///
-/// The frame is here and the film isn't. Until it is, the glass holds a quote
-/// rather than a play button: a still of the thing itself says more than an
-/// icon promising one, and it is the real `LineItemsCard`, so it can't quietly
-/// stop resembling the app. To drop the clip in, replace `OnboardingPhoneScreen`
-/// inside `DevicePreview` with a muted, controls-free looping player. Keep it
-/// short and silent — this plays before anyone has agreed to anything.
+/// The frame is ready for the final screenshot or video. Until then, the glass
+/// holds a minimal text placeholder. Keep any future clip short, muted, and
+/// controls-free — it plays before anyone has agreed to anything.
 struct OnboardingHookStep: View {
-    let currencyCode: String
-
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 4)
 
             DevicePreview {
-                OnboardingPhoneScreen(currencyCode: currencyCode)
+                OnboardingPhoneScreen()
             }
             // Let the product be the hero. The preview is intentionally much
             // larger than the content on later steps, like a device sitting in
