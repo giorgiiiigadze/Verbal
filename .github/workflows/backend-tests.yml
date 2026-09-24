@@ -23,7 +23,7 @@ jobs:
       - name: Test verified-entitlement rules
         working-directory: supabase/functions/verify-subscription
         run: |
-          npm install --no-save --package-lock=false @apple/app-store-server-library@3.1.0
+          npm ci
           node entitlement.test.mjs
 
   database:

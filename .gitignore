@@ -14,6 +14,7 @@ xcuserdata/
 # Supabase CLI local state
 supabase/.temp/
 
-# Pulled in only to run the edge-function tests locally.
+# Edge-function test dependencies are isolated from the rest of the project.
 node_modules/
 package-lock.json
+!supabase/functions/verify-subscription/package-lock.json

@@ -1,0 +1,71 @@
+name: Security checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Re-check the repository as security rules improve between pull requests.
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+# Cancel stale runs for the same pull request or branch. Scheduled runs remain
+# independent so a new commit cannot cancel the recurring full scan.
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Detect exposed credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Full history matters: removing a key from the current file does not
+      # remove it from older commits.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Keep PR permissions read-only. Findings remain in the job output.
+          GITLEAKS_ENABLE_COMMENTS: "false"
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # JavaScript/TypeScript does not need a compilation step, so this
+          # finishes quickly while covering the Supabase Edge Functions.
+          - language: javascript-typescript
+            os: ubuntu-latest
+            build-mode: none
+          # Swift extraction requires macOS and an Xcode build. CodeQL's
+          # autobuild keeps this aligned with the project's shared scheme.
+          - language: swift
+            os: macos-latest
+            build-mode: autobuild
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended,security-and-quality
+      - name: Build Swift sources for analysis
+        if: matrix.language == 'swift'
+        uses: github/codeql-action/autobuild@v4
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
