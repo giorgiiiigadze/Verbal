@@ -584,15 +584,6 @@ private struct CurrentTimeIndicator: View {
     let date: Date
     let labelWidth: CGFloat
 
-    /// The hour labels sit on the grid rules. Keep the live marker on its
-    /// exact minute, but move only its text away from a nearby hour label.
-    private var labelVerticalOffset: CGFloat {
-        let minute = Calendar.current.component(.minute, from: date)
-        if minute <= 12 { return 16 }
-        if minute >= 48 { return -16 }
-        return 0
-    }
-
     var body: some View {
         HStack(spacing: 5) {
             Text(date.formatted(date: .omitted, time: .shortened))
@@ -603,7 +594,6 @@ private struct CurrentTimeIndicator: View {
                 .minimumScaleFactor(0.75)
                 .frame(width: labelWidth - 6, alignment: .trailing)
                 .padding(.trailing, 6)
-                .offset(y: labelVerticalOffset)
             Rectangle().fill(Color(.mainText)).frame(width: 1, height: 14)
             Rectangle().fill(Color(.mainText)).frame(height: 1)
         }
