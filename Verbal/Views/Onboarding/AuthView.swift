@@ -25,7 +25,7 @@ struct AuthView: View {
 
             VStack(spacing: 0) {
                 AuthWelcomeArtwork()
-                    .frame(height: 390)
+                    .frame(height: 410)
                     .padding(.top, 8)
 
                 Spacer(minLength: 26)
@@ -274,7 +274,7 @@ private struct AuthWelcomeArtwork: View {
             ZStack {
                 AuthArtworkTile(kind: .voice)
                     .rotationEffect(.degrees(-11))
-                    .position(x: width * 0.11, y: height * 0.10)
+                    .position(x: width * 0.09, y: height * 0.10)
 
                 AuthArtworkTile(kind: .quote)
                     .rotationEffect(.degrees(5))
@@ -282,27 +282,27 @@ private struct AuthWelcomeArtwork: View {
 
                 AuthArtworkTile(kind: .sent)
                     .rotationEffect(.degrees(8))
-                    .position(x: width * 0.89, y: height * 0.10)
+                    .position(x: width * 0.91, y: height * 0.10)
 
                 AuthArtworkTile(kind: .rate)
                     .rotationEffect(.degrees(-6))
-                    .position(x: width * 0.5, y: height * 0.367)
+                    .position(x: width * 0.5, y: height * 0.39)
 
                 AuthArtworkTile(kind: .client)
                     .rotationEffect(.degrees(7))
-                    .position(x: width * 0.17, y: height * 0.633)
+                    .position(x: width * 0.15, y: height * 0.65)
 
                 AuthArtworkTile(kind: .visit)
                     .rotationEffect(.degrees(-8))
-                    .position(x: width * 0.83, y: height * 0.633)
+                    .position(x: width * 0.85, y: height * 0.68)
 
                 AuthArtworkTile(kind: .draft)
                     .rotationEffect(.degrees(-5))
-                    .position(x: width * 0.29, y: height * 0.90)
+                    .position(x: width * 0.31, y: height * 0.91)
 
                 AuthArtworkTile(kind: .accepted)
                     .rotationEffect(.degrees(9))
-                    .position(x: width * 0.71, y: height * 0.90)
+                    .position(x: width * 0.75, y: height * 0.94)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -314,7 +314,7 @@ private struct AuthArtworkTile: View {
     let kind: AuthArtworkKind
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
             .fill(
                 LinearGradient(
                     colors: [kind.background.opacity(0.88), kind.background],
@@ -322,7 +322,7 @@ private struct AuthArtworkTile: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .frame(width: 76, height: 76)
+            .frame(width: 82, height: 82)
             .overlay {
                 content
                     .padding(9)
@@ -335,7 +335,7 @@ private struct AuthArtworkTile: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .allowsHitTesting(false)
             }
             .shadow(color: Color.black.opacity(0.11), radius: 8, y: 4)
@@ -345,109 +345,56 @@ private struct AuthArtworkTile: View {
     private var content: some View {
         switch kind {
         case .voice:
-            VStack(spacing: 4) {
-                Text("VOICE NOTE")
-                    .font(.system(size: 7, weight: .bold))
-                    .tracking(0.5)
-                Image(systemName: "waveform")
-                    .font(.system(size: 23, weight: .semibold))
-                Text("0:42")
-                    .font(.system(size: 9, weight: .semibold))
-                    .monospacedDigit()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            tileContent(icon: .onboardingSpeak, value: "0:42", label: "VOICE NOTE")
 
         case .quote:
-            VStack(alignment: .leading, spacing: 2) {
-                Text("QUOTE")
-                    .font(.system(size: 8, weight: .bold))
-                    .tracking(0.6)
-                Spacer()
-                Text("£2,450")
-                    .font(.system(size: 16, weight: .bold))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text("Draft")
-                    .font(.system(size: 9, weight: .medium))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            tileContent(icon: .quoteDocument, value: "£2,450", label: "DRAFT QUOTE",
+                        valueSize: 14)
 
         case .client:
-            VStack(spacing: 3) {
-                Text("SW")
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(width: 28, height: 28)
-                    .background(.white.opacity(0.7), in: Circle())
-                Text("Sarah")
-                    .font(.system(size: 11, weight: .bold))
-                Text("CLIENT")
-                    .font(.system(size: 7, weight: .bold))
-                    .tracking(0.5)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            tileContent(icon: .clientList, value: "Sarah", label: "CLIENT")
 
         case .rate:
-            VStack(spacing: 0) {
-                Text("RATE")
-                    .font(.system(size: 8, weight: .black))
-                    .tracking(0.6)
-                Text("£65")
-                    .font(.system(size: 21, weight: .black))
-                    .monospacedDigit()
-                Text("per hour")
-                    .font(.system(size: 8, weight: .semibold))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            tileContent(icon: .rateCardIntroTag, value: "£65", label: "PER HOUR")
 
         case .visit:
-            VStack(spacing: 0) {
-                Text("TUE")
-                    .font(.system(size: 17, weight: .black))
-                Text("10:30")
-                    .font(.system(size: 14, weight: .bold))
-                    .monospacedDigit()
-                Spacer(minLength: 2)
-                Text("SITE VISIT")
-                    .font(.system(size: 7, weight: .bold))
-                    .tracking(0.4)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            tileContent(icon: .visitClock, value: "10:30", label: "TUE · VISIT",
+                        valueSize: 14)
 
         case .sent:
-            VStack(spacing: 5) {
-                Image(systemName: "paperplane.fill")
-                    .font(.system(size: 23, weight: .bold))
-                Text("SENT")
-                    .font(.system(size: 9, weight: .bold))
-                    .tracking(0.7)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            tileContent(icon: .onboardingSend, value: "Sent", label: "QUOTE")
 
         case .draft:
-            VStack(spacing: 0) {
-                Text("3")
-                    .font(.system(size: 25, weight: .black))
-                    .monospacedDigit()
-                Text("items")
-                    .font(.system(size: 10, weight: .semibold))
-                Spacer(minLength: 2)
-                Text("DRAFT")
-                    .font(.system(size: 7, weight: .bold))
-                    .tracking(0.5)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            tileContent(icon: .recordingIntroReview, value: "3 items", label: "DRAFT",
+                        valueSize: 13)
 
         case .accepted:
-            VStack(spacing: 5) {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 25, weight: .black))
-                Text("ACCEPTED")
-                    .font(.system(size: 8, weight: .bold))
-                    .tracking(0.3)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            tileContent(icon: .shareSketch, value: "Accepted", label: "QUOTE",
+                        valueSize: 12)
         }
+    }
+
+    private func tileContent(icon: ImageResource, value: String, label: String,
+                             valueSize: CGFloat = 15) -> some View {
+        VStack(spacing: 3) {
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 23, height: 23)
+
+            Text(value)
+                .font(.system(size: valueSize, weight: .bold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            Text(label)
+                .font(.system(size: 6.5, weight: .bold))
+                .tracking(0.45)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 }
 

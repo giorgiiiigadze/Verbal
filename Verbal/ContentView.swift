@@ -60,11 +60,12 @@ struct ContentView: View {
             && !offlineBannerDismissed
     }
 
-    /// Authentication and the signed-in app both follow the saved appearance
-    /// preference. This must live at the scene root so every entry screen uses
-    /// the same light, dark, or system setting.
+    /// Authentication is deliberately light-only. Enforcing that at the scene
+    /// root also covers its navigation chrome and the pushed email flow; once
+    /// signed in, the user's saved appearance preference takes over again.
     private var preferredColorScheme: ColorScheme? {
-        (AppAppearance(rawValue: appearance) ?? .system).colorScheme
+        if session.state == .signedOut { return .light }
+        return (AppAppearance(rawValue: appearance) ?? .system).colorScheme
     }
 
     var body: some View {
