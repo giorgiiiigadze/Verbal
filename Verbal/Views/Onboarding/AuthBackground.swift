@@ -29,37 +29,10 @@ struct AuthBackground: View {
     }
 
     var body: some View {
-        ZStack {
-            Color(.homeBackground)
-
-            // Tint gathers at the top, where the lockup and headline sit, and
-            // clears before the bottom so the sign-in button keeps plain
-            // ground under it.
-            LinearGradient(
-                colors: [
-                    Color(.royalBlue600).opacity(0.18),
-                    Color(.royalBlue600).opacity(0.06),
-                    .clear
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            GeometryReader { proxy in
-                ForEach(Array(Self.waves.enumerated()), id: \.offset) { _, wave in
-                    Wave(amplitude: wave.amplitude,
-                         wavelength: wave.wavelength,
-                         phase: wave.phase)
-                        .stroke(lineColor.opacity(wave.opacity),
-                                style: StrokeStyle(lineWidth: wave.width, lineCap: .round))
-                        .frame(height: 220)
-                        .position(x: proxy.size.width / 2,
-                                  y: proxy.size.height * wave.y)
-                }
-            }
-            .allowsHitTesting(false)
-        }
-        .ignoresSafeArea()
+        (scheme == .dark
+            ? Color(.homeBackground)
+            : Color(red: 252 / 255, green: 252 / 255, blue: 249 / 255))
+            .ignoresSafeArea()
     }
 
     /// Varied on every axis so they read as one drawn gesture rather than a

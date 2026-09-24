@@ -307,7 +307,6 @@ final class SessionStore {
         // Show the app immediately; don't block first paint on the network.
         state = .ready
         isBootstrapped = true
-        markOnboardingSeen()
         scheduleBootstrap()
         return true
     }
@@ -315,7 +314,7 @@ final class SessionStore {
     /// Resolve the initial state and preload first-paint data, then keep
     /// listening for auth changes.
     func start() async {
-        // If a session exists at all, land on the home screen — even if its
+        // If a session exists at all, land on the authenticated route — even if its
         // access token is expired (a logged-in user still has a refresh token)
         // and even if we're offline. Expiry is refreshed in the background; it
         // is NOT a sign-out. We only show sign-in when there is truly no stored
@@ -331,7 +330,6 @@ final class SessionStore {
             switch change.event {
             case .initialSession:
                 if change.session != nil {
-                    markOnboardingSeen()
                     if state == .signedOut {
                         scheduleBootstrap(revealWhenComplete: true)
                     } else {
@@ -348,7 +346,6 @@ final class SessionStore {
                 }
             case .signedIn:
                 if change.session != nil {
-                    markOnboardingSeen()
                     if state == .signedOut {
                         // Keep AuthView's branded finishing screen in place
                         // until the first account data is ready.
@@ -371,7 +368,6 @@ final class SessionStore {
                 // was somehow waiting for a session.
                 if change.session != nil, state != .ready {
                     state = .ready
-                    markOnboardingSeen()
                     scheduleBootstrap()
                 }
             case .signedOut:
@@ -459,21 +455,17 @@ final class SessionStore {
 
     // MARK: - Onboarding adoption
 
-    /// Records that this person has been through onboarding, the moment a
-    /// session turns up.
-    ///
-    /// Belt and braces alongside the flow writing it at the end: someone whose
-    /// account already exists has plainly been through it, however they got
-    /// here — a reinstall that restored the Keychain session, or a sign-in on
-    /// a device that has never shown them the flow.
-    private func markOnboardingSeen() {
-        OnboardingMemory.hasSeenOnboarding = true
+    /// Applies onboarding answers now that the account already exists. The
+    /// work stays on-device until the final setup screen, then is written once
+    /// and forgotten so later profile edits are never overwritten.
+    func adoptPostAuthOnboarding() async {
+        await adoptPendingTrade()
+        await adoptOnboardingDraft()
     }
 
-    /// Onboarding runs before there is an account, so the trade it collects has
-    /// to wait on the device until one exists. Written once and then forgotten,
-    /// so a user who later clears it in their profile doesn't find it restored
-    /// on the next launch.
+    /// The chosen trade is kept locally until post-auth onboarding finishes.
+    /// It is written once and then forgotten, so a user who later clears it in
+    /// their profile doesn't find it restored on the next launch.
     private func adoptPendingTrade() async {
         let pending = UserDefaults.standard.string(forKey: Self.pendingTradeKey)
         guard let pending, !pending.isEmpty else { return }

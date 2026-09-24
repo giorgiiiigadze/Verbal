@@ -13,9 +13,9 @@ struct ContentView: View {
     /// `Transaction.updates` listener is running from launch — a renewal or a
     /// refund arrives when Apple sends it, not when a screen happens to be up.
     @State private var store = Store()
-    /// Whether this person has been through onboarding — read from the
-    /// Keychain, not `@AppStorage`, so it survives a delete and reinstall the
-    /// same way the auth session does. See `OnboardingMemory`.
+    /// Whether this device has finished the post-registration setup — read
+    /// from the Keychain, not `@AppStorage`, so returning users do not repeat
+    /// it after signing out or reinstalling. See `OnboardingMemory`.
     ///
     /// Mirrored into state because the Keychain is not observable: the flow
     /// itself writes through `OnboardingMemory` and then flips this, which is
@@ -49,10 +49,10 @@ struct ContentView: View {
         return session.state == .ready && !session.listsLoaded && !listWaitElapsed
     }
 
-    /// The banner belongs to the signed-in app. Onboarding runs entirely on a
-    /// local draft and needs no connection, so a banner there interrupts a flow
-    /// that has nothing to fail — and its bottom inset is measured against a tab
-    /// bar that only exists once you're in.
+    /// The banner belongs to the signed-in app proper. Onboarding is a focused
+    /// setup flow, so an offline warning there would interrupt the task — and
+    /// its bottom inset is measured against a tab bar that only exists once
+    /// setup is complete.
     private var showsOfflineBanner: Bool {
         session.state == .ready
             && !showSplash
@@ -60,14 +60,11 @@ struct ContentView: View {
             && !offlineBannerDismissed
     }
 
-    /// The signed-in app follows the saved appearance preference. Auth is the
-    /// one deliberate exception: it is a fixed dark threshold into the product.
-    /// This preference must live at this scene-root level; a child preference
-    /// cannot reliably override the app-wide light preference that used to be
-    /// applied in `VerbalApp`.
+    /// Authentication and the signed-in app both follow the saved appearance
+    /// preference. This must live at the scene root so every entry screen uses
+    /// the same light, dark, or system setting.
     private var preferredColorScheme: ColorScheme? {
-        if session.state == .signedOut && hasSeenOnboarding { return .dark }
-        return (AppAppearance(rawValue: appearance) ?? .system).colorScheme
+        (AppAppearance(rawValue: appearance) ?? .system).colorScheme
     }
 
     var body: some View {
@@ -129,7 +126,7 @@ struct ContentView: View {
         // Signing out is the one moment the mirror above can be stale: the
         // session that `SessionStore` recorded arrived after this view read
         // the Keychain, so without this a sign-out inside a reinstalled app
-        // drops back to onboarding rather than to sign-in.
+        // can briefly use an outdated completion state.
         .onChange(of: session.state) { _, state in
             hasSeenOnboarding = OnboardingMemory.hasSeenOnboarding
             // Report the entitlement against whoever just signed in. StoreKit's
@@ -157,18 +154,18 @@ struct ContentView: View {
         case .loading:
             Color.clear
         case .signedOut:
-            if hasSeenOnboarding {
-                NavigationStack {
-                    AuthView()
-                }
-            } else {
+            NavigationStack {
+                AuthView()
+            }
+        case .ready:
+            if !hasSeenOnboarding {
                 OnboardingView {
                     OnboardingMemory.hasSeenOnboarding = true
                     hasSeenOnboarding = true
                 }
+            } else {
+                MainTabView()
             }
-        case .ready:
-            MainTabView()
         }
     }
 }

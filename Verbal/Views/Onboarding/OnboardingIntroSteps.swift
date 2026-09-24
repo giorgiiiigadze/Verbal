@@ -43,7 +43,7 @@ struct OnboardingHookStep: View {
 
             VStack(spacing: 8) {
                 Text("Welcome to Verbal")
-                    .font(.robotoSlab(27, relativeTo: .title))
+                    .font(.robotoSlab(25, relativeTo: .title))
                     .foregroundStyle(Color(.mainText))
 
                 Text("A faster way to turn the work\nyou do into a quote.")
@@ -58,6 +58,208 @@ struct OnboardingHookStep: View {
             Spacer(minLength: 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// The five post-registration product stories. Each is deliberately short:
+/// the phone is the proof, while the text says what to notice in it.
+struct OnboardingFeatureStep: View {
+    enum Feature {
+        case welcome, speak, quote, organise, followUp
+
+        var title: String {
+            switch self {
+            case .welcome: "Welcome to Verbal"
+            case .speak: "Speak naturally"
+            case .quote: "Quotes in minutes"
+            case .organise: "Everything in one place"
+            case .followUp: "Stay one step ahead"
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .welcome: "Turn the work you do into a clear quote."
+            case .speak: "Describe the job as you would to a customer."
+            case .quote: "Review the work, add prices, and send it on."
+            case .organise: "Keep clients, quotes, and every detail together."
+            case .followUp: "Follow up on the work that matters."
+            }
+        }
+
+        var stepNumber: Int {
+            switch self {
+            case .welcome: 1
+            case .speak: 2
+            case .quote: 3
+            case .organise: 4
+            case .followUp: 5
+            }
+        }
+    }
+
+    let feature: Feature
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 12)
+
+            DevicePreview {
+                OnboardingFeaturePhoneScreen(feature: feature)
+            }
+            .frame(width: OnboardingPhonePreviewMeasurements.displayedFrameWidth)
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 22)
+
+            VStack(spacing: 8) {
+                if case .welcome = feature {
+                    Text(feature.title)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color(.mainText))
+                } else {
+                    Text(feature.title)
+                        .font(.robotoSlab(25, relativeTo: .title))
+                        .foregroundStyle(Color(.mainText))
+                }
+
+                Text(feature.subtitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 18)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A deliberately plain in-frame placeholder until final product screenshots
+/// are supplied. The outer device frame already matches the final layout.
+private struct OnboardingFeaturePhoneScreen: View {
+    let feature: OnboardingFeatureStep.Feature
+
+    var body: some View {
+        Text("Step \(feature.stepNumber)")
+            .font(.title2.weight(.semibold))
+            .foregroundStyle(Color(.mainText))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.homeBackground))
+    }
+}
+
+// MARK: - Preparing the workspace
+
+/// The quiet beat between finishing the questions and arriving at sign-in.
+/// The surrounding cards intentionally contain only neutral skeletons: they
+/// reserve the composition for product screenshots without pretending the app
+/// has already made anything for the person.
+struct OnboardingPreparationView: View {
+    var onFinished: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            (colorScheme == .dark ? Color(.homeBackground) : .white)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer()
+
+                preparationArtwork
+
+                VStack(spacing: 8) {
+                    Text("Setting up Verbal")
+                        .font(.robotoSlab(27, relativeTo: .title))
+                        .foregroundStyle(Color(.mainText))
+
+                    Text("Getting things ready…")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 42)
+
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Setting up Verbal. Getting things ready.")
+        .task {
+            try? await Task.sleep(for: .seconds(1.6))
+            guard !Task.isCancelled else { return }
+            onFinished()
+        }
+    }
+
+    private var preparationArtwork: some View {
+        ZStack {
+            screenshotPlaceholder(width: 88, height: 116, accent: .royalBlue100)
+                .rotationEffect(.degrees(-9))
+                .offset(x: -94, y: -35)
+                .blur(radius: 1.5)
+
+            screenshotPlaceholder(width: 92, height: 124, accent: .royalBlue50)
+                .rotationEffect(.degrees(8))
+                .offset(x: 97, y: -21)
+                .blur(radius: 5)
+                .opacity(0.72)
+
+            screenshotPlaceholder(width: 80, height: 106, accent: .cardSurface)
+                .rotationEffect(.degrees(11))
+                .offset(x: 96, y: 66)
+                .blur(radius: 5)
+                .opacity(0.62)
+
+            screenshotPlaceholder(width: 74, height: 98, accent: .royalBlue25)
+                .rotationEffect(.degrees(-12))
+                .offset(x: -91, y: 62)
+                .blur(radius: 3)
+                .opacity(0.76)
+
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(OnboardingStyle.action)
+                .frame(width: 128, height: 128)
+                .shadow(color: OnboardingStyle.action.opacity(0.22), radius: 20, y: 10)
+                .overlay {
+                    Image(.brandMark)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 66, height: 50)
+                        .foregroundStyle(.white)
+                }
+        }
+        .frame(height: 180)
+        .accessibilityHidden(true)
+    }
+
+    private func screenshotPlaceholder(width: CGFloat, height: CGFloat,
+                                       accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(accent)
+                .frame(height: height * 0.46)
+
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(Color(.mainText).opacity(0.16))
+                .frame(width: width * 0.58, height: 7)
+
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(Color(.mainText).opacity(0.09))
+                .frame(width: width * 0.38, height: 6)
+        }
+        .padding(10)
+        .frame(width: width, height: height, alignment: .topLeading)
+        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        }
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.18 : 0.1), radius: 14, y: 7)
     }
 }
 

@@ -2,50 +2,36 @@
 //  OnboardingView.swift
 //  Verbal
 //
-//  The screens between installing the app and signing in.
+//  The screens after registering and before entering the app.
 //
 //  Three acts rather than a queue of questions. The introduction names the
 //  problem and prices it in the user's own numbers; the climax hands them the
-//  app and lets them make a quote by speaking, before anyone has signed up for
-//  anything; the conclusion says what they came for, what it costs, and how the
+//  app and lets them make a quote by speaking; the conclusion says what they
+//  came for, what it costs, and how the
 //  reminders keep it happening.
 //
 //  It is longer than it was, on purpose. The setup questions were always here —
 //  answered cold they are a form, and answered after someone has watched what
 //  quoting costs them in a year they are the first thing being done about it.
 //
-//  It all runs before auth, so there is no user to save anything to. The
-//  answers are held on the device and written to the profile on first sign-in.
+//  It runs after authentication. Answers stay local while it is in progress,
+//  then are written to the newly authenticated profile at completion.
 //
 
-import StoreKit
 import SwiftUI
-import UserNotifications
 
 struct OnboardingView: View {
     /// Called when the last step is finished, to hand over to the auth screen.
     var onContinue: () -> Void
 
-    @AppStorage("mainCurrency") private var currencyCode = AppCurrency.deviceDefault.rawValue
-
-    @Environment(Store.self) private var store
+    @Environment(SessionStore.self) private var session
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var model = OnboardingModel()
     @State private var step = 0
-    /// The route can grow when someone chooses a trade with preset jobs. Keep
-    /// the visible bar tied to navigation, not to an answer changing beneath
-    /// the current screen.
-    @State private var displayedProgress = 0.0
-    /// Long onboarding lists scroll beneath the fixed progress header. Once
-    /// they do, a separator gives that header a deliberate, settled edge.
-    @State private var isProgressHeaderSeparated = false
-    /// Long option lists also pass beneath the fixed Continue area. The footer
-    /// gains an edge only while there is content below it; at the true end the
-    /// normal breathing room returns and the divider disappears.
-    @State private var isFooterSeparated = false
-    @FocusState private var focusedField: OnboardingField?
-
+    /// A short handoff after the final choice gives setup a visible finish
+    /// before the main app appears.
+    @State private var isPreparing = false
     private typealias Step = OnboardingModel.Step
 
     /// Clamped, because `steps` shrinks underneath the index when someone swipes
@@ -60,55 +46,15 @@ struct OnboardingView: View {
     /// before it.
     private var isLastStep: Bool { step >= model.steps.count - 1 }
 
-    /// The opening screen, which carries the invitation into all this. Every
-    /// screen after it is a step through it.
-    private var isFirstStep: Bool { step == 0 }
-
-    /// The trade is the one answer with no sensible default, and it reaches the
-    /// extraction on every quote. So it is the one question that is asked
-    /// rather than offered — everything else here has a default worth keeping,
-    /// or is not a question at all.
-    ///
-    private var canContinue: Bool {
-        switch current {
-        case .profile:
-            return true
-        case .method:
-            return model.answers.method != nil
-        case .quoteVolume:
-            return model.answers.quotesPerWeek != nil
-        case .quoteDuration:
-            return model.answers.minutesPerQuote != nil
-        case .setup, .trade:
-            return !model.trade.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .jobs:
-            return !model.pickedJobs.isEmpty
-        case .commitment:
-            return model.answers.commitment != nil
-        default:
-            return true
-        }
-    }
-
-    /// Steps a Skip button belongs on: the ones that collect something the app
-    /// can manage without. Never on a statement screen, where there is nothing
-    /// to skip and the button would just be a second Continue.
-    private var isSkippable: Bool {
-        switch current {
-        case .method, .quoteVolume, .quoteDuration, .jobs, .prices, .business:
-            return true
-        default:
-            return false
-        }
-    }
-
     var body: some View {
-        NavigationStack {
-            content
-                // A real navigation bar, so the back button is the system's own
-                // circular one and the mark sits where a title sits. Drawn by
-                // hand it was a row of shapes imitating a header.
-                .toolbar {
+        Group {
+            if isPreparing {
+                OnboardingPreparationView(onFinished: onContinue)
+                    .transition(.opacity)
+            } else {
+                NavigationStack {
+                    content
+                    .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         if step > 0 {
                             Button {
@@ -116,59 +62,17 @@ struct OnboardingView: View {
                             } label: {
                                 Image(systemName: "chevron.backward")
                             }
-                        }
-                    }
-                    ToolbarItem(placement: .principal) {
-                        // The opening screen is deliberately just the product
-                        // preview, its promise and Continue. The app name
-                        // returns with the questions.
-                        if !isFirstStep {
-                            HStack(spacing: 8) {
-                                Image(.brandMark)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 20)
-                                    .foregroundStyle(OnboardingStyle.action)
-                                Text("Verbal")
-                                    .font(.robotoSlab(18, relativeTo: .headline))
-                                    .foregroundStyle(OnboardingStyle.action)
-                            }
+                            .accessibilityLabel("Back")
                         }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        // Never a wall: every question has a sensible answer
-                        // already, and nobody should be stuck on the way to the
-                        // thing they installed the app for.
-                        // Once they have answered, the primary footer is the
-                        // honest next action. Leaving Skip up at that point
-                        // makes two controls advance the same screen.
-                        if isSkippable && !canContinue {
-                            Button("Skip") { skip() }
-                                .font(.subheadline)
-                                .foregroundStyle(Color(.mainText))
-                        }
-                    }
-                    // Bare text. The glass is the toolbar's, not the button's,
-                    // so a button style can't refuse it — this is the opt-out.
-                    // Two glass capsules either side of the mark read as a pair
-                    // of equal choices, and skipping isn't one of those.
-                    .sharedBackgroundVisibility(.hidden)
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button {
-                            focusedField = nil
-                        } label: {
-                            Image(systemName: "keyboard.chevron.compact.down")
-                        }
-                        .accessibilityLabel("Dismiss keyboard")
+                        Button("Skip") { completeOnboarding() }
                     }
                 }
-                .navigationBarTitleDisplayMode(.inline)
+                    .navigationBarTitleDisplayMode(.inline)
+                }
+            }
         }
-        // Loaded here rather than on the screen that shows the price: StoreKit
-        // takes a moment, and a number that appears after the screen does reads
-        // as the app changing its mind about what it charges.
-        .task { await store.loadProducts() }
     }
 
     private var content: some View {
@@ -179,25 +83,7 @@ struct OnboardingView: View {
             (colorScheme == .dark ? Color(.homeBackground) : .white)
                 .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 0) {
-                // A multi-step setup is long enough that "how much more of this"
-                // is a fair question, and a hairline answers it without
-                // inviting anyone to stop and count.
-                if !isFirstStep {
-                    OnboardingProgressBar(progress: progress)
-                        .padding(.bottom, 20)
-                        .overlay(alignment: .bottom) {
-                            Rectangle()
-                                .fill(Color(.separator))
-                                .frame(height: 0.5)
-                                .padding(.horizontal, -24)
-                                .opacity(isProgressHeaderSeparated ? 1 : 0)
-                        }
-                        .animation(.easeInOut(duration: 0.18),
-                                   value: isProgressHeaderSeparated)
-                        .transition(.opacity)
-                }
-
+            VStack(spacing: 0) {
                 Group {
                     stepView
                 }
@@ -212,15 +98,6 @@ struct OnboardingView: View {
 
                 footer
                     .padding(.top, 12)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(Color(.separator))
-                            .frame(height: 0.5)
-                            .padding(.horizontal, -24)
-                            .opacity(isFooterSeparated ? 1 : 0)
-                    }
-                    .animation(.easeInOut(duration: 0.18),
-                               value: isFooterSeparated)
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
@@ -229,234 +106,75 @@ struct OnboardingView: View {
             // clear of the bottom of the screen.
             .padding(.bottom, 8)
         }
-        .onChange(of: step) { _, _ in
-            isProgressHeaderSeparated = false
-            isFooterSeparated = false
-        }
         .animation(.easeInOut(duration: 0.3), value: step)
-        // The only way back, so it is worth being generous about what counts as
-        // one: a shallow drag rightwards, the same direction the steps travel,
-        // rather than a precise edge swipe nobody would find.
-        //
-        // Vertical movement is ignored, so a thumb sliding down the chips
-        // doesn't jump a step.
-        .gesture(
-            DragGesture(minimumDistance: 20)
-                .onEnded { drag in
-                    guard step > 0 else { return }
-                    let sideways = drag.translation.width
-                    let vertical = abs(drag.translation.height)
-                    // Through the same path as the button, so a swipe back and
-                    // a tap back feel like the one action they are.
-                    if sideways > 60, sideways > vertical * 1.5 { goBack() }
-                }
-        )
     }
 
     @ViewBuilder
     private var stepView: some View {
         switch current {
-        case .hook:
-            OnboardingHookStep()
-        case .profile:
-            OnboardingProfileStep(model: model,
-                                  isProgressHeaderSeparated: $isProgressHeaderSeparated,
-                                  isFooterSeparated: $isFooterSeparated)
-        case .method:
-            OnboardingMethodStep(model: model)
-        case .quoteVolume:
-            OnboardingQuoteVolumeStep(model: model)
-        case .quoteDuration:
-            OnboardingQuoteDurationStep(model: model)
-        case .stat:
-            OnboardingStatStep(answers: model.answers)
-        case .setup:
-            OnboardingSetupStep(model: model, focused: $focusedField,
-                                isProgressHeaderSeparated: $isProgressHeaderSeparated,
-                                isFooterSeparated: $isFooterSeparated)
-        case .trade:
-            OnboardingTradeStep(model: model, focused: $focusedField,
-                                isProgressHeaderSeparated: $isProgressHeaderSeparated,
-                                isFooterSeparated: $isFooterSeparated)
-        case .jobs:
-            OnboardingJobsStep(model: model,
-                               isProgressHeaderSeparated: $isProgressHeaderSeparated,
-                               isFooterSeparated: $isFooterSeparated)
-        case .prices:
-            OnboardingPricesStep(model: model, currencyCode: $currencyCode,
-                                 focused: $focusedField,
-                                 isProgressHeaderSeparated: $isProgressHeaderSeparated)
-        case .business:
-            OnboardingBusinessStep(model: model, focused: $focusedField)
-        case .summary:
-            OnboardingSummaryStep(model: model)
-        case .result:
-            OnboardingResultStep(model: model, currencyCode: currencyCode)
-        case .milestone:
-            OnboardingMilestoneStep(model: model)
-        case .goal:
-            OnboardingGoalStep(answers: model.answers)
-        case .commitment:
-            OnboardingCommitmentStep(model: model)
-        case .expectations:
-            OnboardingExpectationsStep(
-                answers: model.answers,
-                monthlyPrice: store.monthly.map { NSDecimalNumber(decimal: $0.price).doubleValue },
-                monthlyDisplayPrice: store.monthly?.displayPrice
-            )
-        case .notifications:
-            OnboardingNotificationsStep()
+        case .welcome:
+            OnboardingFeatureStep(feature: .welcome)
+        case .speak:
+            OnboardingFeatureStep(feature: .speak)
+        case .quote:
+            OnboardingFeatureStep(feature: .quote)
+        case .organise:
+            OnboardingFeatureStep(feature: .organise)
+        case .followUp:
+            OnboardingFeatureStep(feature: .followUp)
         }
-    }
-
-    private var progress: Double {
-        displayedProgress
-    }
-
-    private func progress(at index: Int) -> Double {
-        let all = model.steps
-        guard all.count > 1 else { return 1 }
-        return Double(min(index, all.count - 1)) / Double(all.count - 1)
-    }
-
-    private func updateDisplayedProgress() {
-        displayedProgress = progress(at: step)
     }
 
     // MARK: - The button
 
-    /// The app's own ink on the opening screen. It was `.primary`, on the
-    /// reasoning that the button wanted to be black and that a literal black
-    /// would not invert in the dark — true of `Color.black`, but `mainText` is
-    /// an adaptive colour and inverts the same as `.primary` does. What was
-    /// left was a pure black button on a warm off-white page, the one thing in
-    /// the app drawn from outside its own palette.
-    private var barFill: Color {
-        if isFirstStep { return Color(.mainText) }
-        return canContinue ? OnboardingStyle.action : OnboardingStyle.action.opacity(0.4)
-    }
-
-    /// One button, and only one, except on the two screens that ask iOS for
-    /// something. There a plain Continue would be a trick — the button that
-    /// raises a system dialog has to say so, and the way out has to sit beside
-    /// it rather than hide in the header.
-    @ViewBuilder
     private var footer: some View {
-        switch current {
-        case .notifications:
-            pairedFooter(primary: "Turn on notifications",
-                         secondary: "Not now") { wantsNotifications in
-                finish(requestingNotifications: wantsNotifications)
-            }
-        default:
-            Button {
-                advance()
-            } label: {
-                Text(footerTitle)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(isFirstStep ? Color(.homeBackground) : .white)
-                    .padding(.horizontal, 22)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(barFill, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(!canContinue)
-            .animation(.easeInOut(duration: 0.2), value: canContinue)
+        Button { advance() } label: {
+            Text(isLastStep ? "Get started" : "Continue")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color(.homeBackground))
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(Color(.mainText), in: Capsule())
         }
-    }
-
-    private func pairedFooter(primary: String, secondary: String,
-                              action: @escaping (Bool) -> Void) -> some View {
-        VStack(spacing: 10) {
-            Button { action(true) } label: {
-                Text(primary)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Color(.homeBackground))
-                    .padding(.horizontal, 22)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(Color(.mainText), in: Capsule())
-            }
-            .buttonStyle(.plain)
-
-            Button { action(false) } label: {
-                Text(secondary)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Color(.mainText))
-                    .padding(.horizontal, 22)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var footerTitle: String {
-        switch current {
-        case .hook: return "Continue"
-        case .result: return "Nice"
-        default: return "Continue"
-        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Moving
 
-    /// Softer than going forward. Both are steps, but one is a decision and the
-    /// other is undoing one, and a back that lands as firmly as a Continue makes
-    /// the two feel interchangeable.
     private func goBack() {
         guard step > 0 else { return }
-        focusedField = nil
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         withAnimation {
             step -= 1
-            updateDisplayedProgress()
         }
     }
 
     private func advance() {
-        focusedField = nil
         guard !isLastStep else {
-            finish(requestingNotifications: false)
+            completeOnboarding()
             return
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         withAnimation {
             step += 1
-            updateDisplayedProgress()
-        }
-    }
-
-    private func skip() {
-        focusedField = nil
-        advance()
-    }
-
-    private func finish(requestingNotifications: Bool) {
-        guard requestingNotifications else {
-            completeOnboarding()
-            return
-        }
-        Task {
-            _ = await ScheduledVisitNotifications.requestAuthorization()
-            await MainActor.run { completeOnboarding() }
         }
     }
 
     private func completeOnboarding() {
+        guard !isPreparing else { return }
         // The end of the questions, not another step through them — the
         // heavier notification marks it as arriving somewhere.
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         model.saveDraft()
-        onContinue()
+        Task { await session.adoptPostAuthOnboarding() }
+        withAnimation(.easeInOut(duration: 0.25)) {
+            isPreparing = true
+        }
     }
 }
 
-// The whole flow runs before there is an account, so it previews on its own —
-// no session, no network, nothing to sign into.
+// The preview supplies its own session store because the real flow now follows
+// authentication.
 //
 // The trade is stored in `UserDefaults`, which the canvas shares with whatever
 // ran last, so each preview sets it explicitly rather than inheriting a chip

@@ -16,7 +16,6 @@ struct AuthView: View {
     /// profile and lists the first screen needs. This is the part worth
     /// covering the screen for.
     @State private var isFinishing = false
-    @State private var headlineIndex = 0
     @State private var showAppleComingSoon = false
     @State private var showEmailAuth = false
 
@@ -24,58 +23,24 @@ struct AuthView: View {
         ZStack {
             AuthBackground()
 
-            VStack(spacing: 24) {
-                // The real mark, not a stand-in glyph. This is the first screen
-                // of the app and it was wearing an SF Symbol.
-                HStack(spacing: 10) {
-                    Image(.brandMark)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 28)
-                        .foregroundStyle(Color(.blueAccentText))
-                    Text("Verbal")
-                        .font(.robotoSlab(26, relativeTo: .title2))
-                        .foregroundStyle(Color(.blueAccentText))
+            VStack(spacing: 0) {
+                AuthWelcomeArtwork()
+                    .frame(height: 390)
+                    .padding(.top, 8)
+
+                Spacer(minLength: 26)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    welcomeTitle
+
+                    Text("Sign in to keep your quotes, clients, and work in sync.")
+                        .font(.system(size: 16, weight: .medium, design: .default))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.top, 8)
-
-                Spacer()
-
-                // Someone arriving straight out of onboarding has just spent
-                // several minutes setting this up, and the reason to sign in is
-                // that work — not the account. A returning user has no draft
-                // waiting, so they keep the headlines that describe the app.
-                if let held = heldSetup {
-                    VStack(spacing: 12) {
-                        Text("Save your\nsetup.")
-                            .font(.robotoSlab(32, relativeTo: .largeTitle))
-                            .foregroundStyle(Color(.mainText))
-                            .multilineTextAlignment(.center)
-                        Text(held)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.horizontal, 12)
-                    }
-                } else {
-                Text(Self.headlines[headlineIndex])
-                    .font(.robotoSlab(32, relativeTo: .largeTitle))
-                    .foregroundStyle(Color(.mainText))
-                    .multilineTextAlignment(.center)
-                    .id(headlineIndex)
-                    // Rises in as the last one lifts away. Deliberately not the
-                    // banner's push: that travels a full line height and would
-                    // need clipping to a fixed frame, which is what cost the mic
-                    // sheet its icon at the larger type sizes.
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .offset(y: 14)),
-                        removal: .opacity.combined(with: .offset(y: -14))
-                    ))
-                    .task { await cycleHeadlines() }
-                }
-
-                Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 28)
 
                 VStack(spacing: 10) {
                     googleButton
@@ -89,6 +54,7 @@ struct AuthView: View {
                 }
 
                 authConsent
+                    .padding(.top, 14)
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
@@ -100,6 +66,7 @@ struct AuthView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: isFinishing)
+        .preferredColorScheme(.light)
         .toast($toast)
         .navigationDestination(isPresented: $showEmailAuth) {
             EmailAuthView {
@@ -119,47 +86,20 @@ struct AuthView: View {
         }
     }
 
-    /// One promise, said four ways. Not a carousel of different claims — a
-    /// sign-in screen that argues a new point every few seconds reads as an
-    /// advert, and this one is being looked at by someone who has already
-    /// decided to install.
-    /// What onboarding left on the device, said in one line — or nil for
-    /// someone who never went through it, or who skipped every question in it.
-    ///
-    /// Read once, when the screen is built: the draft is cleared as the first
-    /// sign-in writes it into the profile, and a headline that changes to
-    /// something else mid-sign-in reads as the app losing the work.
-    private var heldSetup: String? {
-        guard let draft = OnboardingDraft.load() else { return nil }
-        var parts: [String] = []
-        if !draft.rates.isEmpty {
-            parts.append(draft.rates.count == 1 ? "your rate" : "your \(draft.rates.count) rates")
+    private var welcomeTitle: some View {
+        HStack(spacing: 10) {
+            Text("Welcome to")
+            Image(.authAppIcon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 32, height: 32)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Text("Verbal")
         }
-        if (draft.businessName?.isEmpty == false) || draft.taxRate != nil {
-            parts.append("your business details")
-        }
-        guard !parts.isEmpty else { return nil }
-        return "Signing in keeps \(ListFormatter.localizedString(byJoining: parts))."
-    }
-
-    private static let headlines = [
-        "Speak the job.\nSend the quote.",
-        "Describe the work.\nWalk out with it priced.",
-        "Say it once.\nThe quote writes itself.",
-        "Talk through the job.\nLeave with it quoted."
-    ]
-
-    /// Slow on purpose. The generating banner turns over every 1.8 seconds
-    /// because something is actually happening; here nothing is, and text that
-    /// changes while it is being read is worse than text that doesn't move.
-    private func cycleHeadlines() async {
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(4.5))
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.55)) {
-                headlineIndex = (headlineIndex + 1) % Self.headlines.count
-            }
-        }
+        .font(.system(size: 30, weight: .semibold, design: .default))
+        .foregroundStyle(Color(.mainText))
+        .minimumScaleFactor(0.72)
+        .lineLimit(1)
     }
 
     private let authButtonHeight: CGFloat = 56
@@ -214,12 +154,13 @@ struct AuthView: View {
     private var emailButton: some View {
         Button { showEmailAuth = true } label: {
             Text("Continue with email")
-                .font(.body.weight(.semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color(.mainText))
                 .frame(maxWidth: .infinity)
                 .frame(height: authButtonHeight)
                 .background(Color(.cardSurface), in: Capsule())
                 .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
+                .shadow(color: Color.black.opacity(0.08), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -258,7 +199,7 @@ struct AuthView: View {
                 .opacity(isDimmed ? 0.35 : 1)
 
             Text(title)
-                .font(.body.weight(.semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(foreground)
                 .opacity(isDimmed ? 0.35 : 1)
 
@@ -270,6 +211,7 @@ struct AuthView: View {
         .frame(height: authButtonHeight)
         .background(background, in: Capsule())
         .overlay(Capsule().strokeBorder(border, lineWidth: 0.5))
+        .shadow(color: Color.black.opacity(0.10), radius: 4, y: 2)
     }
 
     /// Full-screen overlay shown while signing in and setting up the account.
@@ -317,6 +259,219 @@ struct AuthView: View {
             return "Google sign-in was denied. Try another account."
         }
         return "Couldn't sign in with Google. Try again."
+    }
+}
+
+/// A light, floating product collage in the spirit of a cover-art spread. The
+/// tiles use Verbal concepts rather than another product's artwork, and can be
+/// replaced independently if final imagery is added later.
+private struct AuthWelcomeArtwork: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+
+            ZStack {
+                AuthArtworkTile(kind: .voice)
+                    .rotationEffect(.degrees(-11))
+                    .position(x: width * 0.11, y: height * 0.10)
+
+                AuthArtworkTile(kind: .quote)
+                    .rotationEffect(.degrees(5))
+                    .position(x: width * 0.5, y: height * 0.10)
+
+                AuthArtworkTile(kind: .sent)
+                    .rotationEffect(.degrees(8))
+                    .position(x: width * 0.89, y: height * 0.10)
+
+                AuthArtworkTile(kind: .rate)
+                    .rotationEffect(.degrees(-6))
+                    .position(x: width * 0.5, y: height * 0.367)
+
+                AuthArtworkTile(kind: .client)
+                    .rotationEffect(.degrees(7))
+                    .position(x: width * 0.17, y: height * 0.633)
+
+                AuthArtworkTile(kind: .visit)
+                    .rotationEffect(.degrees(-8))
+                    .position(x: width * 0.83, y: height * 0.633)
+
+                AuthArtworkTile(kind: .draft)
+                    .rotationEffect(.degrees(-5))
+                    .position(x: width * 0.29, y: height * 0.90)
+
+                AuthArtworkTile(kind: .accepted)
+                    .rotationEffect(.degrees(9))
+                    .position(x: width * 0.71, y: height * 0.90)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct AuthArtworkTile: View {
+    let kind: AuthArtworkKind
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [kind.background.opacity(0.88), kind.background],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 76, height: 76)
+            .overlay {
+                content
+                    .padding(9)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .foregroundStyle(kind.foreground)
+            }
+            .overlay {
+                LinearGradient(
+                    colors: [.white.opacity(0.16), .clear, .clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .allowsHitTesting(false)
+            }
+            .shadow(color: Color.black.opacity(0.11), radius: 8, y: 4)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch kind {
+        case .voice:
+            VStack(spacing: 4) {
+                Text("VOICE NOTE")
+                    .font(.system(size: 7, weight: .bold))
+                    .tracking(0.5)
+                Image(systemName: "waveform")
+                    .font(.system(size: 23, weight: .semibold))
+                Text("0:42")
+                    .font(.system(size: 9, weight: .semibold))
+                    .monospacedDigit()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .quote:
+            VStack(alignment: .leading, spacing: 2) {
+                Text("QUOTE")
+                    .font(.system(size: 8, weight: .bold))
+                    .tracking(0.6)
+                Spacer()
+                Text("£2,450")
+                    .font(.system(size: 16, weight: .bold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text("Draft")
+                    .font(.system(size: 9, weight: .medium))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+
+        case .client:
+            VStack(spacing: 3) {
+                Text("SW")
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 28, height: 28)
+                    .background(.white.opacity(0.7), in: Circle())
+                Text("Sarah")
+                    .font(.system(size: 11, weight: .bold))
+                Text("CLIENT")
+                    .font(.system(size: 7, weight: .bold))
+                    .tracking(0.5)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .rate:
+            VStack(spacing: 0) {
+                Text("RATE")
+                    .font(.system(size: 8, weight: .black))
+                    .tracking(0.6)
+                Text("£65")
+                    .font(.system(size: 21, weight: .black))
+                    .monospacedDigit()
+                Text("per hour")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .visit:
+            VStack(spacing: 0) {
+                Text("TUE")
+                    .font(.system(size: 17, weight: .black))
+                Text("10:30")
+                    .font(.system(size: 14, weight: .bold))
+                    .monospacedDigit()
+                Spacer(minLength: 2)
+                Text("SITE VISIT")
+                    .font(.system(size: 7, weight: .bold))
+                    .tracking(0.4)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .sent:
+            VStack(spacing: 5) {
+                Image(systemName: "paperplane.fill")
+                    .font(.system(size: 23, weight: .bold))
+                Text("SENT")
+                    .font(.system(size: 9, weight: .bold))
+                    .tracking(0.7)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .draft:
+            VStack(spacing: 0) {
+                Text("3")
+                    .font(.system(size: 25, weight: .black))
+                    .monospacedDigit()
+                Text("items")
+                    .font(.system(size: 10, weight: .semibold))
+                Spacer(minLength: 2)
+                Text("DRAFT")
+                    .font(.system(size: 7, weight: .bold))
+                    .tracking(0.5)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .accepted:
+            VStack(spacing: 5) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 25, weight: .black))
+                Text("ACCEPTED")
+                    .font(.system(size: 8, weight: .bold))
+                    .tracking(0.3)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+private enum AuthArtworkKind {
+    case voice, quote, client, rate, visit, sent, draft, accepted
+
+    var background: Color {
+        switch self {
+        case .voice: Color(red: 0.14, green: 0.32, blue: 0.82)
+        case .quote: Color(red: 1.00, green: 0.93, blue: 0.70)
+        case .client: Color(red: 1.00, green: 0.55, blue: 0.48)
+        case .rate: Color(red: 0.97, green: 0.84, blue: 0.27)
+        case .visit: Color(red: 0.70, green: 0.90, blue: 0.78)
+        case .sent: Color(red: 0.82, green: 0.75, blue: 1.00)
+        case .draft: Color(red: 0.63, green: 0.83, blue: 1.00)
+        case .accepted: Color(red: 0.07, green: 0.37, blue: 0.35)
+        }
+    }
+
+    var foreground: Color {
+        switch self {
+        case .voice, .accepted: .white
+        default: Color(red: 0.08, green: 0.09, blue: 0.12)
+        }
     }
 }
 
