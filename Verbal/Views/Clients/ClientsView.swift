@@ -328,15 +328,9 @@ struct ClientsView: View {
 
     private var smartCollections: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("At a glance")
-                    .font(.robotoSlab(24, relativeTo: .title2))
-                    .foregroundStyle(Color(.mainText))
-
-                Text("Find who needs attention or what's coming next.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            Text("At a glance")
+                .font(.robotoSlab(24, relativeTo: .title2))
+                .foregroundStyle(Color(.mainText))
 
             GlassEffectContainer(spacing: 16) {
                 LazyVGrid(columns: gridColumns, spacing: 16) {

@@ -102,22 +102,27 @@ struct EmailAuthView: View {
     private var emailStep: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("What's your email?")
-                .font(.robotoSlab(32, relativeTo: .largeTitle))
+                .font(.system(size: 30, weight: .semibold, design: .default))
                 .foregroundStyle(Color(.mainText))
                 .fixedSize(horizontal: false, vertical: true)
 
             Text("We'll send you a six-digit code. No password to remember.")
-                .font(.subheadline)
+                .font(.system(size: 16, weight: .medium, design: .default))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            TextField("you@yourbusiness.com", text: $email)
+            TextField(
+                "",
+                text: $email,
+                prompt: Text("you@yourbusiness.com")
+                    .foregroundStyle(Color(.secondaryLabel))
+            )
                 .textFieldStyle(.plain)
                 .font(.body)
-                .foregroundStyle(Color(.mainText))
+                .foregroundColor(.black)
                 // Inputs stay neutral; blue is a brand accent, not a focus
                 // state competing with the words someone is entering.
-                .tint(Color(.mainText))
+                .tint(.black)
                 .keyboardType(.emailAddress)
                 .textContentType(.emailAddress)
                 .textInputAutocapitalization(.never)

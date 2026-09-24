@@ -21,9 +21,10 @@ final class OnboardingModel {
         static let usesShortFlow = true
     }
 
-    /// Five concise product stories, shown immediately after registration.
+    /// Five concise product stories followed by the two profile details the
+    /// app needs before creating the user's first quote.
     enum Step: Hashable {
-        case welcome, speak, quote, organise, followUp
+        case welcome, speak, quote, organise, followUp, businessName, trade
     }
 
     // MARK: - The setup answers (these become the profile)
@@ -61,7 +62,7 @@ final class OnboardingModel {
     // MARK: - The flow
 
     var steps: [Step] {
-        [.welcome, .speak, .quote, .organise, .followUp]
+        [.welcome, .speak, .quote, .organise, .followUp, .businessName, .trade]
     }
 
     // MARK: - What they told us, as things worth showing

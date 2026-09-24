@@ -116,20 +116,37 @@ struct OnboardingFeatureStep: View {
                 if case .welcome = feature {
                     Text(feature.title)
                         .font(.title2.weight(.semibold))
-                        .foregroundStyle(Color(.mainText))
+                        .foregroundStyle(.black)
                 } else {
                     Text(feature.title)
                         .font(.robotoSlab(25, relativeTo: .title))
-                        .foregroundStyle(Color(.mainText))
+                        .foregroundStyle(.black)
                 }
 
                 Text(feature.subtitle)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.black.opacity(0.58))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
+
+            HStack(spacing: 7) {
+                ForEach(1...5, id: \.self) { page in
+                    Capsule(style: .continuous)
+                        .fill(page == feature.stepNumber
+                              ? Color.black
+                              : Color.black.opacity(0.18))
+                        .frame(width: page == feature.stepNumber ? 18 : 6, height: 6)
+                        .animation(
+                            .smooth(duration: 0.32),
+                            value: feature.stepNumber
+                        )
+                }
+            }
+            .padding(.top, 18)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Page \(feature.stepNumber) of 5")
 
             Spacer(minLength: 18)
         }
@@ -160,11 +177,9 @@ private struct OnboardingFeaturePhoneScreen: View {
 struct OnboardingPreparationView: View {
     var onFinished: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
         ZStack {
-            (colorScheme == .dark ? Color(.homeBackground) : .white)
+            Color(red: 252 / 255, green: 252 / 255, blue: 249 / 255)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -259,7 +274,7 @@ struct OnboardingPreparationView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color(.separator), lineWidth: 0.5)
         }
-        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.18 : 0.1), radius: 14, y: 7)
+        .shadow(color: Color.black.opacity(0.1), radius: 14, y: 7)
     }
 }
 
@@ -712,7 +727,34 @@ private extension View {
     }
 }
 
-// MARK: - 5 · Trade
+// MARK: - Business name
+
+/// The first setup detail after the product tour. Keeping it to one field
+/// makes this feel like the start of personalising Verbal, not an account form.
+struct OnboardingBusinessNameStep: View {
+    @Bindable var model: OnboardingModel
+    var focused: FocusState<OnboardingField?>.Binding
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            OnboardingHeading(
+                title: "What's your business called?",
+                subtitle: "This is the name customers will see on your quotes."
+            )
+
+            OnboardingFieldBox {
+                TextField("Your business name", text: $model.businessName)
+                    .textInputAutocapitalization(.words)
+                    .focused(focused, equals: .businessName)
+                    .submitLabel(.continue)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+// MARK: - Trade
 
 /// The trade is the one answer with no sensible default, and it reaches the
 /// extraction on every quote — "20 mil" means one thing to a plumber and

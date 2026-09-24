@@ -286,7 +286,7 @@ private struct AuthWelcomeArtwork: View {
 
                 AuthArtworkTile(kind: .rate)
                     .rotationEffect(.degrees(-6))
-                    .position(x: width * 0.5, y: height * 0.39)
+                    .position(x: width * 0.5, y: height * 0.48)
 
                 AuthArtworkTile(kind: .client)
                     .rotationEffect(.degrees(7))

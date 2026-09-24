@@ -25,10 +25,11 @@ struct OnboardingView: View {
     var onContinue: () -> Void
 
     @Environment(SessionStore.self) private var session
-    @Environment(\.colorScheme) private var colorScheme
-
     @State private var model = OnboardingModel()
     @State private var step = 0
+    @FocusState private var focusedField: OnboardingField?
+    @State private var isTradeHeaderSeparated = false
+    @State private var isTradeFooterSeparated = false
     /// A short handoff after the final choice gives setup a visible finish
     /// before the main app appears.
     @State private var isPreparing = false
@@ -73,14 +74,12 @@ struct OnboardingView: View {
                 }
             }
         }
+        .preferredColorScheme(.light)
     }
 
     private var content: some View {
         ZStack {
-            // Light Mode gets a clean white canvas. Dark Mode retains the
-            // original warm charcoal from the app palette rather than picking
-            // up the system's black background.
-            (colorScheme == .dark ? Color(.homeBackground) : .white)
+            Color(red: 252 / 255, green: 252 / 255, blue: 249 / 255)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -122,6 +121,15 @@ struct OnboardingView: View {
             OnboardingFeatureStep(feature: .organise)
         case .followUp:
             OnboardingFeatureStep(feature: .followUp)
+        case .businessName:
+            OnboardingBusinessNameStep(model: model, focused: $focusedField)
+        case .trade:
+            OnboardingTradeStep(
+                model: model,
+                focused: $focusedField,
+                isProgressHeaderSeparated: $isTradeHeaderSeparated,
+                isFooterSeparated: $isTradeFooterSeparated
+            )
         }
     }
 
@@ -131,18 +139,32 @@ struct OnboardingView: View {
         Button { advance() } label: {
             Text(isLastStep ? "Get started" : "Continue")
                 .font(.body.weight(.semibold))
-                .foregroundStyle(Color(.homeBackground))
+                .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 52)
-                .background(Color(.mainText), in: Capsule())
+                .background(.black, in: Capsule())
         }
         .buttonStyle(.plain)
+        .disabled(!canAdvance)
+        .opacity(canAdvance ? 1 : 0.45)
+    }
+
+    private var canAdvance: Bool {
+        switch current {
+        case .businessName:
+            !model.businessName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .trade:
+            !model.trade.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        default:
+            true
+        }
     }
 
     // MARK: - Moving
 
     private func goBack() {
         guard step > 0 else { return }
+        focusedField = nil
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
         withAnimation {
             step -= 1
@@ -150,10 +172,12 @@ struct OnboardingView: View {
     }
 
     private func advance() {
+        guard canAdvance else { return }
         guard !isLastStep else {
             completeOnboarding()
             return
         }
+        focusedField = nil
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         withAnimation {
             step += 1

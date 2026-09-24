@@ -128,10 +128,6 @@ struct NextVisitWidgetView: View {
                     .foregroundStyle(Color.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                Image(systemName: "calendar.badge.checkmark")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.secondary)
-                    .padding(.bottom, 2)
             } else {
                 ForEach(Array(quotes.prefix(3)), id: \.id) { quote in
                     HStack(alignment: .top, spacing: 7) {
