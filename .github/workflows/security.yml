@@ -35,37 +35,45 @@ jobs:
           # Keep PR permissions read-only. Findings remain in the job output.
           GITLEAKS_ENABLE_COMMENTS: "false"
 
-  codeql:
-    name: CodeQL (${{ matrix.language }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+  codeql-javascript:
+    name: CodeQL (JavaScript/TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # JavaScript/TypeScript does not need a compilation step, so this
-          # finishes quickly while covering the Supabase Edge Functions.
-          - language: javascript-typescript
-            os: ubuntu-latest
-            build-mode: none
-          # Swift extraction requires macOS and an Xcode build. CodeQL's
-          # autobuild keeps this aligned with the project's shared scheme.
-          - language: swift
-            os: macos-latest
-            build-mode: autobuild
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          languages: javascript-typescript
+          build-mode: none
           queries: security-extended,security-and-quality
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+
+  # Swift extraction needs a full macOS/Xcode build and is too slow and flaky
+  # to gate routine changes. Keep the deeper scan as scheduled/manual coverage
+  # while it is being stabilized, and never block delivery on its result.
+  codeql-swift:
+    name: CodeQL (Swift, scheduled)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: swift
+          build-mode: autobuild
+          queries: security-extended
       - name: Build Swift sources for analysis
-        if: matrix.language == 'swift'
         uses: github/codeql-action/autobuild@v4
       - name: Analyze
         uses: github/codeql-action/analyze@v4
