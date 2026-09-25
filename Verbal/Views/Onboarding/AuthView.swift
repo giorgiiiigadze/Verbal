@@ -12,9 +12,9 @@ struct AuthView: View {
     /// Google's sheet is up. The button waits, but the screen behind it stays
     /// exactly as it was — the user is choosing an account, not signing in.
     @State private var isChoosingAccount = false
-    /// Google is done and the work is ours now: token exchange, then the
-    /// profile and lists the first screen needs. This is the part worth
-    /// covering the screen for.
+    /// Google is done and the work is ours now: token exchange and account
+    /// bootstrap. Keep that feedback on the sign-in control instead of
+    /// inserting a visually disconnected loading screen before Home.
     @State private var isFinishing = false
     @State private var showAppleComingSoon = false
     @State private var showEmailAuth = false
@@ -60,24 +60,22 @@ struct AuthView: View {
             .padding(.top, 24)
             .padding(.bottom, 8)
 
-            if isFinishing {
-                loadingScreen
-                    .transition(.opacity)
-            }
         }
-        .animation(.easeInOut(duration: 0.25), value: isFinishing)
         .preferredColorScheme(.light)
         .toast($toast)
-        .navigationDestination(isPresented: $showEmailAuth) {
-            EmailAuthView {
-                // Order matters: the finishing screen is put up behind the
-                // cover before it goes, so the sign-in buttons never flash back
-                // into view between the code being accepted and the app
-                // appearing.
-                toast = nil
-                isFinishing = true
-                showEmailAuth = false
+        .sheet(isPresented: $showEmailAuth) {
+            NavigationStack {
+                EmailAuthView {
+                    // Keep the completed sign-in state visible while the session
+                    // prepares the first screen. This avoids a separate spinner
+                    // page and makes the wait belong to the action that caused it.
+                    toast = nil
+                    isFinishing = true
+                    showEmailAuth = false
+                }
             }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .alert("Apple sign-in coming soon", isPresented: $showAppleComingSoon) {
             Button("OK", role: .cancel) {}
@@ -113,12 +111,14 @@ struct AuthView: View {
     private var googleButton: some View {
         Button(action: signInWithGoogle) {
             authButtonLabel(
-                title: "Continue with Google",
+                title: isFinishing ? "Signing in…" : "Continue with Google",
                 foreground: .white,
                 background: .black,
                 border: .white.opacity(0.12),
                 isDimmed: isChoosingAccount,
-                trailing: isChoosingAccount ? AnyView(ProgressView().tint(.white)) : nil
+                trailing: (isChoosingAccount || isFinishing)
+                    ? AnyView(ProgressView().tint(.white))
+                    : nil
             ) {
                 Image(.googleLogo)
                     .resizable()
@@ -127,6 +127,7 @@ struct AuthView: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(isChoosingAccount || isFinishing)
     }
 
     private var appleButton: some View {
@@ -144,6 +145,7 @@ struct AuthView: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(isChoosingAccount || isFinishing)
         .accessibilityLabel("Continue with Apple, coming soon")
     }
 
@@ -163,6 +165,7 @@ struct AuthView: View {
                 .shadow(color: Color.black.opacity(0.08), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
+        .disabled(isChoosingAccount || isFinishing)
     }
 
     private var authConsent: some View {
@@ -214,16 +217,6 @@ struct AuthView: View {
         .shadow(color: Color.black.opacity(0.10), radius: 4, y: 2)
     }
 
-    /// Full-screen overlay shown while signing in and setting up the account.
-    private var loadingScreen: some View {
-        ZStack {
-            Color(.systemBackground).ignoresSafeArea()
-            ProgressView()
-                .controlSize(.regular)
-                .tint(.primary)
-        }
-    }
-
     private func signInWithGoogle() {
         isChoosingAccount = true
         toast = nil
@@ -234,9 +227,8 @@ struct AuthView: View {
                     isChoosingAccount = false
                     isFinishing = true
                 }
-                // The loading screen stays up deliberately: this view is
-                // replaced once the session is ready, after the preload, so
-                // there is no gap between it and the app.
+                // This view stays visible until the session is ready. Its
+                // button communicates progress without an interstitial page.
             } catch {
                 isChoosingAccount = false
                 isFinishing = false
@@ -266,47 +258,66 @@ struct AuthView: View {
 /// tiles use Verbal concepts rather than another product's artwork, and can be
 /// replaced independently if final imagery is added later.
 private struct AuthWelcomeArtwork: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hasAppeared = false
+
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             let height = proxy.size.height
 
             ZStack {
-                AuthArtworkTile(kind: .voice)
-                    .rotationEffect(.degrees(-11))
-                    .position(x: width * 0.09, y: height * 0.10)
-
-                AuthArtworkTile(kind: .quote)
-                    .rotationEffect(.degrees(5))
-                    .position(x: width * 0.5, y: height * 0.10)
-
-                AuthArtworkTile(kind: .sent)
-                    .rotationEffect(.degrees(8))
-                    .position(x: width * 0.91, y: height * 0.10)
-
-                AuthArtworkTile(kind: .rate)
-                    .rotationEffect(.degrees(-6))
-                    .position(x: width * 0.5, y: height * 0.48)
-
-                AuthArtworkTile(kind: .client)
-                    .rotationEffect(.degrees(7))
-                    .position(x: width * 0.15, y: height * 0.65)
-
-                AuthArtworkTile(kind: .visit)
-                    .rotationEffect(.degrees(-8))
-                    .position(x: width * 0.85, y: height * 0.68)
-
-                AuthArtworkTile(kind: .draft)
-                    .rotationEffect(.degrees(-5))
-                    .position(x: width * 0.31, y: height * 0.91)
-
-                AuthArtworkTile(kind: .accepted)
-                    .rotationEffect(.degrees(9))
-                    .position(x: width * 0.75, y: height * 0.94)
+                tile(.voice, rotation: -11, x: width * 0.09, y: height * 0.10, delay: 0.00)
+                tile(.quote, rotation: 5, x: width * 0.5, y: height * 0.10, delay: 0.06)
+                tile(.sent, rotation: 8, x: width * 0.91, y: height * 0.10, delay: 0.12)
+                tile(.rate, rotation: -6, x: width * 0.5, y: height * 0.48, delay: 0.18)
+                tile(.client, rotation: 7, x: width * 0.15, y: height * 0.65, delay: 0.24)
+                tile(.visit, rotation: -8, x: width * 0.85, y: height * 0.68, delay: 0.30)
+                tile(.draft, rotation: -5, x: width * 0.31, y: height * 0.91, delay: 0.36)
+                tile(.accepted, rotation: 9, x: width * 0.75, y: height * 0.94, delay: 0.42)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .onAppear { hasAppeared = true }
         .accessibilityHidden(true)
+    }
+
+    private func tile(
+        _ kind: AuthArtworkKind,
+        rotation: Double,
+        x: CGFloat,
+        y: CGFloat,
+        delay: TimeInterval
+    ) -> some View {
+        AuthArtworkTile(kind: kind)
+            .rotationEffect(.degrees(rotation))
+            .position(x: x, y: y)
+            .modifier(AuthArtworkEntrance(
+                hasAppeared: hasAppeared,
+                delay: delay,
+                reduceMotion: reduceMotion
+            ))
+    }
+}
+
+/// Lets the artwork settle into place while the rest of the sign-in screen is
+/// already usable. The stagger makes the cards feel assembled rather than like
+/// a single image abruptly appearing.
+private struct AuthArtworkEntrance: ViewModifier {
+    let hasAppeared: Bool
+    let delay: TimeInterval
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(hasAppeared ? 1 : 0)
+            .blur(radius: hasAppeared ? 0 : 10)
+            .scaleEffect(hasAppeared ? 1 : 0.94)
+            .offset(y: hasAppeared || reduceMotion ? 0 : 96)
+            .animation(
+                reduceMotion ? nil : .smooth(duration: 0.58).delay(delay),
+                value: hasAppeared
+            )
     }
 }
 

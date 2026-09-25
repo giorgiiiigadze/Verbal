@@ -5,10 +5,10 @@
 //  The two screens behind "Continue with email": an address, then the code
 //  that was mailed to it.
 //
-//  Presented over the sign-in screen rather than beside it, on the same
-//  backdrop, because it is the same act continued — the provider buttons sign
-//  you in without leaving that screen, and this shouldn't feel like a different
-//  part of the app for having a keyboard in it.
+//  Presented as a sheet over the sign-in screen because it is the same action
+//  continued — entering an email should not feel like leaving the sign-in
+//  experience for a separate page. Its title and controls use the sheet's
+//  native navigation header.
 //
 
 import SwiftUI
@@ -57,19 +57,21 @@ struct EmailAuthView: View {
         }
         .navigationTitle("Email sign in")
         .navigationBarTitleDisplayMode(.inline)
-        // The code screen's back action changes its form state instead of
-        // popping the auth route, so it owns that one toolbar item.
-        .navigationBarBackButtonHidden(step == .code)
         .toolbar {
             if step == .code {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: goBack) {
                         Image(systemName: "chevron.backward")
                     }
-                    .accessibilityLabel(
-                        step == .code ? "Change email address" : "Back to sign-in options"
-                    )
+                    .accessibilityLabel("Change email address")
                 }
+            }
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: dismiss.callAsFunction) {
+                    Image(systemName: "xmark")
+                }
+                .accessibilityLabel("Close email sign in")
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {

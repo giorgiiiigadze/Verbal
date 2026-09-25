@@ -64,7 +64,7 @@ struct OnboardingHookStep: View {
 /// The five post-registration product stories. Each is deliberately short:
 /// the phone is the proof, while the text says what to notice in it.
 struct OnboardingFeatureStep: View {
-    enum Feature {
+    enum Feature: Equatable {
         case welcome, speak, quote, organise, followUp
 
         var title: String {
@@ -113,15 +113,9 @@ struct OnboardingFeatureStep: View {
             Spacer(minLength: 22)
 
             VStack(spacing: 8) {
-                if case .welcome = feature {
-                    Text(feature.title)
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.black)
-                } else {
-                    Text(feature.title)
-                        .font(.robotoSlab(25, relativeTo: .title))
-                        .foregroundStyle(.black)
-                }
+                Text(feature.title)
+                    .font(.robotoSlab(25, relativeTo: .title))
+                    .foregroundStyle(.black)
 
                 Text(feature.subtitle)
                     .font(.callout)
@@ -138,12 +132,15 @@ struct OnboardingFeatureStep: View {
                               ? Color.black
                               : Color.black.opacity(0.18))
                         .frame(width: page == feature.stepNumber ? 18 : 6, height: 6)
-                        .animation(
-                            .smooth(duration: 0.32),
-                            value: feature.stepNumber
-                        )
                 }
             }
+            // Animate the row as a single unit: the previous selection shrinks
+            // as the next one widens, with no page-level transition competing
+            // for attention.
+            .animation(
+                .easeInOut(duration: 0.38).delay(0.06),
+                value: feature.stepNumber
+            )
             .padding(.top, 18)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Page \(feature.stepNumber) of 5")

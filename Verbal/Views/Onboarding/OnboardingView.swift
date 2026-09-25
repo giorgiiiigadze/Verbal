@@ -47,6 +47,20 @@ struct OnboardingView: View {
     /// before it.
     private var isLastStep: Bool { step >= model.steps.count - 1 }
 
+    /// The product-story screens share one concrete view identity. That lets
+    /// their page indicator interpolate from one selected dot to the next
+    /// rather than replacing the entire dot row on every Continue tap.
+    private var currentFeature: OnboardingFeatureStep.Feature? {
+        switch current {
+        case .welcome: .welcome
+        case .speak: .speak
+        case .quote: .quote
+        case .organise: .organise
+        case .followUp: .followUp
+        default: nil
+        }
+    }
+
     var body: some View {
         Group {
             if isPreparing {
@@ -83,17 +97,8 @@ struct OnboardingView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                Group {
-                    stepView
-                }
-                // Each step arrives from the side it was going, so the sequence
-                // reads as forward motion rather than as unrelated
-                // screens sharing a background.
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .offset(x: 24)),
-                    removal: .opacity.combined(with: .offset(x: -24))
-                ))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                stepView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
                 footer
                     .padding(.top, 12)
@@ -105,31 +110,26 @@ struct OnboardingView: View {
             // clear of the bottom of the screen.
             .padding(.bottom, 8)
         }
-        .animation(.easeInOut(duration: 0.3), value: step)
     }
 
     @ViewBuilder
     private var stepView: some View {
-        switch current {
-        case .welcome:
-            OnboardingFeatureStep(feature: .welcome)
-        case .speak:
-            OnboardingFeatureStep(feature: .speak)
-        case .quote:
-            OnboardingFeatureStep(feature: .quote)
-        case .organise:
-            OnboardingFeatureStep(feature: .organise)
-        case .followUp:
-            OnboardingFeatureStep(feature: .followUp)
-        case .businessName:
-            OnboardingBusinessNameStep(model: model, focused: $focusedField)
-        case .trade:
-            OnboardingTradeStep(
-                model: model,
-                focused: $focusedField,
-                isProgressHeaderSeparated: $isTradeHeaderSeparated,
-                isFooterSeparated: $isTradeFooterSeparated
-            )
+        if let currentFeature {
+            OnboardingFeatureStep(feature: currentFeature)
+        } else {
+            switch current {
+            case .businessName:
+                OnboardingBusinessNameStep(model: model, focused: $focusedField)
+            case .trade:
+                OnboardingTradeStep(
+                    model: model,
+                    focused: $focusedField,
+                    isProgressHeaderSeparated: $isTradeHeaderSeparated,
+                    isFooterSeparated: $isTradeFooterSeparated
+                )
+            case .welcome, .speak, .quote, .organise, .followUp:
+                EmptyView()
+            }
         }
     }
 
@@ -166,9 +166,7 @@ struct OnboardingView: View {
         guard step > 0 else { return }
         focusedField = nil
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        withAnimation {
-            step -= 1
-        }
+        step -= 1
     }
 
     private func advance() {
@@ -179,9 +177,7 @@ struct OnboardingView: View {
         }
         focusedField = nil
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation {
-            step += 1
-        }
+        step += 1
     }
 
     private func completeOnboarding() {
