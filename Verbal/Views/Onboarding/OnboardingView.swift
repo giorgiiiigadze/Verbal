@@ -39,7 +39,7 @@ struct OnboardingView: View {
     private var isFeatureStep: Bool { step < OnboardingFeaturePage.allCases.count }
 
     private var pageBackground: Color {
-        step == OnboardingFeaturePage.quote.rawValue
+        step == OnboardingFeaturePage.speak.rawValue || step == OnboardingFeaturePage.quote.rawValue
             ? .white
             : Color(red: 252 / 255, green: 252 / 255, blue: 249 / 255)
     }
@@ -53,6 +53,7 @@ struct OnboardingView: View {
                 NavigationStack {
                     content
                         .navigationBarTitleDisplayMode(.inline)
+                        .toolbarBackground(.hidden, for: .navigationBar)
                         .toolbar {
                             if step > 0 {
                                 ToolbarItem(placement: .topBarLeading) {
@@ -78,16 +79,6 @@ struct OnboardingView: View {
             pageBackground
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 0.55), value: step)
-
-            GeometryReader { geometry in
-                OnboardingStep2LowerSurface()
-                    .frame(height: min(300, max(240, geometry.size.height * 0.36)))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .opacity(step == OnboardingFeaturePage.speak.rawValue ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.55), value: step)
-                    .allowsHitTesting(false)
-            }
-            .ignoresSafeArea(edges: .bottom)
 
             VStack(spacing: 0) {
                 if isFeatureStep {

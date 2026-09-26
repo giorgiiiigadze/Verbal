@@ -63,7 +63,6 @@ struct OnboardingFeaturePager: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .animation(motion, value: currentPage)
         }
-        .clipped()
     }
 
     @ViewBuilder
@@ -95,6 +94,29 @@ struct OnboardingPageView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
+        .background(alignment: .bottom) {
+            if page != .welcome {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(Color.white.opacity(0.8))
+                    .opacity(0.75)
+                    .mask {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0),
+                                .init(color: .white.opacity(0.6), location: 0.08),
+                                .init(color: .white, location: 0.18),
+                                .init(color: .white, location: 1)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+                    .frame(height: 340)
+                    .offset(y: 210)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 }
 
@@ -193,12 +215,11 @@ private struct OnboardingPhonePresentation: AnimatableModifier {
                 LinearGradient(
                     stops: [
                         .init(color: .white, location: 0),
-                        .init(color: .white, location: 0.60),
-                        .init(color: .white.opacity(1 - fadeProgress * 0.02), location: 0.68),
-                        .init(color: .white.opacity(1 - fadeProgress * 0.15), location: 0.76),
-                        .init(color: .white.opacity(1 - fadeProgress * 0.42), location: 0.84),
-                        .init(color: .white.opacity(1 - fadeProgress * 0.75), location: 0.92),
-                        .init(color: .white.opacity(1 - fadeProgress * 0.96), location: 0.98),
+                        .init(color: .white, location: 0.78),
+                        .init(color: .white.opacity(1 - fadeProgress * 0.05), location: 0.83),
+                        .init(color: .white.opacity(1 - fadeProgress * 0.23), location: 0.88),
+                        .init(color: .white.opacity(1 - fadeProgress * 0.50), location: 0.93),
+                        .init(color: .white.opacity(1 - fadeProgress * 0.80), location: 0.97),
                         .init(color: .white.opacity(1 - edgeFade), location: 1)
                     ],
                     startPoint: .top,
