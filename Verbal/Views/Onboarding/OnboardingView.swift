@@ -4,24 +4,14 @@
 //
 //  The screens after registering and before entering the app.
 //
-//  Three acts rather than a queue of questions. The introduction names the
-//  problem and prices it in the user's own numbers; the climax hands them the
-//  app and lets them make a quote by speaking; the conclusion says what they
-//  came for, what it costs, and how the
-//  reminders keep it happening.
-//
-//  It is longer than it was, on purpose. The setup questions were always here —
-//  answered cold they are a form, and answered after someone has watched what
-//  quoting costs them in a year they are the first thing being done about it.
-//
-//  It runs after authentication. Answers stay local while it is in progress,
-//  then are written to the newly authenticated profile at completion.
+//  Five product pages lead into the existing business setup questions.
+//  It runs after authentication; answers are saved on completion.
 //
 
 import SwiftUI
 
 struct OnboardingView: View {
-    /// Called when the last step is finished, to hand over to the auth screen.
+    /// Called after setup finishes, to enter the app.
     var onContinue: () -> Void
 
     @Environment(SessionStore.self) private var session
@@ -35,8 +25,7 @@ struct OnboardingView: View {
     @State private var isPreparing = false
     private typealias Step = OnboardingModel.Step
 
-    /// Clamped, because `steps` shrinks underneath the index when someone swipes
-    /// back and unticks every job.
+    /// Keep the active step valid if the model changes its step list.
     private var current: Step {
         let all = model.steps
         return all[min(step, all.count - 1)]
@@ -47,18 +36,12 @@ struct OnboardingView: View {
     /// before it.
     private var isLastStep: Bool { step >= model.steps.count - 1 }
 
-    /// The product-story screens share one concrete view identity. That lets
-    /// their page indicator interpolate from one selected dot to the next
-    /// rather than replacing the entire dot row on every Continue tap.
-    private var currentFeature: OnboardingFeatureStep.Feature? {
-        switch current {
-        case .welcome: .welcome
-        case .speak: .speak
-        case .quote: .quote
-        case .organise: .organise
-        case .followUp: .followUp
-        default: nil
-        }
+    private var isFeatureStep: Bool { step < OnboardingFeaturePage.allCases.count }
+
+    private var pageBackground: Color {
+        step == OnboardingFeaturePage.quote.rawValue
+            ? .white
+            : Color(red: 252 / 255, green: 252 / 255, blue: 249 / 255)
     }
 
     var body: some View {
@@ -69,22 +52,21 @@ struct OnboardingView: View {
             } else {
                 NavigationStack {
                     content
-                    .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        if step > 0 {
-                            Button {
-                                goBack()
-                            } label: {
-                                Image(systemName: "chevron.backward")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            if step > 0 {
+                                ToolbarItem(placement: .topBarLeading) {
+                                    Button(action: goBack) {
+                                        Label("Back", systemImage: "chevron.backward")
+                                            .labelStyle(.iconOnly)
+                                    }
+                                }
                             }
-                            .accessibilityLabel("Back")
+
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Skip", action: completeOnboarding)
+                            }
                         }
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Skip") { completeOnboarding() }
-                    }
-                }
-                    .navigationBarTitleDisplayMode(.inline)
                 }
             }
         }
@@ -93,60 +75,67 @@ struct OnboardingView: View {
 
     private var content: some View {
         ZStack {
-            Color(red: 252 / 255, green: 252 / 255, blue: 249 / 255)
+            pageBackground
                 .ignoresSafeArea()
+                .animation(.easeInOut(duration: 0.55), value: step)
+
+            GeometryReader { geometry in
+                OnboardingStep2LowerSurface()
+                    .frame(height: min(300, max(240, geometry.size.height * 0.36)))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .opacity(step == OnboardingFeaturePage.speak.rawValue ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.55), value: step)
+                    .allowsHitTesting(false)
+            }
+            .ignoresSafeArea(edges: .bottom)
 
             VStack(spacing: 0) {
-                stepView
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                if isFeatureStep {
+                    OnboardingFeaturePager(currentPage: step)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.top, step == OnboardingFeaturePage.quote.rawValue ? 0 : 24)
 
-                footer
-                    .padding(.top, 12)
+                    OnboardingPageIndicator(
+                        currentPage: step,
+                        pageCount: OnboardingFeaturePage.allCases.count
+                    )
+                    .padding(.top, 18)
+                    .padding(.bottom, 18)
+                } else {
+                    stepView
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 24)
+                }
+
+                OnboardingContinueButton(
+                    title: isLastStep ? "Get started" : "Continue",
+                    isEnabled: canAdvance,
+                    action: advance
+                )
+                .padding(.top, 12)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            // Less than the sides: the home indicator already reserves space
-            // below this, and matching 24 to it left the button floating well
-            // clear of the bottom of the screen.
-            .padding(.bottom, 8)
         }
     }
 
     @ViewBuilder
     private var stepView: some View {
-        if let currentFeature {
-            OnboardingFeatureStep(feature: currentFeature)
-        } else {
-            switch current {
-            case .businessName:
-                OnboardingBusinessNameStep(model: model, focused: $focusedField)
-            case .trade:
-                OnboardingTradeStep(
-                    model: model,
-                    focused: $focusedField,
-                    isProgressHeaderSeparated: $isTradeHeaderSeparated,
-                    isFooterSeparated: $isTradeFooterSeparated
-                )
-            case .welcome, .speak, .quote, .organise, .followUp:
-                EmptyView()
-            }
+        switch current {
+        case .businessName:
+            OnboardingBusinessNameStep(model: model, focused: $focusedField)
+                .padding(.horizontal, 24)
+        case .trade:
+            OnboardingTradeStep(
+                model: model,
+                focused: $focusedField,
+                isProgressHeaderSeparated: $isTradeHeaderSeparated,
+                isFooterSeparated: $isTradeFooterSeparated
+            )
+            .padding(.horizontal, 24)
+        case .welcome, .speak, .quote, .organise, .followUp:
+            EmptyView()
         }
-    }
-
-    // MARK: - The button
-
-    private var footer: some View {
-        Button { advance() } label: {
-            Text(isLastStep ? "Get started" : "Continue")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(.black, in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(!canAdvance)
-        .opacity(canAdvance ? 1 : 0.45)
     }
 
     private var canAdvance: Bool {
@@ -166,7 +155,9 @@ struct OnboardingView: View {
         guard step > 0 else { return }
         focusedField = nil
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        step -= 1
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.9)) {
+            step -= 1
+        }
     }
 
     private func advance() {
@@ -177,7 +168,9 @@ struct OnboardingView: View {
         }
         focusedField = nil
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        step += 1
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.9)) {
+            step += 1
+        }
     }
 
     private func completeOnboarding() {

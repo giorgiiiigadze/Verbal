@@ -22,6 +22,11 @@ enum OnboardingPhonePreviewMeasurements {
     /// Pixel dimensions of `deviceFrame` in the asset catalog.
     static let frameArtworkSize = CGSize(width: 489, height: 1000)
 
+    /// Height occupied by the phone at `displayedFrameWidth`.
+    static var displayedFrameHeight: CGFloat {
+        displayedFrameWidth * frameArtworkSize.height / frameArtworkSize.width
+    }
+
     /// Pixel dimensions and origin of the transparent screen opening in that
     /// artwork. The opening starts at x: 25, y: 22.
     static let screenOpeningSize = CGSize(width: 438, height: 955)
