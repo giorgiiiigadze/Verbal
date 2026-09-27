@@ -9,8 +9,8 @@ enum OnboardingFeaturePage: Int, CaseIterable {
         case .welcome: "Welcome to Verbal"
         case .speak: "Speak naturally"
         case .quote: "Quotes in minutes"
-        case .organise: "Everything in one place"
-        case .followUp: "Stay one step ahead"
+        case .organise: "All your work, in one place"
+        case .followUp: "Know what to do next"
         }
     }
 
@@ -19,37 +19,45 @@ enum OnboardingFeaturePage: Int, CaseIterable {
         case .welcome: "Turn the work you do into a clear quote."
         case .speak: "Describe the job as you would to a customer."
         case .quote: "Review the work, add prices, and send it on."
-        case .organise: "Keep clients, quotes, and every detail together."
-        case .followUp: "Follow up on the work that matters."
+        case .organise: "Keep every client, quote, and job detail together."
+        case .followUp: "See which quotes need a follow-up and keep work moving."
         }
     }
 }
 
 struct OnboardingFeaturePager: View {
     let currentPage: Int
+    let onPageChange: (Int) -> Void
 
-    private let motion = Animation.spring(response: 0.55, dampingFraction: 0.9)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var motion: Animation? {
+        reduceMotion ? nil : .spring(response: 0.55, dampingFraction: 0.9)
+    }
 
     var body: some View {
         GeometryReader { geometry in
-            let isStep3 = currentPage == OnboardingFeaturePage.quote.rawValue
-            let previewHeight = isStep3
-                ? max(300, geometry.size.height - 100)
-                : min(OnboardingPhonePreviewMeasurements.displayedFrameHeight,
-                      max(300, geometry.size.height - 130))
+            // Keep the phone anchored near the top; reserve the flexible space below it for copy.
+            let topMargin = min(22, max(10, geometry.size.height * 0.025))
+            let copyReserve = dynamicTypeSize.isAccessibilitySize
+                ? min(220, geometry.size.height * 0.35)
+                : min(150, max(110, geometry.size.height * 0.22))
+            let previewHeight = min(
+                OnboardingPhonePreviewMeasurements.displayedFrameHeight,
+                max(0, geometry.size.height - topMargin - copyReserve)
+            )
 
             VStack(spacing: 0) {
-                if !isStep3 {
-                    Spacer(minLength: 12)
-                }
-
                 OnboardingPreviewContainer(
                     currentPage: currentPage,
-                    height: previewHeight,
-                    availableWidth: geometry.size.width
+                    height: previewHeight
                 )
+                .frame(height: previewHeight)
+                .padding(.top, topMargin)
+                .accessibilityHidden(true)
 
-                Spacer(minLength: 22)
+                Spacer(minLength: 16)
 
                 HStack(spacing: 0) {
                     ForEach(OnboardingFeaturePage.allCases, id: \.rawValue) { page in
@@ -57,11 +65,23 @@ struct OnboardingFeaturePager: View {
                             .frame(width: geometry.size.width)
                     }
                 }
+                .frame(width: geometry.size.width, alignment: .leading)
                 .offset(x: -CGFloat(currentPage) * geometry.size.width)
                 .animation(motion, value: currentPage)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
             .animation(motion, value: currentPage)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 30)
+                    .onEnded { value in
+                        guard abs(value.translation.width) > abs(value.translation.height) * 1.3,
+                              abs(value.translation.width) > 55 else { return }
+                        let nextPage = currentPage + (value.translation.width < 0 ? 1 : -1)
+                        guard OnboardingFeaturePage.allCases.indices.contains(nextPage) else { return }
+                        onPageChange(nextPage)
+                    }
+            )
         }
     }
 
@@ -76,7 +96,7 @@ struct OnboardingFeaturePager: View {
     }
 }
 
-/// Only page copy moves horizontally. The phone has its own continuous animation.
+/// The copy and phone screen move horizontally while the device frame stays put.
 struct OnboardingPageView: View {
     let page: OnboardingFeaturePage
 
@@ -94,133 +114,56 @@ struct OnboardingPageView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
-        .background(alignment: .bottom) {
-            if page != .welcome {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .overlay(Color.white.opacity(0.8))
-                    .opacity(0.75)
-                    .mask {
-                        LinearGradient(
-                            stops: [
-                                .init(color: .clear, location: 0),
-                                .init(color: .white.opacity(0.6), location: 0.08),
-                                .init(color: .white, location: 0.18),
-                                .init(color: .white, location: 1)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    }
-                    .frame(height: 340)
-                    .offset(y: 210)
-                    .allowsHitTesting(false)
-            }
-        }
     }
 }
 
-/// The artwork remains mounted while its screen, scale and position change.
+/// Every page uses the same phone size and position; only the screen slides.
 struct OnboardingPreviewContainer: View {
     let currentPage: Int
     let height: CGFloat
-    let availableWidth: CGFloat
 
-    private let motion = Animation.spring(response: 0.55, dampingFraction: 0.9)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var normalScale: CGFloat {
+    private var motion: Animation? {
+        reduceMotion ? nil : .spring(response: 0.55, dampingFraction: 0.9)
+    }
+
+    private var scale: CGFloat {
         height / OnboardingPhonePreviewMeasurements.displayedFrameHeight
     }
 
-    private var enlargedScale: CGFloat {
-        min(1.45, max(1.15,
-            (availableWidth + 20) / OnboardingPhonePreviewMeasurements.displayedFrameWidth))
-    }
-
-    /// Step 3 keeps the phone large, but lifts it enough to show its rounded bottom.
-    private var step3Scale: CGFloat {
-        min(1.24, max(1,
-            (availableWidth - 60) / OnboardingPhonePreviewMeasurements.displayedFrameWidth))
-    }
-
-    private var step3Offset: CGFloat {
-        height - OnboardingPhonePreviewMeasurements.displayedFrameHeight * step3Scale - 14
-    }
-
-    private var presentationPhase: CGFloat { CGFloat(min(currentPage, 3)) }
-
     var body: some View {
         DevicePreview {
-            ZStack {
-                Step1PhonePreview()
-                    .opacity(currentPage == 0 ? 1 : 0)
-                Step2PhonePreview()
-                    .opacity(currentPage == 1 ? 1 : 0)
-                Step3PhonePreview()
-                    .opacity(currentPage == 2 ? 1 : 0)
-                if currentPage > 2 {
-                    OnboardingPlaceholderPhonePreview(page: OnboardingFeaturePage(rawValue: currentPage) ?? .quote)
+            GeometryReader { screen in
+                HStack(spacing: 0) {
+                    Step1PhonePreview()
+                        .frame(width: screen.size.width, height: screen.size.height)
+                    Step2PhonePreview()
+                        .frame(width: screen.size.width, height: screen.size.height)
+                    Step3PhonePreview()
+                        .frame(width: screen.size.width, height: screen.size.height)
+                    OnboardingPlaceholderPhonePreview(page: .organise)
+                        .frame(width: screen.size.width, height: screen.size.height)
+                    OnboardingPlaceholderPhonePreview(page: .followUp)
+                        .frame(width: screen.size.width, height: screen.size.height)
                 }
+                .frame(height: screen.size.height)
+                .frame(width: screen.size.width, alignment: .leading)
+                .offset(x: -CGFloat(currentPage) * screen.size.width)
+                .animation(motion, value: currentPage)
             }
-            .animation(.easeInOut(duration: 0.24), value: currentPage)
         }
         .frame(width: OnboardingPhonePreviewMeasurements.displayedFrameWidth,
                height: OnboardingPhonePreviewMeasurements.displayedFrameHeight)
-        .modifier(OnboardingPhonePresentation(
-            phase: presentationPhase,
-            normalScale: normalScale,
-            enlargedScale: enlargedScale,
-            step3Scale: step3Scale,
-            step3Offset: step3Offset,
-            height: height
-        ))
-        .animation(motion, value: presentationPhase)
-    }
-}
-
-/// One interpolated value drives every phone state and the fade between them.
-private struct OnboardingPhonePresentation: AnimatableModifier {
-    var phase: CGFloat
-    let normalScale: CGFloat
-    let enlargedScale: CGFloat
-    let step3Scale: CGFloat
-    let step3Offset: CGFloat
-    let height: CGFloat
-
-    var animatableData: CGFloat {
-        get { phase }
-        set { phase = newValue }
-    }
-
-    func body(content: Content) -> some View {
-        let toStep2 = min(1, max(0, phase))
-        let toStep3 = min(1, max(0, phase - 1))
-        let toLaterPages = min(1, max(0, phase - 2))
-        let scale = normalScale
-            + (enlargedScale - normalScale) * toStep2
-            + (step3Scale - enlargedScale) * toStep3
-            + (normalScale - step3Scale) * toLaterPages
-        let verticalOffset = -10 * toStep2
-            + (step3Offset + 10) * toStep3
-            - step3Offset * toLaterPages
-        let fadeProgress = phase <= 1 ? toStep2 : max(0, 1 - toStep3)
-        let edgeFade = phase <= 1 ? min(1, fadeProgress * 100) : fadeProgress
-
-        content
             .scaleEffect(scale, anchor: .top)
-            .offset(y: verticalOffset)
             .frame(maxWidth: .infinity)
             .frame(height: height, alignment: .top)
             .mask {
                 LinearGradient(
                     stops: [
                         .init(color: .white, location: 0),
-                        .init(color: .white, location: 0.78),
-                        .init(color: .white.opacity(1 - fadeProgress * 0.05), location: 0.83),
-                        .init(color: .white.opacity(1 - fadeProgress * 0.23), location: 0.88),
-                        .init(color: .white.opacity(1 - fadeProgress * 0.50), location: 0.93),
-                        .init(color: .white.opacity(1 - fadeProgress * 0.80), location: 0.97),
-                        .init(color: .white.opacity(1 - edgeFade), location: 1)
+                        .init(color: .white, location: 0.985),
+                        .init(color: .clear, location: 1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom

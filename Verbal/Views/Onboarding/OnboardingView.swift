@@ -15,6 +15,7 @@ struct OnboardingView: View {
     var onContinue: () -> Void
 
     @Environment(SessionStore.self) private var session
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var model = OnboardingModel()
     @State private var step = 0
     @FocusState private var focusedField: OnboardingField?
@@ -53,7 +54,9 @@ struct OnboardingView: View {
                 NavigationStack {
                     content
                         .navigationBarTitleDisplayMode(.inline)
-                        .toolbarBackground(.hidden, for: .navigationBar)
+                        .toolbarBackground(Color.clear, for: .navigationBar)
+                        .toolbarBackground(.visible, for: .navigationBar)
+                        .toolbarColorScheme(.light, for: .navigationBar)
                         .toolbar {
                             if step > 0 {
                                 ToolbarItem(placement: .topBarLeading) {
@@ -78,13 +81,12 @@ struct OnboardingView: View {
         ZStack {
             pageBackground
                 .ignoresSafeArea()
-                .animation(.easeInOut(duration: 0.55), value: step)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.55), value: step)
 
             VStack(spacing: 0) {
                 if isFeatureStep {
-                    OnboardingFeaturePager(currentPage: step)
+                    OnboardingFeaturePager(currentPage: step, onPageChange: navigateFeature)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.top, step == OnboardingFeaturePage.quote.rawValue ? 0 : 24)
 
                     OnboardingPageIndicator(
                         currentPage: step,
@@ -142,11 +144,20 @@ struct OnboardingView: View {
 
     // MARK: - Moving
 
+    private func navigateFeature(to page: Int) {
+        guard isFeatureStep, abs(page - step) == 1 else { return }
+        if page < step {
+            goBack()
+        } else {
+            advance()
+        }
+    }
+
     private func goBack() {
         guard step > 0 else { return }
         focusedField = nil
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.9)) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.9)) {
             step -= 1
         }
     }
@@ -158,17 +169,13 @@ struct OnboardingView: View {
             return
         }
         focusedField = nil
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.9)) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.9)) {
             step += 1
         }
     }
 
     private func completeOnboarding() {
         guard !isPreparing else { return }
-        // The end of the questions, not another step through them — the
-        // heavier notification marks it as arriving somewhere.
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
         model.saveDraft()
         Task { await session.adoptPostAuthOnboarding() }
         withAnimation(.easeInOut(duration: 0.25)) {
