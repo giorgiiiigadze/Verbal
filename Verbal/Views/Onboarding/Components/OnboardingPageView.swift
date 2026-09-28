@@ -42,16 +42,18 @@ struct OnboardingFeaturePager: View {
             let topMargin = min(22, max(10, geometry.size.height * 0.025))
             let copyReserve = dynamicTypeSize.isAccessibilitySize
                 ? min(220, geometry.size.height * 0.35)
-                : min(150, max(110, geometry.size.height * 0.22))
+                : min(135, max(110, geometry.size.height * 0.18))
             let previewHeight = min(
-                OnboardingPhonePreviewMeasurements.displayedFrameHeight,
+                OnboardingPhonePreviewMeasurements.displayedFrameHeight * 1.05,
                 max(0, geometry.size.height - topMargin - copyReserve)
             )
 
             VStack(spacing: 0) {
                 OnboardingPreviewContainer(
                     currentPage: currentPage,
-                    height: previewHeight
+                    height: previewHeight,
+                    availableWidth: geometry.size.width,
+                    topOverflow: geometry.safeAreaInsets.top + topMargin + 125
                 )
                 .frame(height: previewHeight)
                 .padding(.top, topMargin)
@@ -117,10 +119,12 @@ struct OnboardingPageView: View {
     }
 }
 
-/// Every page uses the same phone size and position; only the screen slides.
+/// Steps 2 and 3 enlarge the phone; Step 3 also extends above the screen.
 struct OnboardingPreviewContainer: View {
     let currentPage: Int
     let height: CGFloat
+    let availableWidth: CGFloat
+    let topOverflow: CGFloat
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -129,7 +133,10 @@ struct OnboardingPreviewContainer: View {
     }
 
     private var scale: CGFloat {
-        height / OnboardingPhonePreviewMeasurements.displayedFrameHeight
+        let regularScale = height / OnboardingPhonePreviewMeasurements.displayedFrameHeight
+        guard currentPage == OnboardingFeaturePage.speak.rawValue ||
+              currentPage == OnboardingFeaturePage.quote.rawValue else { return regularScale }
+        return max(regularScale, availableWidth * 0.88 / OnboardingPhonePreviewMeasurements.displayedFrameWidth)
     }
 
     var body: some View {
@@ -156,6 +163,7 @@ struct OnboardingPreviewContainer: View {
         .frame(width: OnboardingPhonePreviewMeasurements.displayedFrameWidth,
                height: OnboardingPhonePreviewMeasurements.displayedFrameHeight)
             .scaleEffect(scale, anchor: .top)
+            .offset(y: currentPage == OnboardingFeaturePage.quote.rawValue ? -topOverflow : 0)
             .frame(maxWidth: .infinity)
             .frame(height: height, alignment: .top)
             .mask {
@@ -168,6 +176,8 @@ struct OnboardingPreviewContainer: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
+                .frame(height: height + (currentPage == OnboardingFeaturePage.quote.rawValue ? topOverflow : 0))
+                .frame(height: height, alignment: .bottom)
             }
             .frame(height: height)
     }
