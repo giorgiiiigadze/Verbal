@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Product pages stay in model order; adding another case adds another pager slot.
 enum OnboardingFeaturePage: Int, CaseIterable {
-    case welcome, speak, quote, organise, followUp
+    case welcome, speak, quote, organise
 
     var title: String {
         switch self {
@@ -10,7 +10,6 @@ enum OnboardingFeaturePage: Int, CaseIterable {
         case .speak: "Speak naturally"
         case .quote: "Quotes in minutes"
         case .organise: "All your work, in one place"
-        case .followUp: "Know what to do next"
         }
     }
 
@@ -20,7 +19,6 @@ enum OnboardingFeaturePage: Int, CaseIterable {
         case .speak: "Describe the job as you would to a customer."
         case .quote: "Review the work, add prices, and send it on."
         case .organise: "Keep every client, quote, and job detail together."
-        case .followUp: "See which quotes need a follow-up and keep work moving."
         }
     }
 }
@@ -93,7 +91,7 @@ struct OnboardingFeaturePager: View {
         case .welcome: OnboardingStep1View()
         case .speak: OnboardingStep2View()
         case .quote: OnboardingStep3View()
-        case .organise, .followUp: OnboardingPageView(page: page)
+        case .organise: OnboardingPageView(page: page)
         }
     }
 }
@@ -150,8 +148,6 @@ struct OnboardingPreviewContainer: View {
                     Step3PhonePreview()
                         .frame(width: screen.size.width, height: screen.size.height)
                     OnboardingPlaceholderPhonePreview(page: .organise)
-                        .frame(width: screen.size.width, height: screen.size.height)
-                    OnboardingPlaceholderPhonePreview(page: .followUp)
                         .frame(width: screen.size.width, height: screen.size.height)
                 }
                 .frame(height: screen.size.height)

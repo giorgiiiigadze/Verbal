@@ -4,7 +4,7 @@
 //
 //  The screens after registering and before entering the app.
 //
-//  Five product pages lead into the existing business setup questions.
+//  Four product pages lead into the existing business setup questions.
 //  It runs after authentication; answers are saved on completion.
 //
 
@@ -74,6 +74,7 @@ struct OnboardingView: View {
                 }
             }
         }
+        .environment(\.colorScheme, .light)
         .preferredColorScheme(.light)
     }
 
@@ -126,7 +127,7 @@ struct OnboardingView: View {
                 isFooterSeparated: $isTradeFooterSeparated
             )
             .padding(.horizontal, 24)
-        case .welcome, .speak, .quote, .organise, .followUp:
+        case .welcome, .speak, .quote, .organise:
             EmptyView()
         }
     }

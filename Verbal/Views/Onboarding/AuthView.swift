@@ -257,7 +257,7 @@ struct AuthView: View {
 /// A light, floating product collage in the spirit of a cover-art spread. The
 /// tiles use Verbal concepts rather than another product's artwork, and can be
 /// replaced independently if final imagery is added later.
-private struct AuthWelcomeArtwork: View {
+struct AuthWelcomeArtwork: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hasAppeared = false
 
@@ -321,7 +321,7 @@ private struct AuthArtworkEntrance: ViewModifier {
     }
 }
 
-private struct AuthArtworkTile: View {
+struct AuthArtworkTile: View {
     let kind: AuthArtworkKind
 
     var body: some View {
@@ -409,7 +409,7 @@ private struct AuthArtworkTile: View {
     }
 }
 
-private enum AuthArtworkKind {
+enum AuthArtworkKind {
     case voice, quote, client, rate, visit, sent, draft, accepted
 
     var background: Color {

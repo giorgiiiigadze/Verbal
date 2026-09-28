@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppAppearance.defaultsKey) private var appearance = AppAppearance.system.rawValue
     @State private var network = NetworkMonitor()
     @State private var session: SessionStore
@@ -64,7 +65,7 @@ struct ContentView: View {
     /// root also covers its navigation chrome and the pushed email flow; once
     /// signed in, the user's saved appearance preference takes over again.
     private var preferredColorScheme: ColorScheme? {
-        if session.state == .signedOut { return .light }
+        if session.state == .signedOut || !hasSeenOnboarding { return .light }
         return (AppAppearance(rawValue: appearance) ?? .system).colorScheme
     }
 
@@ -151,23 +152,30 @@ struct ContentView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch session.state {
-        case .loading:
-            Color.clear
-        case .signedOut:
-            NavigationStack {
-                AuthView()
-            }
-        case .ready:
-            if !hasSeenOnboarding {
-                OnboardingView {
-                    OnboardingMemory.hasSeenOnboarding = true
-                    hasSeenOnboarding = true
+        ZStack {
+            switch session.state {
+            case .loading:
+                Color.clear
+            case .signedOut:
+                NavigationStack {
+                    AuthView()
                 }
-            } else {
-                MainTabView()
+                .transition(.opacity)
+                .zIndex(1)
+            case .ready:
+                if !hasSeenOnboarding {
+                    OnboardingView {
+                        OnboardingMemory.hasSeenOnboarding = true
+                        hasSeenOnboarding = true
+                    }
+                    .transition(.opacity)
+                    .zIndex(2)
+                } else {
+                    MainTabView()
+                }
             }
         }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: session.state)
     }
 }
 

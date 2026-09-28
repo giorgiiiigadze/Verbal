@@ -72,8 +72,7 @@ struct OnboardingPreparationView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 252 / 255, green: 252 / 255, blue: 249 / 255)
-                .ignoresSafeArea()
+            AuthBackground()
 
             VStack(spacing: 0) {
                 Spacer()
@@ -82,14 +81,19 @@ struct OnboardingPreparationView: View {
 
                 VStack(spacing: 8) {
                     Text("Setting up Verbal")
-                        .font(.robotoSlab(27, relativeTo: .title))
+                        .font(.system(.title, design: .default, weight: .semibold))
                         .foregroundStyle(Color(.mainText))
 
                     Text("Getting things ready…")
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.top, 42)
+                .multilineTextAlignment(.center)
+                .padding(.top, 36)
+
+                ProgressView()
+                    .tint(.black)
+                    .padding(.top, 24)
 
                 Spacer()
             }
@@ -106,69 +110,50 @@ struct OnboardingPreparationView: View {
 
     private var preparationArtwork: some View {
         ZStack {
-            screenshotPlaceholder(width: 88, height: 116, accent: .royalBlue100)
-                .rotationEffect(.degrees(-9))
-                .offset(x: -94, y: -35)
-                .blur(radius: 1.5)
+            AuthArtworkTile(kind: .client)
+                .scaleEffect(0.72)
+                .rotationEffect(.degrees(-8))
+                .offset(x: -92, y: -72)
 
-            screenshotPlaceholder(width: 92, height: 124, accent: .royalBlue50)
-                .rotationEffect(.degrees(8))
-                .offset(x: 97, y: -21)
-                .blur(radius: 5)
-                .opacity(0.72)
+            AuthArtworkTile(kind: .quote)
+                .scaleEffect(0.68)
+                .rotationEffect(.degrees(-5))
+                .offset(x: -112, y: 8)
 
-            screenshotPlaceholder(width: 80, height: 106, accent: .cardSurface)
-                .rotationEffect(.degrees(11))
-                .offset(x: 96, y: 66)
-                .blur(radius: 5)
-                .opacity(0.62)
+            AuthArtworkTile(kind: .voice)
+                .scaleEffect(0.78)
+                .blur(radius: 8)
+                .opacity(0.65)
+                .offset(x: 98, y: -48)
 
-            screenshotPlaceholder(width: 74, height: 98, accent: .royalBlue25)
-                .rotationEffect(.degrees(-12))
-                .offset(x: -91, y: 62)
-                .blur(radius: 3)
-                .opacity(0.76)
+            AuthArtworkTile(kind: .accepted)
+                .scaleEffect(0.7)
+                .blur(radius: 8)
+                .opacity(0.55)
+                .offset(x: 96, y: 72)
 
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(OnboardingStyle.action)
-                .frame(width: 128, height: 128)
-                .shadow(color: OnboardingStyle.action.opacity(0.22), radius: 20, y: 10)
+            RoundedRectangle(cornerRadius: 36, style: .continuous)
+                .fill(OnboardingStyle.action.opacity(0.16))
+                .frame(width: 110, height: 110)
+                .blur(radius: 24)
+
+            Image(.authAppIcon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 76, height: 76)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .padding(6)
                 .overlay {
-                    Image(.brandMark)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 66, height: 50)
-                        .foregroundStyle(.white)
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .strokeBorder(OnboardingStyle.action.opacity(0.15), lineWidth: 1)
                 }
+                .shadow(color: OnboardingStyle.action.opacity(0.14), radius: 18, y: 8)
         }
-        .frame(height: 180)
+        .frame(maxWidth: .infinity)
+        .frame(height: 240)
         .accessibilityHidden(true)
     }
 
-    private func screenshotPlaceholder(width: CGFloat, height: CGFloat,
-                                       accent: Color) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(accent)
-                .frame(height: height * 0.46)
-
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(Color(.mainText).opacity(0.16))
-                .frame(width: width * 0.58, height: 7)
-
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(Color(.mainText).opacity(0.09))
-                .frame(width: width * 0.38, height: 6)
-        }
-        .padding(10)
-        .frame(width: width, height: height, alignment: .topLeading)
-        .background(Color(.cardSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        }
-        .shadow(color: Color.black.opacity(0.1), radius: 14, y: 7)
-    }
 }
 
 // MARK: - 2 · How they do it today
@@ -640,6 +625,30 @@ struct OnboardingBusinessNameStep: View {
                     .textInputAutocapitalization(.words)
                     .focused(focused, equals: .businessName)
                     .submitLabel(.continue)
+            }
+
+            Toggle("I'm tax registered", isOn: $model.isTaxRegistered)
+                .font(.callout)
+                .foregroundStyle(Color(.mainText))
+                .tint(OnboardingStyle.action)
+
+            if model.isTaxRegistered {
+                OnboardingFieldBox {
+                    HStack(spacing: 8) {
+                        Text("Tax rate")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        TextField("20", text: $model.taxRate)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .focused(focused, equals: .taxRate)
+                            .frame(width: 60)
+                            .accessibilityLabel("Tax rate percentage")
+                        Text("%")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.callout)
+                }
             }
 
             Spacer(minLength: 0)
